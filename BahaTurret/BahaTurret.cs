@@ -229,7 +229,7 @@ namespace BahaTurret
 		public bool airDetonation = false;
 
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Default Detonation Range"),
-		 UI_FloatRange(minValue = 500, maxValue = 3500f, stepIncrement = 1f, scene = UI_Scene.All)]
+		 UI_FloatRange(minValue = 500, maxValue = 35000f, stepIncrement = 1f, scene = UI_Scene.All)]
 		public float defaultDetonationRange = 3500;
 
 		float detonationRange = 2000;
@@ -715,7 +715,7 @@ namespace BahaTurret
 					targetPrevVel = targetVessel.rb.velocity;
 					
 				}
-				else if(vessel.altitude < 5000)
+				else if(vessel.altitude < 50000)
 				{
 					float time2 = VectorUtils.CalculateLeadTime(target-transform.position, Vector3.zero-rb.velocity, bulletVelocity);
 					if(time2 > 0) time = time2;
@@ -734,7 +734,7 @@ namespace BahaTurret
 				//airdetonation
 				if(targetVessel!=null)
 				{
-					detonationRange = Mathf.Clamp(Vector3.Distance(transform.position, target), 500, 3500) - 50f;
+					detonationRange = Mathf.Clamp(Vector3.Distance(transform.position, target), 500, 35000) - 50f;
 				}
 				
 			}
@@ -1091,7 +1091,7 @@ namespace BahaTurret
 		private bool FireLaser()
 		{
 			float maxDistance = BDArmorySettings.PHYSICS_RANGE;
-			if(BDArmorySettings.PHYSICS_RANGE == 0) maxDistance = 2500;
+			if(BDArmorySettings.PHYSICS_RANGE == 0) maxDistance = 25000;
 
 			float chargeAmount = requestResourceAmount * TimeWarp.fixedDeltaTime;
 			if(!CheckMouseIsOnGui() && WMgrAuthorized() && inTurretRange && !isOverheated && (part.RequestResource(ammoName, chargeAmount)>=chargeAmount || BDArmorySettings.INFINITE_AMMO))
@@ -1365,7 +1365,7 @@ namespace BahaTurret
 				float size = 30;
 				
 				Vector3 aimPosition;
-				if(BDArmorySettings.AIM_ASSIST && vessel.altitude < 5000)
+				if(BDArmorySettings.AIM_ASSIST && vessel.altitude < 25000)
 				{
 					aimPosition = FlightCamera.fetch.mainCamera.WorldToViewportPoint(bulletPrediction);
 				}

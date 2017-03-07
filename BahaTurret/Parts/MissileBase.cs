@@ -112,6 +112,8 @@ namespace BahaTurret
 
         public bool HasExploded { get; set; } = false;
 
+        protected Vector3 previousTargetVelocity { get; set; } = Vector3.zero;
+        protected Vector3 previousMissileVelocity { get; set; } = Vector3.zero;
 
         public float DetonationRadius
         {

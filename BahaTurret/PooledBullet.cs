@@ -556,7 +556,7 @@ namespace BahaTurret
 
             float fov = c.fieldOfView;
             float factor = (fov/60)*resizeFactor*
-                           Mathf.Clamp(Vector3.Distance(transform.position, c.transform.position), 0, 3000)/50;
+                           Mathf.Clamp(Vector3.Distance(transform.position, c.transform.position), 0, 30000)/50;
             float width1 = tracerStartWidth*factor*randomWidthScale;
             float width2 = tracerEndWidth*factor*randomWidthScale;
 

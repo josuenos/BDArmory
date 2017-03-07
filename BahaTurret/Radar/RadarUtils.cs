@@ -55,8 +55,8 @@ namespace BahaTurret
 
 			float distance = (v.transform.position - origin).magnitude;
 
-			radarCam.nearClipPlane = Mathf.Clamp(distance - 200, 20, 40000);
-			radarCam.farClipPlane = Mathf.Clamp(distance + 200, 20, 40000);
+			radarCam.nearClipPlane = Mathf.Clamp(distance - 200, 20, 400000);
+			radarCam.farClipPlane = Mathf.Clamp(distance + 200, 20, 400000);
 
 			radarCam.fieldOfView = camFoV;
 

@@ -29,7 +29,7 @@ namespace BahaTurret
 
         public static bool SMART_GUARDS = true;
 
-        [BDAPersistantSettingsField] public static float MAX_BULLET_RANGE = 8000;
+        [BDAPersistantSettingsField] public static float MAX_BULLET_RANGE = 80000;
         [BDAPersistantSettingsField] public static float TRIGGER_HOLD_TIME = 0.3f;
         [BDAPersistantSettingsField] public static bool ALLOW_LEGACY_TARGETING = true;
         [BDAPersistantSettingsField] public static float TARGET_CAM_RESOLUTION = 1024;
@@ -38,7 +38,7 @@ namespace BahaTurret
         [BDAPersistantSettingsField] public static float FLARE_THERMAL = 1900;
         [BDAPersistantSettingsField] public static float BDARMORY_UI_VOLUME = 0.35f;
         [BDAPersistantSettingsField] public static float BDARMORY_WEAPONS_VOLUME = 0.32f;
-        [BDAPersistantSettingsField] public static float MAX_GUARD_VISUAL_RANGE = 5000;
+        [BDAPersistantSettingsField] public static float MAX_GUARD_VISUAL_RANGE = 50000;
         [BDAPersistantSettingsField] public static float GLOBAL_LIFT_MULTIPLIER = 0.20f;
         [BDAPersistantSettingsField] public static float GLOBAL_DRAG_MULTIPLIER = 4f;
         [BDAPersistantSettingsField] public static float IVA_LOWPASS_FREQ = 2500;
@@ -146,8 +146,8 @@ namespace BahaTurret
         };
 
         //competition mode
-        float competitionDist = 8000;
-        string compDistGui = "8000";
+        float competitionDist = 30000;
+        string compDistGui = "30000";
 
         #region Textures
         public static string textureDir = "BDArmory/Textures/";
@@ -962,7 +962,7 @@ namespace BahaTurret
                     gRange =
                         GUI.HorizontalSlider(
                             new Rect(leftIndent + 90, (guardLines*entryHeight), contentWidth - 90 - 38, entryHeight),
-                            gRange, 0, 10000);
+                            gRange, 0, BDArmorySettings.MAX_BULLET_RANGE);
                     gRange /= 100f;
                     gRange = Mathf.Round(gRange);
                     gRange *= 100f;
@@ -1415,7 +1415,7 @@ namespace BahaTurret
 
                     if (GUI.Button(SRightRect(line), "Start Competition"))
                     {
-                        competitionDist = Mathf.Clamp(competitionDist, 2000f, 20000f);
+                        competitionDist = Mathf.Clamp(competitionDist, 2000f, 100000f);
                         compDistGui = competitionDist.ToString();
                         BDACompetitionMode.Instance.StartCompetitionMode(competitionDist);
                         SaveConfig();

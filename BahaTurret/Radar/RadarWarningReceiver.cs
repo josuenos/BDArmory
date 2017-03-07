@@ -48,7 +48,7 @@ namespace BahaTurret
 
         const int dataCount = 10;
 
-        public float rwrDisplayRange = 8000;
+        public float rwrDisplayRange = 80000;
 
         public TargetSignatureData[] pingsData;
         public Vector3[] pingWorldPositions;
@@ -183,7 +183,7 @@ namespace BahaTurret
             if (!referenceTransform || !part) return;
 
             float sqrDist = (part.transform.position - source).sqrMagnitude;
-            if (sqrDist < Mathf.Pow(5000, 2) && sqrDist > Mathf.Pow(100, 2) &&
+            if (sqrDist < Mathf.Pow(50000, 2) && sqrDist > Mathf.Pow(100, 2) &&
                 Vector3.Angle(direction, part.transform.position - source) < 15)
             {
                 StartCoroutine(

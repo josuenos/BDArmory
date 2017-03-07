@@ -163,7 +163,7 @@ namespace BahaTurret
                         foreach (var p in pilots[t])
                         {
                             if (p.currentCommand == BDModulePilotAI.PilotCommands.Follow &&
-                                Vector3.Distance(p.vessel.CoM, p.commandLeader.vessel.CoM) > 1000f)
+                                Vector3.Distance(p.vessel.CoM, p.commandLeader.vessel.CoM) > 2000f)
                             {
                                 competitionStatus = "Competition: Waiting for teams to get in position.";
                                 waiting = true;

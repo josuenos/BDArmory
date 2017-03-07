@@ -28,7 +28,7 @@ namespace BahaTurret
 
             Vector3 finalTarget = targetPosition +
                                   (Mathf.Clamp(
-                                       (distanceToTarget - ((float) missileVessel.srfSpeed*descentRatio))*0.22f, 0, 2000)*
+                                       (distanceToTarget - ((float) missileVessel.srfSpeed*descentRatio))*0.22f, 0, 20000)*
                                    upDirection);
 
 
@@ -123,37 +123,37 @@ namespace BahaTurret
             return target;
         }
 
-        public static Vector3 GetAirToAirTarget(Vector3 targetPosition, Vector3 targetVelocity,
-            Vector3 targetAcceleration, Vessel missileVessel, out float timeToImpact, float minSpeed = 200)
-        {
-            float leadTime = 0;
-            float targetDistance = Vector3.Distance(targetPosition, missileVessel.transform.position);
+        //public static Vector3 GetAirToAirTarget(Vector3 targetPosition, Vector3 targetVelocity,
+        //    Vector3 targetAcceleration, Vessel missileVessel, out float timeToImpact, float minSpeed = 200)
+        //{
+        //    float leadTime = 0;
+        //    float targetDistance = Vector3.Distance(targetPosition, missileVessel.transform.position);
 
-            Vector3 currVel = Mathf.Max((float) missileVessel.srfSpeed, minSpeed)*missileVessel.srf_velocity.normalized;
+        //    Vector3 currVel = Mathf.Max((float) missileVessel.srfSpeed, minSpeed)*missileVessel.srf_velocity.normalized;
 
-            leadTime = (float) (1/((targetVelocity - currVel).magnitude/targetDistance));
-            timeToImpact = leadTime;
-            leadTime = Mathf.Clamp(leadTime, 0f, 8f);
-            Vector3 mTargetPosition = targetPosition + (targetVelocity*leadTime);
+        //    leadTime = (float) (1/((targetVelocity - currVel).magnitude/targetDistance));
+        //    timeToImpact = leadTime;
+        //    leadTime = Mathf.Clamp(leadTime, 0f, 8f);
+        //    Vector3 mTargetPosition = targetPosition + (targetVelocity*leadTime);
 
-            if (targetDistance < 1600)
-            {
-                //mTargetPosition += (Vector3)targetAcceleration * 0.03f * Mathf.Pow(leadTime,2);
-            }
+        //    if (targetDistance < 1600)
+        //    {
+        //        //mTargetPosition += (Vector3)targetAcceleration * 0.03f * Mathf.Pow(leadTime,2);
+        //    }
 
 
-            if (targetDistance > 500)
-            {
-                Vector3 upDirection = -FlightGlobals.getGeeForceAtPosition(targetPosition).normalized;
-                float targetAltitude = FlightGlobals.getAltitudeAtPos(targetPosition);
-                targetPosition += Mathf.Clamp((float) (targetAltitude - missileVessel.altitude)/6, -20, 1500)*
-                                  upDirection;
-            }
+        //    if (targetDistance > 500)
+        //    {
+        //        Vector3 upDirection = -FlightGlobals.getGeeForceAtPosition(targetPosition).normalized;
+        //        float targetAltitude = FlightGlobals.getAltitudeAtPos(targetPosition);
+        //        targetPosition += Mathf.Clamp((float) (targetAltitude - missileVessel.altitude)/6, -20, 1500)*
+        //                          upDirection;
+        //    }
 
-            Vector3 finalTarget = mTargetPosition;
+        //    Vector3 finalTarget = mTargetPosition;
 
-            return finalTarget;
-        }
+        //    return finalTarget;
+        //}
 
 	    public static Vector3 GetAirToAirTargetModular(Vector3 targetPosition, Vector3 targetVelocity,
 	        Vector3 previousTargetVelocity, Vector3 targetAcceleration, Vessel missileVessel,
@@ -175,7 +175,7 @@ namespace BahaTurret
             timeToImpact = targetDistance / (targetVelocity - currVel).magnitude;
 
 
-	        if (targetDistance < 3000)
+	        if (targetDistance < 5000)
 	        {
 
 	            return targetPosition + (targetVelocity * timeToImpact);
@@ -293,7 +293,7 @@ namespace BahaTurret
                 Vector3 tRayDirection = (planarDirectionToTarget*10) - (10*upDirection);
                 Ray terrainRay = new Ray(missileVessel.transform.position, tRayDirection);
                 RaycastHit rayHit;
-                if (Physics.Raycast(terrainRay, out rayHit, 8000, 1 << 15))
+                if (Physics.Raycast(terrainRay, out rayHit, 80000, 1 << 15))
                 {
                     float detectedAlt =
                         Vector3.Project(rayHit.point - missileVessel.transform.position, upDirection).magnitude;

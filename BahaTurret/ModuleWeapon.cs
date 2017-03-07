@@ -1470,7 +1470,7 @@ namespace BahaTurret
                     Vector3 acceleration = targetAcceleration;
                     finalTarget += (0.5f * acceleration * time * time); //target acceleration
                 }
-                else if (vessel.altitude < 6000)
+                else if (vessel.altitude < 25000)
                 {
                     float time2 = VectorUtils.CalculateLeadTime(finalTarget - fireTransforms[0].position,
                         -part.rb.velocity, bulletVelocity);

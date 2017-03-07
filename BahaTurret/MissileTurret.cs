@@ -365,7 +365,7 @@ namespace BahaTurret
             if (pausingAfterShot) return;
 
             Vector3 targetPosition;
-            float maxTargetingRange = 5000;
+            float maxTargetingRange = 50000;
 
             //MouseControl
             Vector3 mouseAim = new Vector3(Input.mousePosition.x/Screen.width, Input.mousePosition.y/Screen.height, 0);

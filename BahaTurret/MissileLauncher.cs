@@ -108,7 +108,7 @@ namespace BahaTurret
 		public float rndAngVel = 0;
 		
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Cruise Altitude"),
-		 UI_FloatRange(minValue = 30, maxValue = 2500f, stepIncrement = 5f, scene = UI_Scene.All)]
+		 UI_FloatRange(minValue = 500, maxValue = 20000f, stepIncrement = 100f, scene = UI_Scene.All)]
 		public float cruiseAltitude = 500;
 
 		[KSPField]
@@ -1346,7 +1346,9 @@ namespace BahaTurret
 			{
 				DrawDebugLine(transform.position+(part.rb.velocity*Time.fixedDeltaTime), TargetPosition);
                 float timeToImpact;
-                aamTarget = MissileGuidance.GetAirToAirTarget(TargetPosition, TargetVelocity, TargetAcceleration, vessel, out timeToImpact, optimumAirspeed);
+                aamTarget = MissileGuidance.GetAirToAirTargetModular(TargetPosition, TargetVelocity, previousTargetVelocity, TargetAcceleration, vessel, previousMissileVelocity, out timeToImpact);
+                previousTargetVelocity = TargetVelocity;
+                previousMissileVelocity = vessel.srf_velocity;
                 TimeToImpact = timeToImpact;
                 if (Vector3.Angle(aamTarget-transform.position, transform.forward) > maxOffBoresight*0.75f)
 				{
@@ -1429,7 +1431,7 @@ namespace BahaTurret
 				
 				if(TargetingMode == TargetingModes.Radar)
 				{
-					activeRadarRange = 20000;
+					activeRadarRange = 200000;
 					TargetAcquired = true;
 					radarTarget = new TargetSignatureData(legacyTargetVessel, 500);
 					return;

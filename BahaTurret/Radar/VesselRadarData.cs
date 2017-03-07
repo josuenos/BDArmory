@@ -77,7 +77,7 @@ namespace BahaTurret
         float guiInputCooldown = 0.2f;
 
         //range increments
-        public float[] rIncrements = new float[] {5000, 10000, 20000};
+        public float[] rIncrements = new float[] {5000, 10000, 20000, 100000};
         int rangeIndex = 0;
 
         //lock cursor

@@ -61,8 +61,8 @@ namespace BahaTurret
 
 			rangeAddMax += (float)diffAlt;
 
-			float min = Mathf.Clamp(minLaunchRange + rangeAddMin, 0, 20000);
-			float max = Mathf.Clamp(maxLaunchRange + rangeAddMax, min+100, 20000);
+			float min = Mathf.Clamp(minLaunchRange + rangeAddMin, 0, 200000);
+			float max = Mathf.Clamp(maxLaunchRange + rangeAddMax, min+100, 200000);
 
 			return new MissileLaunchParams(min, max);
 		}

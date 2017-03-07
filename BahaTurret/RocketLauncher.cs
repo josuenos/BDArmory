@@ -36,7 +36,7 @@ namespace BahaTurret
         [KSPField] public float thrustDeviation = 0.10f;
 
         [KSPField] public float maxTargetingRange = 8000;
-        float currentTgtRange = 8000;
+        float currentTgtRange = 80000;
         float predictedFlightTime = 1;
 
         public bool drawAimer = false;

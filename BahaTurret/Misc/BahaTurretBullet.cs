@@ -65,8 +65,8 @@ namespace BahaTurret
 		{
 			startPosition = transform.position;
 
-			float maxLimit = Mathf.Clamp(BDArmorySettings.MAX_BULLET_RANGE, 0, 8000);
-			maxDistance = Mathf.Clamp(BDArmorySettings.PHYSICS_RANGE, 2500, maxLimit);
+			float maxLimit = Mathf.Clamp(BDArmorySettings.MAX_BULLET_RANGE, 0, 80000);
+		    maxDistance = 150000;
 			projectileColor.a = projectileColor.a/2;
 			startColor.a = startColor.a/2;
 			
@@ -130,8 +130,8 @@ namespace BahaTurret
 			}
 			
 			float fov = FlightCamera.fetch.mainCamera.fieldOfView;
-			float width1 = (fov/60) * tracerStartWidth * Mathf.Clamp(Vector3.Distance(transform.position, FlightCamera.fetch.mainCamera.transform.position),0,3000)/50;
-			float width2 = (fov/60) * tracerEndWidth * Mathf.Clamp(Vector3.Distance(transform.position, FlightCamera.fetch.mainCamera.transform.position),0,3000)/50;
+			float width1 = (fov/60) * tracerStartWidth * Mathf.Clamp(Vector3.Distance(transform.position, FlightCamera.fetch.mainCamera.transform.position),0,30000)/50;
+			float width2 = (fov/60) * tracerEndWidth * Mathf.Clamp(Vector3.Distance(transform.position, FlightCamera.fetch.mainCamera.transform.position),0,30000)/50;
 			
 			bulletTrail.SetWidth(width1, width2);
 			

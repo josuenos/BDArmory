@@ -573,7 +573,7 @@ namespace BahaTurret
 				}
 				else //extend if too close for agm attack
 				{
-					float extendDistance = Mathf.Clamp(weaponManager.guardRange - 1800, 2500, 4000);
+					float extendDistance = Mathf.Clamp(weaponManager.guardRange - 1800, 2500, 8000);
 					float srfDist = Vector3.Distance(GetSurfacePosition(targetVessel.transform.position), GetSurfacePosition(vessel.transform.position));
 
 					if(srfDist < extendDistance && Vector3.Angle(vesselTransform.up, targetVessel.transform.position - vessel.transform.position) > 45)

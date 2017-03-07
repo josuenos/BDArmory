@@ -373,11 +373,11 @@ namespace BahaTurret
             guardAngle = 360;
 
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "Visual Range"),
-         UI_FloatRange(minValue = 100f, maxValue = 5000, stepIncrement = 100f, scene = UI_Scene.All)] public float
+         UI_FloatRange(minValue = 100f, maxValue = 50000, stepIncrement = 100f, scene = UI_Scene.All)] public float
             guardRange = 5000;
 
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "Guns Range"),
-         UI_FloatRange(minValue = 0f, maxValue = 10000f, stepIncrement = 10f, scene = UI_Scene.All)] public float
+         UI_FloatRange(minValue = 0f, maxValue = 100000f, stepIncrement = 10f, scene = UI_Scene.All)] public float
             gunRange = 2000f;
 
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "Missiles/Target"),
@@ -1700,15 +1700,15 @@ namespace BahaTurret
 
         IEnumerator WarningSoundRoutine(float distance, MissileBase ml)//give distance parameter
         {
-            if (distance < 4000)
+            if (distance < 10000)
             {
                 warningSounding = true;
                 BDArmorySettings.Instance.missileWarningTime = Time.time;
                 BDArmorySettings.Instance.missileWarning = true;
-                warningAudioSource.pitch = distance < 800 ? 1.45f : 1f;
+                warningAudioSource.pitch = distance < 8000 ? 1.45f : 1f;
                 warningAudioSource.PlayOneShot(warningSound);
 
-                float waitTime = distance < 800 ? .25f : 1.5f;
+                float waitTime = distance < 2000 ? .25f : 1.5f;
 
                 yield return new WaitForSeconds(waitTime);
 
@@ -4592,7 +4592,7 @@ namespace BahaTurret
 
         bool AltitudeTrigger()
         {
-            float maxAlt = Mathf.Clamp(BDArmorySettings.PHYSICS_RANGE * 0.75f, 2250, 5000);
+            float maxAlt = Mathf.Clamp(BDArmorySettings.PHYSICS_RANGE * 0.75f, 2250, 25000);
             double asl = vessel.mainBody.GetAltitude(vessel.CoM);
             double radarAlt = asl - vessel.terrainAltitude;
 
