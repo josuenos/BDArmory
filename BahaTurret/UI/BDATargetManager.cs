@@ -315,7 +315,7 @@ namespace BahaTurret
 						}
 
 						float thisScore = (float)(part.thermalInternalFluxPrevious+part.skinTemperature) * (15/Mathf.Max(15,angle));
-						thisScore *= Mathf.Pow(1400,2)/Mathf.Clamp((vessel.CoM-ray.origin).sqrMagnitude, 90000, 36000000);
+						thisScore *= Mathf.Pow(2800,2)/Mathf.Clamp((vessel.CoM-ray.origin).sqrMagnitude, 90000, 36000000);
 						score = Mathf.Max (score, thisScore);
 					}
 
