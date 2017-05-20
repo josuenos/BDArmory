@@ -54,6 +54,8 @@ namespace BahaTurret
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Stages Number"), UI_FloatRange(minValue = 1f, maxValue = 5f, stepIncrement = 1f, scene = UI_Scene.Editor, affectSymCounterparts = UI_Scene.All)]
         public float StagesNumber = 1;
 
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Stage to Trigger On Proximity"), UI_FloatRange(minValue = 0f, maxValue = 6f, stepIncrement = 1f, scene = UI_Scene.Editor, affectSymCounterparts = UI_Scene.All)]
+        public float StageToTriggerOnProximity = 0;
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Steer Damping"), UI_FloatRange(minValue = 0f, maxValue = 20f, stepIncrement = .05f, scene = UI_Scene.Editor, affectSymCounterparts = UI_Scene.All)]
         public float SteerDamping = 5;
@@ -300,7 +302,9 @@ namespace BahaTurret
 
             weaponClass = WeaponClasses.Missile;
             WeaponName = GetShortName();
-                      
+
+            InitializeEngagementRange(minStaticLaunchRange, maxStaticLaunchRange);
+            this.ToggleEngageOptions();
             this.activeRadarRange = ActiveRadarRange;
 
             //TODO: BDModularGuidance should be configurable?
@@ -348,44 +352,6 @@ namespace BahaTurret
             this.ForwardTransformAxis = (TransformAxisVectors) Enum.Parse(typeof(TransformAxisVectors), ForwardTransform);
             this.UpTransformAxis = (TransformAxisVectors)Enum.Parse(typeof(TransformAxisVectors), UpTransform);
         }      
-
-        /// <summary>
-        /// This method will obtain the expected transform forward that matches the expected BD missile transform
-        /// </summary>
-        //private TransformAxisVectors CalculateTransform(Vector3 referenceVector)
-        //{
-        //    var vectorAngles = new Dictionary<TransformAxisVectors, float>
-        //    {
-        //        {
-        //            TransformAxisVectors.ForwardPositive,
-        //            Vector3.Angle(MissileReferenceTransform.forward.normalized, referenceVector)
-        //        },
-        //        {
-        //            TransformAxisVectors.ForwardNegative,
-        //            Vector3.Angle(-MissileReferenceTransform.forward.normalized, referenceVector)
-        //        },
-        //        {
-        //            TransformAxisVectors.UpNegative,
-        //            Vector3.Angle(-MissileReferenceTransform.up.normalized, referenceVector)
-        //        },
-        //        {
-        //            TransformAxisVectors.UpPositive,
-        //            Vector3.Angle(MissileReferenceTransform.up.normalized, referenceVector)
-        //        },
-        //        {
-        //            TransformAxisVectors.RightPositive,
-        //            Vector3.Angle(MissileReferenceTransform.right.normalized, referenceVector)
-        //        },
-        //         {
-        //            TransformAxisVectors.RightNegative,
-        //            Vector3.Angle(-MissileReferenceTransform.right.normalized, referenceVector)
-        //         }
-
-        //    };
-        //    var result = vectorAngles.First(x => x.Value == vectorAngles.Min(y => y.Value)).Key;
-        //    return result;
-        //}
-
 
         void UpdateGuidance()
         {
@@ -435,7 +401,7 @@ namespace BahaTurret
                 TimeToImpact = timeToImpact;
                 if (Vector3.Angle(aamTarget - vessel.CoM, vessel.transform.forward) > maxOffBoresight * 0.75f)
                 {
-                    Debug.LogFormat("[BDArmory]: Missile with Name={0} has exceeded the max off boresight, checking missed target ");
+                    Debug.LogFormat("[BDArmory]: Missile with Name={0} has exceeded the max off boresight, checking missed target ",vessel.vesselName);
                     aamTarget = TargetPosition;
                 }
                 DrawDebugLine(vessel.CoM, aamTarget);
@@ -800,8 +766,18 @@ namespace BahaTurret
             {
                 if (SourceVessel == null) SourceVessel = vessel;
 
-                vessel.FindPartModulesImplementing<BDExplosivePart>().ForEach(explosivePart => explosivePart.DetonateIfPossible());
-                AutoDestruction();
+                if (StageToTriggerOnProximity != 0)
+                {
+                    vessel.ActionGroups.ToggleGroup(
+                        (KSPActionGroup) Enum.Parse(typeof(KSPActionGroup), "Custom0" + ((int)StageToTriggerOnProximity)));
+                }
+                else
+                {
+                    vessel.FindPartModulesImplementing<BDExplosivePart>().ForEach(explosivePart => explosivePart.DetonateIfPossible());
+                    AutoDestruction();
+                }
+                
+               
                 HasExploded = true;
             }
         }

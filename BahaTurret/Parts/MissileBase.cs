@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace BahaTurret
 {
-    public abstract class MissileBase : PartModule, IBDWeapon
+    public abstract class MissileBase : EngageableWeapon, IBDWeapon
     {
        protected WeaponClasses weaponClass;
         public WeaponClasses GetWeaponClass()
@@ -37,7 +37,7 @@ namespace BahaTurret
         public float maxOffBoresight = 360;
 
 
-        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Detonation distance override"), UI_FloatRange(minValue = 0f, maxValue = 100f, stepIncrement = 5f, scene = UI_Scene.Editor, affectSymCounterparts = UI_Scene.All)]
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Detonation distance override"), UI_FloatRange(minValue = 0f, maxValue = 500f, stepIncrement = 10f, scene = UI_Scene.Editor, affectSymCounterparts = UI_Scene.All)]
         public float DetonationDistance = 0;
 
         [KSPField]
@@ -59,8 +59,8 @@ namespace BahaTurret
         public bool radarLOAL = false;
 
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "Drop Time"),
-            UI_FloatRange(minValue = 0f, maxValue = 2f, stepIncrement = 0.1f, scene = UI_Scene.Editor)]
-        public float dropTime = 0.4f;
+            UI_FloatRange(minValue = 0f, maxValue = 5f, stepIncrement = 0.5f, scene = UI_Scene.Editor)]
+        public float dropTime = 0.5f;
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "In Cargo Bay: "),
             UI_Toggle(disabledText = "False", enabledText = "True", affectSymCounterparts = UI_Scene.All)]
@@ -101,6 +101,7 @@ namespace BahaTurret
         public float TimeIndex => Time.time - TimeFired;
 
         public TargetingModes TargetingMode { get; set; }
+        public TargetingModes TargetingModeTerminal { get; set; }
 
         public float TimeToImpact { get; set; }
 
@@ -550,7 +551,7 @@ namespace BahaTurret
         {
             if (TargetingMode == TargetingModes.AntiRad && TargetAcquired && v == vessel)
             {
-                if ((source - VectorUtils.GetWorldSurfacePostion(targetGPSCoords, vessel.mainBody)).sqrMagnitude < Mathf.Pow(50, 2)
+                if ((source - VectorUtils.GetWorldSurfacePostion(targetGPSCoords, vessel.mainBody)).sqrMagnitude < Mathf.Pow(maxStaticLaunchRange / 4, 2) //drastically increase update range for anti-radiation missile to track moving targets!
                     && Vector3.Angle(source - transform.position, GetForwardTransform()) < maxOffBoresight)
                 {
                     TargetAcquired = true;
