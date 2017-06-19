@@ -167,7 +167,6 @@
     <None Include="Distribution\GameData\BDArmory\AssetBundles\bdarmoryshaders_windows.bundle" />
     <None Include="Distribution\GameData\BDArmory\ATM_BDArmory.cfg" />
     <None Include="Distribution\GameData\BDArmory\BDArmory.version" />
-    <None Include="Distribution\GameData\BDArmory\bullets.cfg" />
     <None Include="Distribution\GameData\BDArmory\craft\BDA - Test Platform - Missile.craft" />
     <None Include="Distribution\GameData\BDArmory\craft\BDA - Test Platform.craft" />
     <None Include="Distribution\GameData\BDArmory\craft\BDA - TestPlaneAI - v3 - Clean.craft" />
@@ -307,7 +306,6 @@
     <None Include="Distribution\GameData\BDArmory\Parts\towMissile\towMissile.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\weaponManager\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\weaponManager\weaponManager.cfg" />
-    <None Include="Distribution\GameData\BDArmory\Resources\Ammo.cfg" />
     <None Include="Distribution\GameData\BDArmory\Resources\Countermeasures.cfg" />
     <None Include="Distribution\GameData\BDArmory\settings.cfg" />
   </ItemGroup>
