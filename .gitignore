@@ -110,3 +110,5 @@ BDArmory/BDArmory.sln.DotSettings.user
 BDArmory/BDArmory.csproj.user
 BDArmory.Core/bin/Debug/UnityEngine.UI.dll
 /BDArmory.Events/obj/Debug
+/Binaries
+/LocalDev
