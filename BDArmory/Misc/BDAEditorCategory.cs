@@ -20,22 +20,23 @@ namespace BDArmory.Misc
 
 		void BDAWeaponsCategory()
 		{
-		    const string customCategoryName = "BDAWeapons";
-            const string customDisplayCategoryName = "BDA Weapons";
 
-			availableParts.Clear();
-			availableParts.AddRange(PartLoader.LoadedPartsList.BDAParts());
+		    const string FILTER_CATEGORY = "Filter by Function";
+		    const string CUSTOM_CATEGORY_NAME = "BDA Weapons";
 
-			Texture2D iconTex = GameDatabase.Instance.GetTexture("BDArmory/Textures/icon", false);
+		    availableParts.Clear();
+		    availableParts.AddRange(PartLoader.LoadedPartsList.BDAParts());
 
-			RUI.Icons.Selectable.Icon icon = new RUI.Icons.Selectable.Icon("BDArmory", iconTex, iconTex, false);
-		    
-            PartCategorizer.Category filter = PartCategorizer.Instance.filters.Find(f => f.button.categoryName == "Filter by function");
+		    Texture2D iconTex = GameDatabase.Instance.GetTexture("BDArmory/Textures/icon", false);
 
-	        PartCategorizer.AddCustomSubcategoryFilter(filter, customCategoryName, customDisplayCategoryName, icon,
-	            p => availableParts.Contains(p));
+		    RUI.Icons.Selectable.Icon icon = new RUI.Icons.Selectable.Icon("BDArmory", iconTex, iconTex, false);
 
-		}
+		    PartCategorizer.Category filter = PartCategorizer.Instance.filters.Find(f => f.button.categoryName == FILTER_CATEGORY);
+		    PartCategorizer.AddCustomSubcategoryFilter(filter, CUSTOM_CATEGORY_NAME, icon, p => availableParts.Contains(p));
+
+		    KSP.UI.UIRadioButton button = filter.button.activeButton;
+
+        }
 
 	}
 }
