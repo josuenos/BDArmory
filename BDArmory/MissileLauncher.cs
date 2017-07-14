@@ -1637,7 +1637,10 @@ namespace BDArmory
             {
                 DrawDebugLine(transform.position + (part.rb.velocity * Time.fixedDeltaTime), TargetPosition);
                 float timeToImpact;
-                SLWTarget = MissileGuidance.GetAirToAirTarget(TargetPosition, TargetVelocity, TargetAcceleration, vessel, out timeToImpact, optimumAirspeed);
+                SLWTarget = MissileGuidance.GetAirToAirTargetModular(TargetPosition, TargetVelocity, previousTargetVelocity, TargetAcceleration, vessel, previousMissileVelocity, out timeToImpact); 
+                previousTargetVelocity = TargetVelocity;
+                previousMissileVelocity = vessel.srf_velocity;
+
                 TimeToImpact = timeToImpact;
                 if (Vector3.Angle(SLWTarget - transform.position, transform.forward) > maxOffBoresight * 0.75f)
                 {
