@@ -348,10 +348,9 @@ namespace BDArmory
             }
             return finalTarget;
         }
-
-
-        public static FloatCurve DefaultLiftCurve;
-        public static FloatCurve DefaultDragCurve;
+        
+        public static FloatCurve DefaultLiftCurve = null;
+        public static FloatCurve DefaultDragCurve = null;
 
         public static Vector3 DoAeroForces(MissileLauncher ml, Vector3 targetPosition, float liftArea, float steerMult,
             Vector3 previousTorque, float maxTorque, float maxAoA)
