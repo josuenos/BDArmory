@@ -285,6 +285,7 @@
     <None Include="Distribution\GameData\BDArmory\Localization\UI\en-us.cfg" />
     <None Include="Distribution\GameData\BDArmory\MMPatches\000000_HitpointModule.cfg" />
     <None Include="Distribution\GameData\BDArmory\MMPatches\000000_HitpointModule_PartFixes.cfg" />
+    <None Include="Distribution\GameData\BDArmory\MMPatches\000000_IntakeModule_PartFixes.cfg" />
     <None Include="Distribution\GameData\BDArmory\MMPatches\10_bdac_stealth.cfg" />
     <None Include="Distribution\GameData\BDArmory\MMPatches\Armor_CVE.cfg" />
     <None Include="Distribution\GameData\BDArmory\MMPatches\BDA_Armor.cfg" />
@@ -403,6 +404,8 @@
     <None Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\Sounds\m230loop.ogg" />
     <None Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\Sounds\m230loopEnd.ogg" />
     <None Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\Sounds\m230shot.ogg" />
+    <None Include="Distribution\GameData\BDArmory\Parts\ManleyDrive\manley_drive.cfg" />
+    <None Include="Distribution\GameData\BDArmory\Parts\ManleyDrive\SSME.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\maverick\maverickMissile.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\maverick\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\missileTurret\missileTurret.cfg" />
@@ -608,6 +611,9 @@
     <Content Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\muzzle.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\smoke.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\texture.png" />
+    <Content Include="Distribution\GameData\BDArmory\Parts\ManleyDrive\SSME.dds" />
+    <Content Include="Distribution\GameData\BDArmory\Parts\ManleyDrive\SSME_GLOW.dds" />
+    <Content Include="Distribution\GameData\BDArmory\Parts\ManleyDrive\SSME_NRM.dds" />
     <Content Include="Distribution\GameData\BDArmory\Parts\maverick\texture.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\missileTurret\tex_detectionRadar.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\missileTurret\tex_lockingTurret.png" />
