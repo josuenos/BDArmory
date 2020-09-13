@@ -893,7 +893,7 @@ namespace BDArmory.UI
                 {
                     if (target.Current != null && target.Current.Vessel && mf.CanSeeTarget(target.Current) && !target.Current.isMissile && target.Current.isThreat && !target.Current.isLandedOrSurfaceSplashed)
                     {
-                        float theta = Vector3.Angle(mf.vessel.srf_vel_direction, target.Current.velocity);
+                        float theta = Vector3.Angle(mf.vessel.srf_vel_direction, target.Current.transform.position - mf.vessel.transform.position);
                         float distance = (mf.vessel.transform.position - target.Current.position).magnitude;
                         float targetScore = (target.Current == mf.currentTarget ? hysteresis : 1f) * ((bias - 1f) * Mathf.Pow(Mathf.Cos(theta / 2f), 2f) + 1f) / distance;
                         if (finalTarget == null || targetScore > finalTargetScore)
@@ -905,6 +905,40 @@ namespace BDArmory.UI
                 }
             return finalTarget;
         }
+
+        // Select a target based on target priority settings
+        public static TargetInfo GetHighestPriorityTarget(MissileFire mf)
+        {
+            TargetInfo finalTarget = null;
+            float finalTargetScore = 0f;
+            using (var target = TargetList(mf.Team).GetEnumerator())
+                while (target.MoveNext())
+                {
+                    if (target.Current != null && target.Current.Vessel && mf.CanSeeTarget(target.Current) && !target.Current.isMissile && target.Current.isThreat && !target.Current.isLandedOrSurfaceSplashed)
+                    {
+                        float targetScore = (target.Current == mf.currentTarget ? mf.targetBias : 1f) * (
+                            mf.targetWeightRange * target.Current.TargetPriRange(mf) +
+                            mf.targetWeightATA * target.Current.TargetPriATA(mf) +
+                            mf.targetWeightAccel * target.Current.TargetPriAcceleration() +
+                            mf.targetWeightClosureTime * target.Current.TargetPriClosureTime(mf) +
+                            mf.targetWeightWeaponNumber * target.Current.TargetPriWeapons(target.Current.weaponManager, mf) +
+                            mf.targetWeightFriendliesEngaging * target.Current.TargetPriFriendliesEngaging(mf) +
+                            mf.targetWeightThreat * target.Current.TargetPriThreat(target.Current.weaponManager, mf) +
+                            mf.targetWeightAoD * target.Current.TargetPriAoD(mf));
+                        if (finalTarget == null || targetScore > finalTargetScore)
+                        {
+                            finalTarget = target.Current;
+                            finalTargetScore = targetScore;
+                        }
+                    }
+                }
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                Debug.Log("[BDTargeting]: Selected " + finalTarget.Vessel.GetDisplayName() + " with target score of " + finalTargetScore.ToString("0.00"));
+
+            mf.UpdateTargetPriorityUI(finalTarget);
+            return finalTarget;
+        }
+
 
         public static TargetInfo GetMissileTarget(MissileFire mf, bool targetingMeOnly = false)
         {
