@@ -301,6 +301,11 @@ namespace BDArmory.Control
                 var heading = 360f * spawnedVesselCount / crafts.Count;
                 var direction = Vector3.ProjectOnPlane(Quaternion.AngleAxis(heading, localSurfaceNormal) * refDirection, localSurfaceNormal).normalized;
                 var spawnDistance = crafts.Count > 1 ? (spawnDistanceFactor + spawnDistanceFactor * crafts.Count) : 0f; // If it's a single craft, spawn it at the spawn point.
+
+                // FIXME
+                if ((altitude <= 10) && (crafts.Count > 1))
+                    spawnDistance = spawnDistanceFactor * 1000;
+
                 craftSpawnPosition = spawnPoint + 1000f * localSurfaceNormal + spawnDistance * direction; // Spawn 1000m higher than asked for, then adjust the altitude later once the craft's loaded.
                 FlightGlobals.currentMainBody.GetLatLonAlt(craftSpawnPosition, out craftGeoCoords.x, out craftGeoCoords.y, out craftGeoCoords.z); // Convert spawn point to geo-coords for the actual spawning function.
                 Vessel vessel = null;
@@ -347,7 +352,9 @@ namespace BDArmory.Control
                 var heightFromTerrain = spawnedVessels[vesselName].Item4;
                 shipFacility = spawnedVessels[vesselName].Item5;
                 ray = new Ray(craftSpawnPosition, -localSurfaceNormal);
+
                 var distance = Physics.Raycast(ray, out hit, (float)(altitude + 10000f), 1 << 15) ? hit.distance : (float)altitude + 10000f;
+
                 if (!spawnAirborne)
                 {
                     vessel.SetRotation(Quaternion.FromToRotation(shipFacility == EditorFacility.SPH ? -Vector3.forward : Vector3.up, localSurfaceNormal)); // Re-orient the vessel to the terrain normal.
@@ -485,6 +492,7 @@ namespace BDArmory.Control
                             BDACompetitionMode.Instance.competitionStatus.Add(message);
                             break;
                         }
+
                     } while (Planetarium.GetUniversalTime() - landingStartTime < 10 + altitude / easeInSpeed); // Give the vessels up to (10 + altitude / VESSEL_SPAWN_EASE_IN_SPEED) seconds to land.
                     if (!vesselSpawnSuccess && spawnFailureReason == SpawnFailureReason.None)
                         spawnFailureReason = SpawnFailureReason.TimedOut;
@@ -1139,10 +1147,12 @@ namespace BDArmory.Control
             if (startCompetition) // Start the competition.
             {
                 var competitionStartDelayStart = Planetarium.GetUniversalTime();
+
                 while (Planetarium.GetUniversalTime() - competitionStartDelayStart < competitionStartDelay - Time.fixedDeltaTime)
                 {
                     var timeLeft = competitionStartDelay - (Planetarium.GetUniversalTime() - competitionStartDelayStart);
                     if ((int)(timeLeft - Time.fixedDeltaTime) < (int)timeLeft)
+
                         BDACompetitionMode.Instance.competitionStatus.Add("Competition starting in T-" + timeLeft.ToString("0") + "s");
                     yield return new WaitForFixedUpdate();
                 }
