@@ -695,7 +695,7 @@ namespace BDArmory.Modules
 			}
 			emitter.Dispose();
 
-			if (roundsPerMinute >= 1500 || !pulseLaser)
+			if (roundsPerMinute >= 1500 || (eWeaponType == WeaponTypes.Laser && !pulseLaser))
 			{
 				Events["ToggleRipple"].guiActiveEditor = false;
 				Fields["useRippleFire"].guiActiveEditor = false;
