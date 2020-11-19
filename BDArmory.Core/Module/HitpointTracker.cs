@@ -100,7 +100,7 @@ namespace BDArmory.Core.Module
             }
             else
             {
-                Debug.Log("[BDArmory]: HitpointTracker::OnStart part is null");
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: OnStart part is null");
             }
         }
 
@@ -165,18 +165,24 @@ namespace BDArmory.Core.Module
 
                 var density = (part.mass * 1000f) / structuralVolume;
                 density = Mathf.Clamp(density, 1000, 10000);
-                //Debug.Log("[BDArmory]: Hitpoint Calc" + part.name + " | structuralVolume : " + structuralVolume);
-                //Debug.Log("[BDArmory]: Hitpoint Calc"+part.name+" | Density : " + density);
+                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: Hitpoint Calc" + part.name + " | structuralVolume : " + structuralVolume);
+                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: Hitpoint Calc" + part.name + " | Density : " + density);
 
                 var structuralMass = density * structuralVolume;
-                //Debug.Log("[BDArmory]: Hitpoint Calc" + part.name + " | structuralMass : " + structuralMass);
+                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: Hitpoint Calc" + part.name + " | structuralMass : " + structuralMass);
                 //3. final calculations
                 hitpoints = structuralMass * hitpointMultiplier * 0.33f;
 
                 if (hitpoints > 10 * part.mass * 1000f || hitpoints < 0.1f * part.mass * 1000f)
                 {
-                    Debug.Log($"[BDArmory]: HitpointTracker::Clamping hitpoints for part {part.name}");
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log($"[HitpointTracker]: Clamping hitpoints for part {part.name}");
                     hitpoints = hitpointMultiplier * part.mass * 333f;
+                }
+
+                // SuicidalInsanity B9 patch
+                if (part.name.Contains("B9.Aero.Wing.Procedural")) 
+                {
+                    hitpoints = (part.mass * 1000f) * 3.5f; // since wings are basically a 2d object, lets have mass be our scalar - afterall, 2x the mass will ~= 2x the surfce area
                 }
 
                 hitpoints = Mathf.Round(hitpoints / HpRounding) * HpRounding;

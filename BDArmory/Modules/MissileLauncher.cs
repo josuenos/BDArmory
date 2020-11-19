@@ -664,7 +664,8 @@ namespace BDArmory.Modules
 
         void Update()
         {
-            CheckDetonationState();
+            if (!HasFired)
+                CheckDetonationState();
             if (HighLogic.LoadedSceneIsFlight)
 			{
 				if (weaponClass == WeaponClasses.SLW && FlightGlobals.getAltitudeAtPos(part.transform.position) > 0) //#710
@@ -807,6 +808,7 @@ namespace BDArmory.Modules
 
             if (HasFired && !HasExploded && part != null)
             {
+                CheckDetonationState();
                 CheckDetonationDistance();
 
                 part.rb.isKinematic = false;
@@ -918,27 +920,39 @@ namespace BDArmory.Modules
 
         void UpdateGuidance()
         {
+            string debugTarget = "none";
             if (guidanceActive)
             {
                 if (TargetingMode == TargetingModes.Heat)
                 {
                     UpdateHeatTarget();
+                    if (heatTarget.vessel)
+                        debugTarget = heatTarget.vessel.GetDisplayName() + " " + heatTarget.signalStrength.ToString();
+                    else if (heatTarget.signalStrength > 0)
+                        debugTarget = "Flare " + heatTarget.signalStrength.ToString();
                 }
                 else if (TargetingMode == TargetingModes.Radar)
                 {
                     UpdateRadarTarget();
+                    if (radarTarget.vessel)
+                        debugTarget = radarTarget.vessel.GetDisplayName() + " " + radarTarget.signalStrength.ToString();
+                    else if (radarTarget.signalStrength > 0)
+                        debugTarget = "Chaff " + radarTarget.signalStrength.ToString();
                 }
                 else if (TargetingMode == TargetingModes.Laser)
                 {
                     UpdateLaserTarget();
+                    debugTarget = TargetPosition.ToString();
                 }
                 else if (TargetingMode == TargetingModes.Gps)
                 {
                     UpdateGPSTarget();
+                    debugTarget = UpdateGPSTarget().ToString();
                 }
                 else if (TargetingMode == TargetingModes.AntiRad)
                 {
                     UpdateAntiRadiationTarget();
+                    debugTarget = TargetPosition.ToString();
                 }
 
                 UpdateTerminalGuidance();
@@ -1067,6 +1081,9 @@ namespace BDArmory.Modules
                     KillRCS();
                 }
             }
+
+            debugString.Append("Missile target=" + debugTarget);
+            debugString.Append(Environment.NewLine);
         }
 
         // feature_engagementenvelope: terminal guidance mode for cruise missiles
@@ -1088,7 +1105,7 @@ namespace BDArmory.Modules
                 {
                     case TargetingModes.Heat:
                         // get ground heat targets
-                        heatTarget = BDATargetManager.GetHeatTarget(SourceVessel, vessel, new Ray(transform.position + (50 * GetForwardTransform()), TargetPosition - GetForwardTransform()), terminalGuidanceDistance, heatThreshold, true, SourceVessel.gameObject.GetComponent<MissileFire>(), true);
+                        heatTarget = BDATargetManager.GetHeatTarget(SourceVessel, vessel, new Ray(transform.position + (50 * GetForwardTransform()), TargetPosition - GetForwardTransform()), heatTarget.signalStrength, terminalGuidanceDistance, heatThreshold, true, SourceVessel.gameObject.GetComponent<MissileFire>(), true);
                         if (heatTarget.exists)
                         {
                             if (BDArmorySettings.DRAW_DEBUG_LABELS)
@@ -1099,6 +1116,15 @@ namespace BDArmory.Modules
                             TargetAcceleration = heatTarget.acceleration;
                             lockFailTimer = 0;
                             targetGPSCoords = VectorUtils.WorldPositionToGeoCoords(TargetPosition, vessel.mainBody);
+
+                            // Adjust heat score based on distance missile will travel in the next update
+                            if (heatTarget.signalStrength > 0)
+                            {
+                                float currentFactor = (1400 * 1400) / Mathf.Clamp((heatTarget.position - transform.position).sqrMagnitude, 90000, 36000000);
+                                Vector3 currVel = (float)vessel.srfSpeed * vessel.Velocity().normalized;
+                                float futureFactor = (1400 * 1400) / Mathf.Clamp((TargetPosition - (transform.position + (currVel * Time.fixedDeltaTime))).sqrMagnitude, 90000, 36000000);
+                                heatTarget.signalStrength *= futureFactor / currentFactor;
+                            }
                         }
                         else
                         {
@@ -1742,7 +1768,7 @@ namespace BDArmory.Modules
             {
                 Vector3 position = transform.position;//+rigidbody.velocity*Time.fixedDeltaTime;
 
-                ExplosionFx.CreateExplosion(position, blastPower, explModelPath, explSoundPath, true, 0, part);
+                ExplosionFx.CreateExplosion(position, blastPower, explModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part);
             }
 
             List<BDAGaplessParticleEmitter>.Enumerator e = gaplessEmitters.GetEnumerator();

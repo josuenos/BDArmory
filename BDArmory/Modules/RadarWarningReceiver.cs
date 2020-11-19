@@ -222,7 +222,7 @@ namespace BDArmory.Modules
 
                 if (weaponManager && weaponManager.guardMode)
                 {
-                    weaponManager.FireAllCountermeasures(Random.Range(2, 4));
+                    weaponManager.FireAllCountermeasures(Random.Range(1, 2)); // Was 2-4, but we don't want to take too long doing this initial dump before other routines kick in
                     weaponManager.incomingThreatPosition = source;
                 }
             }

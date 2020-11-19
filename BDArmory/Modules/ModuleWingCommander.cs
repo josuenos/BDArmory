@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using BDArmory.Core;
 using BDArmory.Control;
 using BDArmory.Misc;
 using BDArmory.Parts;
@@ -15,7 +16,7 @@ namespace BDArmory.Modules
     {
         public MissileFire weaponManager;
 
-        List<IBDAIControl> friendlies;
+        public List<IBDAIControl> friendlies;
 
         List<IBDAIControl> wingmen;
         [KSPField(isPersistant = true)] public string savedWingmen = string.Empty;
@@ -460,14 +461,13 @@ namespace BDArmory.Modules
         {
             RefreshFriendlies();
             int i = 0;
-            List<IBDAIControl>.Enumerator wingman = friendlies.GetEnumerator();
-            while (wingman.MoveNext())
-            {
-                if (wingman.Current == null) continue;
-                wingman.Current.CommandFollow(this, i);
-                i++;
-            }
-            wingman.Dispose();
+            using (var wingman = friendlies.GetEnumerator())
+                while (wingman.MoveNext())
+                {
+                    if (wingman.Current == null) continue;
+                    wingman.Current.CommandFollow(this, i);
+                    i++;
+                }
         }
 
         void CommandAG(IBDAIControl wingman, int index, object ag)

@@ -5,6 +5,7 @@ using System.Text;
 using BDArmory.Core;
 using BDArmory.Core.Extension;
 using BDArmory.CounterMeasure;
+using BDArmory.Control;
 using BDArmory.FX;
 using BDArmory.Guidances;
 using BDArmory.Misc;
@@ -60,6 +61,10 @@ namespace BDArmory.Modules
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_DetonationDistanceOverride"), UI_FloatRange(minValue = 0f, maxValue = 100f, stepIncrement = 1f, scene = UI_Scene.Editor, affectSymCounterparts = UI_Scene.All)]//Detonation distance override
         public float DetonationDistance = -1;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_DetonateAtMinimumDistance"), // Detonate At Minumum Distance
+            UI_Toggle(disabledText = "#LOC_BDArmory_false", enabledText = "#LOC_BDArmory_true", scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
+        public bool DetonateAtMinimumDistance = false;
 
         //[KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "SLW Offset"), UI_FloatRange(minValue = -1000f, maxValue = 0f, stepIncrement = 100f, affectSymCounterparts = UI_Scene.All)]
         public float SLWOffset = 0;
@@ -237,6 +242,7 @@ namespace BDArmory.Modules
 
         //heat stuff
         public TargetSignatureData heatTarget;
+        private TargetSignatureData predictedHeatTarget;
 
         //radar stuff
         public VesselRadarData vrd;
@@ -385,30 +391,57 @@ namespace BDArmory.Modules
 
         protected void UpdateHeatTarget()
         {
+
             if (lockFailTimer > 1)
             {
                 legacyTargetVessel = null;
                 TargetAcquired = false;
+                predictedHeatTarget.exists = false;
+                predictedHeatTarget.signalStrength = 0;
                 return;
             }
-
 
             if (heatTarget.exists && lockFailTimer < 0)
             {
                 lockFailTimer = 0;
+                predictedHeatTarget = heatTarget;
             }
             if (lockFailTimer >= 0)
             {
-                Ray lookRay = new Ray(transform.position, heatTarget.position + (heatTarget.velocity * Time.fixedDeltaTime) - transform.position);
-                heatTarget = BDATargetManager.GetHeatTarget(SourceVessel, vessel, lookRay, lockedSensorFOV / 2, heatThreshold, allAspect, SourceVessel?.gameObject?.GetComponent<MissileFire>());
+                // Decide where to point seeker
+                Ray lookRay;
+                float targetHeatScore = 0;
+                if (predictedHeatTarget.exists) // We have an active target we've been seeking, or a prior target that went stale
+                {
+                    lookRay = new Ray(transform.position, predictedHeatTarget.position - transform.position);
+                    targetHeatScore = predictedHeatTarget.signalStrength;
+                }
+                else if (heatTarget.exists) // We have a new active target and no prior target
+                {
+                    lookRay = new Ray(transform.position, heatTarget.position + (heatTarget.velocity * Time.fixedDeltaTime) - transform.position);
+                    targetHeatScore = heatTarget.signalStrength;
+                }
+                else // No target, look straight ahead
+                {
+                    lookRay = new Ray(transform.position, vessel.srf_vel_direction);
+                }
+
+                if (BDArmorySettings.DRAW_DEBUG_LINES)
+                    DrawDebugLine(lookRay.origin, lookRay.origin + lookRay.direction * 10000, Color.magenta);
+
+                // Update heat target
+                heatTarget = BDATargetManager.GetHeatTarget(SourceVessel, vessel, lookRay, targetHeatScore, lockedSensorFOV / 2, heatThreshold, allAspect, SourceVessel?.gameObject?.GetComponent<MissileFire>());
 
                 if (heatTarget.exists)
                 {
                     TargetAcquired = true;
-                    TargetPosition = heatTarget.position + (2 * heatTarget.velocity * Time.fixedDeltaTime);
+                    TargetPosition = heatTarget.position + (2 * heatTarget.velocity * Time.fixedDeltaTime); // Not sure why this is 2*
                     TargetVelocity = heatTarget.velocity;
                     TargetAcceleration = heatTarget.acceleration;
                     lockFailTimer = 0;
+
+                    // Update target information
+                    predictedHeatTarget = heatTarget;
                 }
                 else
                 {
@@ -418,6 +451,17 @@ namespace BDArmory.Modules
                         lockFailTimer += Time.fixedDeltaTime;
                     }
                 }
+
+                // Update predicted values based on target information
+                if (predictedHeatTarget.exists)
+                {
+                    float currentFactor = (1400 * 1400) / Mathf.Clamp((predictedHeatTarget.position - transform.position).sqrMagnitude, 90000, 36000000);
+                    Vector3 currVel = (float)vessel.srfSpeed * vessel.Velocity().normalized;
+                    predictedHeatTarget.position = predictedHeatTarget.position + predictedHeatTarget.velocity * Time.fixedDeltaTime;
+                    float futureFactor = (1400 * 1400) / Mathf.Clamp((predictedHeatTarget.position - (transform.position + (currVel * Time.fixedDeltaTime))).sqrMagnitude, 90000, 36000000);
+                    predictedHeatTarget.signalStrength *= futureFactor / currentFactor;
+                }
+
             }
         }
 
@@ -883,7 +927,6 @@ namespace BDArmory.Modules
             {
                 case DetonationDistanceStates.NotSafe:
                     //Lets check if we are at a safe distance from the source vessel
-
                     using (var hitsEnu = Physics.OverlapSphere(futureMissilePosition, GetBlastRadius() * 3f, 557057).AsEnumerable().GetEnumerator())
                     {
                         while (hitsEnu.MoveNext())
@@ -893,7 +936,7 @@ namespace BDArmory.Modules
                             {
                                 Part partHit = hitsEnu.Current.GetComponentInParent<Part>();
 
-                                if (partHit?.vessel == SourceVessel)
+                                if (partHit?.vessel != vessel && partHit?.vessel == SourceVessel) // Not ourselves, but the source vessel.
                                 {
                                     //We found a hit to the vessel
                                     return;
@@ -907,12 +950,10 @@ namespace BDArmory.Modules
                     }
 
                     //We are safe and we can continue with the cruising phase
-
                     DetonationDistanceState = DetonationDistanceStates.Cruising;
                     break;
 
                 case DetonationDistanceStates.Cruising:
-
                     if (Vector3.Distance(futureMissilePosition, futureTargetPosition) < GetBlastRadius() * 10)
                     {
                         //We are now close enough to start checking the detonation distance
@@ -931,7 +972,6 @@ namespace BDArmory.Modules
                     break;
 
                 case DetonationDistanceStates.CheckingProximity:
-
                     if (DetonationDistance == 0)
                     {
                         if (weaponClass == WeaponClasses.Bomb) return;
@@ -976,7 +1016,6 @@ namespace BDArmory.Modules
                     else
                     {
                         float optimalDistance = (float)(Math.Max(DetonationDistance, relativeSpeed));
-
                         using (var hitsEnu = Physics.OverlapSphere(vessel.CoM, optimalDistance, 557057).AsEnumerable().GetEnumerator())
                         {
                             while (hitsEnu.MoveNext())
@@ -988,10 +1027,18 @@ namespace BDArmory.Modules
                                     Part partHit = hitsEnu.Current.GetComponentInParent<Part>();
 
                                     if (partHit?.vessel == vessel || partHit?.vessel == SourceVessel) continue;
+                                    if (partHit?.vessel.vesselType == VesselType.Debris) continue; // Ignore debris
 
                                     Debug.Log("[BDArmory]: Missile proximity sphere hit | Distance overlap = " + optimalDistance + "| Part name = " + partHit.name);
 
                                     //We found a hit a different vessel than ours
+                                    if (DetonateAtMinimumDistance)
+                                    {
+                                        var distance = Vector3.Distance(partHit.transform.position, vessel.CoM);
+                                        var predictedDistance = Vector3.Distance(AIUtils.PredictPosition(partHit.transform.position, partHit.vessel.Velocity(), partHit.vessel.acceleration, Time.deltaTime), AIUtils.PredictPosition(vessel, Time.deltaTime));
+                                        if (distance > predictedDistance && distance > Time.fixedDeltaTime * (float)vessel.srfSpeed) // If we're closing and not going to hit within the next update, then wait.
+                                            return;
+                                    }
                                     DetonationDistanceState = DetonationDistanceStates.Detonate;
                                     return;
                                 }

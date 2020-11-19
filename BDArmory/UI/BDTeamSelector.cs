@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using BDArmory.Core;
 using BDArmory.Misc;
 using BDArmory.Modules;
 using UnityEngine;

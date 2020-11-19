@@ -8,7 +8,7 @@ namespace BDArmory.Control
         //[KSPField(isPersistant = false, guiActive = true, guiActiveEditor = false, guiName = "TargetSpeed"),
         //	UI_FloatRange(minValue = 1f, maxValue = 420f, stepIncrement = 1f, scene = UI_Scene.All)]
         public float targetSpeed = 0;
-
+        public float throttleOverride = -1f;
         public bool useBrakes = true;
         public bool allowAfterburner = true;
 
@@ -23,7 +23,7 @@ namespace BDArmory.Control
         //[KSPField(guiActive = true, guiName = "Thrust")]
         public float debugThrust;
 
-        List<MultiModeEngine> multiModeEngines;
+        public List<MultiModeEngine> multiModeEngines;
 
         //[KSPEvent(guiActive = true, guiActiveEditor = false, guiName = "ToggleAC")]
         public void Toggle()
@@ -75,11 +75,16 @@ namespace BDArmory.Control
             float gravAccel = GravAccel();
             float requestEngineAccel = accel - gravAccel;
 
-            possibleAccel = gravAccel;
+            possibleAccel = 0; //gravAccel;
 
             float dragAccel = 0;
             float engineAccel = MaxEngineAccel(requestEngineAccel, out dragAccel);
 
+            if (throttleOverride >= 0)
+            {
+                s.mainThrottle = throttleOverride;
+                return;
+            }
             if (engineAccel == 0)
             {
                 s.mainThrottle = accel > 0 ? 1 : 0;
@@ -140,7 +145,7 @@ namespace BDArmory.Control
 
             float vesselMass = vessel.GetTotalMass();
 
-            float accel = maxThrust / vesselMass;
+            float accel = maxThrust / vesselMass; // This assumes that all thrust is in the same direction.
 
             //estimate drag
             float estimatedCurrentAccel = finalThrust / vesselMass - GravAccel();
@@ -149,7 +154,7 @@ namespace BDArmory.Control
             float accelError = (actualCurrentAccel - estimatedCurrentAccel); // /2 -- why divide by 2 here?
             dragAccel = accelError;
 
-            possibleAccel += accel;
+            possibleAccel += accel; // This assumes that the acceleration from engines is in the same direction as the original possibleAccel.
 
             //use multimode afterburner for extra accel if lacking
             using (List<MultiModeEngine>.Enumerator mmes = multiModeEngines.GetEnumerator())
@@ -190,7 +195,7 @@ namespace BDArmory.Control
         float GravAccel()
         {
             Vector3 geeVector = FlightGlobals.getGeeForceAtPosition(vessel.CoM);
-            float gravAccel = geeVector.magnitude * Mathf.Cos(Mathf.Deg2Rad * Vector3.Angle(-geeVector, vessel.velocityD));
+            float gravAccel = geeVector.magnitude * Mathf.Cos(Mathf.Deg2Rad * Vector3.Angle(-geeVector, vessel.velocityD)); // -g.v/|v| ???
             return gravAccel;
         }
 

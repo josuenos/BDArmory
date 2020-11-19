@@ -10,6 +10,7 @@ using BDArmory.Parts;
 using BDArmory.Shaders;
 using BDArmory.UI;
 using BDArmory.Control;
+using BDArmory.Competition;
 using UnityEngine;
 
 namespace BDArmory.Bullets
@@ -38,6 +39,7 @@ namespace BDArmory.Bullets
         public BulletDragTypes dragType;
 
         public Vessel sourceVessel;
+        public string sourceVesselName;
         public Color lightColor = Misc.Misc.ParseColor255("255, 235, 145, 255");
         public Color projectileColor;
         public string bulletTexturePath;
@@ -99,10 +101,13 @@ namespace BDArmory.Bullets
 
         private Vector3[] linePositions = new Vector3[2];
 
+        private double distanceTraveled = 0;
+
         void OnEnable()
         {
             startPosition = transform.position;
             initialSpeed = currentVelocity.magnitude; // this is the velocity used for drag estimations (only), use total velocity, not muzzle velocity
+            distanceTraveled = 0; // Reset the distance travelled for the bullet (since it comes from a pool).
 
             if (!wasInitiated)
             {
@@ -172,6 +177,11 @@ namespace BDArmory.Bullets
                 var aName = this.sourceVessel.GetName();
                 if (BDACompetitionMode.Instance && BDACompetitionMode.Instance.Scores.ContainsKey(aName))
                     ++BDACompetitionMode.Instance.Scores[aName].shotsFired;
+                sourceVesselName = sourceVessel.GetName(); // Set the source vessel name as the vessel might have changed its name or died by the time the bullet hits.
+            }
+            else
+            {
+                sourceVesselName = null;
             }
         }
 
@@ -221,6 +231,9 @@ namespace BDArmory.Bullets
 
             //calculate flight time for drag purposes
             flightTimeElapsed += Time.fixedDeltaTime;
+
+            // calculate flight distance for achievement purposes
+            distanceTraveled += currentVelocity.magnitude * Time.fixedDeltaTime;
 
             //Drag types currently only affect Impactvelocity
             //Numerical Integration is currently Broken
@@ -443,7 +456,7 @@ namespace BDArmory.Bullets
             if (ProximityAirDetonation(distanceFromStart))
             {
                 //detonate
-                ExplosionFx.CreateExplosion(currPosition, tntMass, explModelPath, explSoundPath, false, caliber, null, currentVelocity);
+                ExplosionFx.CreateExplosion(currPosition, tntMass, explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, currentVelocity);
                 KillBullet();
 
                 return;
@@ -509,15 +522,39 @@ namespace BDArmory.Bullets
             //No struts, they cause weird bugs :) -BahamutoD
             if (hitPart == null) return;
             if (hitPart.partInfo.name.Contains("Strut")) return;
+
+            // Add decals
+            if (BDArmorySettings.BULLET_HITS)
+            {
+                BulletHitFX.CreateBulletHit(hitPart, hit.point, hit, hit.normal, hasRichocheted, caliber, penetrationfactor);
+            }
+
+            // Apply damage
+            float damage;
+            if (explosive)
+            {
+                damage = hitPart.AddBallisticDamage(bulletMass - tntMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
+            }
+            else
+            {
+                damage = hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
+            }
+
+            // Update scoring structures
             var aName = this.sourceVessel.GetName();
             var tName = hitPart.vessel.GetName();
 
-            if (aName != tName)
+            if (aName != null && tName != null && aName != tName && BDACompetitionMode.Instance.Scores.ContainsKey(aName) && BDACompetitionMode.Instance.Scores.ContainsKey(tName))
             {
                 //Debug.Log("[BDArmory]: Weapon from " + aName + " damaged " + tName);
 
+                if (BDArmorySettings.REMOTE_LOGGING_ENABLED)
+                {
+                    BDAScoreService.Instance.TrackHit(aName, tName, bullet.name, distanceTraveled);
+                    BDAScoreService.Instance.TrackDamage(aName, tName, damage);
+                }
+
                 // update scoring structure on attacker
-                if (BDACompetitionMode.Instance.Scores.ContainsKey(aName))
                 {
                     var aData = BDACompetitionMode.Instance.Scores[aName];
                     aData.Score += 1;
@@ -530,36 +567,26 @@ namespace BDArmory.Bullets
                     }
 
                 }
+
                 // update scoring structure on the defender.
-                if (BDACompetitionMode.Instance.Scores.ContainsKey(tName))
                 {
                     var tData = BDACompetitionMode.Instance.Scores[tName];
                     tData.lastPersonWhoHitMe = aName;
                     tData.lastHitTime = Planetarium.GetUniversalTime();
                     tData.everyoneWhoHitMe.Add(aName);
+                    // Track hits
                     if (tData.hitCounts.ContainsKey(aName))
                         ++tData.hitCounts[aName];
                     else
                         tData.hitCounts.Add(aName, 1);
+                    // Track damage
+                    if (tData.damageFromBullets.ContainsKey(aName))
+                        tData.damageFromBullets[aName] += damage;
+                    else
+                        tData.damageFromBullets.Add(aName, damage);
                 }
             }
 
-            if (BDArmorySettings.BULLET_HITS)
-            {
-                BulletHitFX.CreateBulletHit(hitPart, hit.point, hit, hit.normal, hasRichocheted, caliber,
-                    penetrationfactor);
-            }
-
-            if (explosive)
-            {
-                hitPart.AddBallisticDamage(bulletMass - tntMass, caliber, multiplier, penetrationfactor,
-                    bulletDmgMult, impactVelocity);
-            }
-            else
-            {
-                hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor,
-                    bulletDmgMult, impactVelocity);
-            }
         }
 
         private void CalculateDragNumericalIntegration()
@@ -642,9 +669,14 @@ namespace BDArmory.Bullets
         private float CalculatePenetration()
         {
             float penetration = 0;
-            if (caliber > 10) //use the "krupp" penetration formula for anything larger than HMGs
+            if (apBulletMod <= 0) // sanity check/legacy compatibility
             {
-                penetration = (float)(16f * impactVelocity * Math.Sqrt(bulletMass / 1000) / Math.Sqrt(caliber));
+                apBulletMod = 1;
+            }
+
+            if (caliber > 5) //use the "krupp" penetration formula for anything larger than HMGs
+            {
+                penetration = (float)(16f * impactVelocity * Math.Sqrt(bulletMass / 1000) / Math.Sqrt(caliber) * apBulletMod); //APBulletMod now actually implemented, serves as penetration multiplier, 1 being neutral, <1 for soft rounds, >1 for AP penetrators
             }
 
             return penetration;
@@ -674,13 +706,13 @@ namespace BDArmory.Bullets
 
                     if (airDetonation)
                     {
-                        ExplosionFx.CreateExplosion(hit.point, GetExplosivePower(), explModelPath, explSoundPath, false, caliber);
+                        ExplosionFx.CreateExplosion(hit.point, GetExplosivePower(), explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName);
                     }
                     else
                     {
                         ExplosionFx.CreateExplosion(hit.point - (ray.direction * 0.1f),
                                                     GetExplosivePower(),
-                                                    explModelPath, explSoundPath, false, caliber, null, direction: currentVelocity);
+                                                    explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, direction: currentVelocity);
                     }
 
                     KillBullet();
