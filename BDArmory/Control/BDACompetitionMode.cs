@@ -1321,7 +1321,6 @@ namespace BDArmory.Control
             {
                 if (debris != null && debris.vesselType == VesselType.Debris && debris.FindPartModuleImplementing<MissileBase>()==null)
                 {
-                    Debug.Log("DEBUG debris " + debris.vesselName + " TYPE: " + debris.vesselType.ToString() + " Missile? " + debris.FindPartModuleImplementing<MissileBase>().ToString());
                     StartCoroutine(DelayedVesselRemovalCoroutine(debris, BDArmorySettings.DEBRIS_CLEANUP_DELAY));
                 }
             }
