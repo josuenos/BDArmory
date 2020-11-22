@@ -1319,8 +1319,9 @@ namespace BDArmory.Control
         {
             try
             {
-                if (debris != null && debris.vesselType == VesselType.Debris)
+                if (debris != null && debris.vesselType == VesselType.Debris && debris.FindPartModuleImplementing<MissileBase>()==null)
                 {
+                    Debug.Log("DEBUG debris " + debris.vesselName + " TYPE: " + debris.vesselType.ToString() + " Missile? " + debris.FindPartModuleImplementing<MissileBase>().ToString());
                     StartCoroutine(DelayedVesselRemovalCoroutine(debris, BDArmorySettings.DEBRIS_CLEANUP_DELAY));
                 }
             }
@@ -1332,7 +1333,13 @@ namespace BDArmory.Control
 
         private IEnumerator DelayedVesselRemovalCoroutine(Vessel vessel, float delay)
         {
+            var vesselType = vessel.vesselType;
             yield return new WaitForSeconds(delay);
+            if (vessel != null && vesselType == VesselType.Debris && vessel.vesselType != VesselType.Debris)
+            {
+                Debug.Log("DEBUG Debris " + vessel.vesselName + " is no longer debris, not removing.");
+                yield break;
+            }
             if (vessel != null)
             {
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)

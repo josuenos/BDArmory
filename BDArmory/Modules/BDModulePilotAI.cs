@@ -1232,7 +1232,11 @@ namespace BDArmory.Modules
             debugString.Append(Environment.NewLine);
 
             // float limiter = ((speed - 50) / 330f) + possibleAccel / 15f;
-            float limiter = ((speed - idleSpeed / 2f) / idleSpeed) + possibleAccel; // FIXME Find the right scaling factor for possibleAccel without G.
+            float limiter = 0f;
+            if (possibleAccel > 0)
+                limiter = ((speed - 50) / 330f) + possibleAccel / 15f;
+            else
+                limiter = ((speed - minSpeed) / minSpeed);
             debugString.Append($"unclamped limiter: { limiter}");
             debugString.Append(Environment.NewLine);
 
