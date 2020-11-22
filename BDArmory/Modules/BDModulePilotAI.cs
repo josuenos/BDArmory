@@ -1236,7 +1236,7 @@ namespace BDArmory.Modules
             if (possibleAccel > 0)
                 limiter = ((speed - 50) / 330f) + possibleAccel / 15f;
             else
-                limiter = ((speed - minSpeed) / minSpeed);
+                limiter = ((speed - minSpeed) / 2f / minSpeed);
             debugString.Append($"unclamped limiter: { limiter}");
             debugString.Append(Environment.NewLine);
 
