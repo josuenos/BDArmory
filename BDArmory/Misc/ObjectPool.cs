@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using BDArmory.Core;
 
 namespace BDArmory.Misc
 {
@@ -9,6 +10,7 @@ namespace BDArmory.Misc
         public GameObject poolObject;
         public int size { get { return pool.Count; } }
         public bool canGrow;
+        public float disableAfterDelay;
         public bool forceReUse;
         public int lastIndex = 0;
 
@@ -23,6 +25,12 @@ namespace BDArmory.Misc
 
         void Start()
         {
+        }
+
+        void OnDestroy()
+        {
+            foreach (var poolObject in pool)
+                Destroy(poolObject);
         }
 
         public GameObject GetPooledObject(int index)
@@ -43,6 +51,8 @@ namespace BDArmory.Misc
 
         private void ReplacePoolObject(int index)
         {
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                Debug.Log("[ObjectPool]: Object of type " + poolObjectName + " was null at position " + index + ", replacing it.");
             GameObject obj = Instantiate(poolObject);
             obj.transform.SetParent(transform);
             obj.SetActive(false);
@@ -66,6 +76,7 @@ namespace BDArmory.Misc
                 if (!pool[i].activeInHierarchy)
                 {
                     lastIndex = i;
+                    if (disableAfterDelay > 0f) DisableAfterDelay(pool[i], disableAfterDelay);
                     return pool[i];
                 }
             }
@@ -78,6 +89,7 @@ namespace BDArmory.Misc
                 if (!pool[i].activeInHierarchy)
                 {
                     lastIndex = i;
+                    if (disableAfterDelay > 0f) DisableAfterDelay(pool[i], disableAfterDelay);
                     return pool[i];
                 }
             }
@@ -88,6 +100,7 @@ namespace BDArmory.Misc
                 Debug.Log("[ObjectPool]: Increasing pool size to " + size + " for " + poolObjectName);
                 AddObjectsToPool(size - pool.Count);
 
+                if (disableAfterDelay > 0f) DisableAfterDelay(pool[pool.Count - 1], disableAfterDelay);
                 return pool[pool.Count - 1]; // Return the last entry in the pool
             }
 
@@ -95,6 +108,7 @@ namespace BDArmory.Misc
             {
                 lastIndex = (lastIndex + 1) % pool.Count;
                 pool[lastIndex].SetActive(false);
+                if (disableAfterDelay > 0f) DisableAfterDelay(pool[lastIndex], disableAfterDelay);
                 return pool[lastIndex];
             }
 
@@ -116,12 +130,13 @@ namespace BDArmory.Misc
             }
         }
 
-        public static ObjectPool CreateObjectPool(GameObject obj, int size, bool canGrow, bool destroyOnLoad, bool disableAfterDelay = false, bool forceReUse = false)
+        public static ObjectPool CreateObjectPool(GameObject obj, int size, bool canGrow, bool destroyOnLoad, float disableAfterDelay = 0f, bool forceReUse = false)
         {
             GameObject poolObject = new GameObject(obj.name + "Pool");
             ObjectPool op = poolObject.AddComponent<ObjectPool>();
             op.poolObject = obj;
             op.canGrow = canGrow;
+            op.disableAfterDelay = disableAfterDelay;
             op.forceReUse = forceReUse;
             op.poolObjectName = obj.name;
             if (!destroyOnLoad)

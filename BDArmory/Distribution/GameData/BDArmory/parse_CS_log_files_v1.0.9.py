@@ -72,7 +72,7 @@ for filename in competition_files:
 		for i in range(len(craft_data)):
 			craft_data[i][6] = int(craft_data[i][6])
 			craft_data[i][7] = int(10000*craft_data[i][4]/craft_data[i][5] if craft_data[i][5]>0 else 0)/100
-			craft_data[i][8] = round(1 * craft_data[i][1] + .2 * craft_data[i][2] - .1 * craft_data[i][3] + .01 * craft_data[i][3], 8)
+			craft_data[i][8] = round(3 * craft_data[i][1] + 1 * craft_data[i][2] - 3 * craft_data[i][3] + .001 * craft_data[i][4], 8)
 			craft_data[i][9] = int(100*craft_data[i][4]/(1+craft_data[i][3]))/100
 			craft_data[i][10] = int(craft_data[i][6]/(1+craft_data[i][3]))
 

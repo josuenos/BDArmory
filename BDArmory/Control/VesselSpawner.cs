@@ -40,6 +40,7 @@ namespace BDArmory.Control
         void OnDestroy()
         {
             VesselSpawnerField.Save();
+            Destroy(spawnLocationCamera);
         }
 
         private void OnGUI()
@@ -62,12 +63,9 @@ namespace BDArmory.Control
                 FlightGlobals.fetch.SetVesselPosition(FlightGlobals.currentMainBody.flightGlobalsIndex, latitude, longitude, altitude, 0, 0, true);
                 var terrainAltitude = FlightGlobals.currentMainBody.TerrainAltitude(latitude, longitude);
                 var spawnPoint = FlightGlobals.currentMainBody.GetWorldSurfacePosition(latitude, longitude, terrainAltitude + altitude);
-                // var surfaceNormal = FlightGlobals.currentMainBody.GetSurfaceNVector(latitude, longitude);
                 var radialUnitVector = (spawnPoint - FlightGlobals.currentMainBody.transform.position).normalized;
-                // var refDirection = Math.Abs(Vector3.Dot(Vector3.up, surfaceNormal)) < 0.9f ? Vector3.up : Vector3.forward; // Avoid that the reference direction is colinear with the local surface normal.
                 var refDirection = Math.Abs(Vector3.Dot(Vector3.up, radialUnitVector)) < 0.9f ? Vector3.up : Vector3.forward; // Avoid that the reference direction is colinear with the local surface normal.
                 var flightCamera = FlightCamera.fetch;
-                // var cameraPosition = Vector3.RotateTowards(distance * surfaceNormal, Vector3.Cross(surfaceNormal, refDirection), 70f * Mathf.Deg2Rad, 0);
                 var cameraPosition = Vector3.RotateTowards(distance * radialUnitVector, Vector3.Cross(radialUnitVector, refDirection), 70f * Mathf.Deg2Rad, 0);
                 if (!spawnLocationCamera.activeSelf)
                 {
@@ -76,12 +74,10 @@ namespace BDArmory.Control
                     originalCameraNearClipPlane = BDGUIUtils.GetMainCamera().nearClipPlane;
                 }
                 spawnLocationCamera.transform.position = spawnPoint;
-                // spawnLocationCamera.transform.rotation = Quaternion.LookRotation(-cameraPosition, surfaceNormal);
                 spawnLocationCamera.transform.rotation = Quaternion.LookRotation(-cameraPosition, radialUnitVector);
                 flightCamera.transform.parent = spawnLocationCamera.transform;
                 flightCamera.SetTarget(spawnLocationCamera.transform);
                 flightCamera.transform.position = spawnPoint + cameraPosition;
-                // flightCamera.transform.rotation = Quaternion.LookRotation(-flightCamera.transform.position, surfaceNormal);
                 flightCamera.transform.rotation = Quaternion.LookRotation(-flightCamera.transform.position, radialUnitVector);
                 flightCamera.SetDistance(distance);
             }
@@ -91,14 +87,17 @@ namespace BDArmory.Control
         {
             if (!spawnLocationCamera.activeSelf) return;
             var flightCamera = FlightCamera.fetch;
-            if (keepTransformValues && flightCamera.transform.parent != null)
+            if (originalCameraParentTransform != null)
             {
-                originalCameraParentTransform.position = flightCamera.transform.parent.position;
-                originalCameraParentTransform.rotation = flightCamera.transform.parent.rotation;
-                originalCameraNearClipPlane = BDGUIUtils.GetMainCamera().nearClipPlane;
+                if (keepTransformValues && flightCamera.transform != null && flightCamera.transform.parent != null)
+                {
+                    originalCameraParentTransform.position = flightCamera.transform.parent.position;
+                    originalCameraParentTransform.rotation = flightCamera.transform.parent.rotation;
+                    originalCameraNearClipPlane = BDGUIUtils.GetMainCamera().nearClipPlane;
+                }
+                flightCamera.transform.parent = originalCameraParentTransform;
+                BDGUIUtils.GetMainCamera().nearClipPlane = originalCameraNearClipPlane;
             }
-            flightCamera.transform.parent = originalCameraParentTransform;
-            BDGUIUtils.GetMainCamera().nearClipPlane = originalCameraNearClipPlane;
             if (FlightGlobals.ActiveVessel != null && FlightGlobals.ActiveVessel.state != Vessel.State.DEAD)
                 LoadedVesselSwitcher.Instance.ForceSwitchVessel(FlightGlobals.ActiveVessel); // Update the camera.
             spawnLocationCamera.SetActive(false);
@@ -328,7 +327,7 @@ namespace BDArmory.Control
                 catch { vessel = null; }
                 if (vessel == null)
                 {
-                    var craftName = craftUrl.Substring((Environment.CurrentDirectory + $"/AutoSpawn/{spawnConfig.folder}").Length);
+                    var craftName = craftUrl.Substring((Environment.CurrentDirectory + $"/AutoSpawn/{spawnConfig.folder}").Length + 1);
                     Debug.Log("[VesselSpawner]: Failed to spawn craft " + craftName);
                     failedVessels += "\n  -  " + craftName;
                     continue;
@@ -810,7 +809,10 @@ namespace BDArmory.Control
                 radialUnitVector = (spawnPoint - FlightGlobals.currentMainBody.transform.position).normalized;
                 // Check if sliders have changed.
                 if (spawnSlots.Count != (BDArmorySettings.VESSEL_SPAWN_CONCURRENT_VESSELS > 0 ? Math.Min(spawnConfig.craftFiles.Count, BDArmorySettings.VESSEL_SPAWN_CONCURRENT_VESSELS) : spawnConfig.craftFiles.Count))
+                {
                     spawnSlots = OptimiseSpawnSlots(BDArmorySettings.VESSEL_SPAWN_CONCURRENT_VESSELS > 0 ? Math.Min(spawnConfig.craftFiles.Count, BDArmorySettings.VESSEL_SPAWN_CONCURRENT_VESSELS) : spawnConfig.craftFiles.Count);
+                    continuousSpawnedVesselCount %= spawnSlots.Count;
+                }
                 // Add any craft that hasn't been spawned or has died to the spawn queue if it isn't already in the queue. Note: we need to also check that the vessel isn't null as Unity makes it a fake null!
                 foreach (var craftURL in spawnConfig.craftFiles.Where(craftURL => (BDArmorySettings.VESSEL_SPAWN_LIVES_PER_VESSEL > 0 ? spawnCounts[craftURL] < BDArmorySettings.VESSEL_SPAWN_LIVES_PER_VESSEL : true) && !spawnQueue.Contains(craftURL) && (!craftURLToVesselName.ContainsKey(craftURL) || (activeWeaponManagersByCraftURL.ContainsKey(craftURL) && (activeWeaponManagersByCraftURL[craftURL] == null || activeWeaponManagersByCraftURL[craftURL].vessel == null)))))
                 {
@@ -856,7 +858,7 @@ namespace BDArmory.Control
                         catch { vessel = null; }
                         if (vessel == null)
                         {
-                            var craftName = craftURL.Substring((Environment.CurrentDirectory + $"/AutoSpawn/{spawnConfig.folder}").Length);
+                            var craftName = craftURL.Substring((Environment.CurrentDirectory + $"/AutoSpawn/{spawnConfig.folder}").Length + 1);
                             Debug.Log("[VesselSpawner]: Failed to spawn craft " + craftName);
                             failedVessels += "\n  -  " + craftName;
                             continue;
@@ -873,7 +875,7 @@ namespace BDArmory.Control
                         // If a competition is active, update the scoring structure.
                         if ((BDACompetitionMode.Instance.competitionStarting || BDACompetitionMode.Instance.competitionIsActive) && !BDACompetitionMode.Instance.Scores.ContainsKey(vessel.vesselName))
                         {
-                            BDACompetitionMode.Instance.Scores[vessel.vesselName] = new ScoringData { lastFiredTime = Planetarium.GetUniversalTime(), previousPartCount = vessel.parts.Count };
+                            BDACompetitionMode.Instance.Scores[vessel.vesselName] = new ScoringData { vesselRef = vessel, lastFiredTime = Planetarium.GetUniversalTime(), previousPartCount = vessel.parts.Count }; // Note: we can't assign the weaponManagerRef yet as it may not be updated.
                             if (!BDACompetitionMode.Instance.DeathOrder.ContainsKey(vessel.vesselName)) // Temporarily add the vessel to the DeathOrder to prevent it from being detected as newly dead until it's finished spawning.
                                 BDACompetitionMode.Instance.DeathOrder.Add(vessel.vesselName, new Tuple<int, double>(BDACompetitionMode.Instance.DeathOrder.Count, 0));
                         }
@@ -905,8 +907,10 @@ namespace BDArmory.Control
                     // Fix control point orientation by setting the reference transformations to that of the root parts and re-orient the vessels accordingly.
                     foreach (var vessel in vesselsToActivate)
                     {
+                        int count = 0;
+                        // Sometimes if a vessel camera switch occurs, the craft appears unloaded for a couple of frames. This avoids NREs for control surfaces triggered by the change in reference transform.
+                        while (vessel != null && (vessel.ReferenceTransform == null || vessel.rootPart?.GetReferenceTransform() == null) && ++count < 5) yield return new WaitForFixedUpdate();
                         if (vessel == null) continue; // In case the vessel got destroyed in the mean time.
-                        if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[VesselSpawner]: " + vessel.vesselName + " setting reference transform to that of: " + vessel.rootPart + " refT: " + vessel.ReferenceTransform + " from " + vessel.GetReferenceTransformPart());
                         vessel.SetReferenceTransform(vessel.rootPart);
                         vessel.SetRotation(Quaternion.FromToRotation(-vessel.ReferenceTransform.up, -geeDirection) * vessel.transform.rotation); // Re-orient the vessel to the local gravity direction.
                         vessel.SetRotation(Quaternion.AngleAxis(Vector3.SignedAngle(-vessel.ReferenceTransform.forward, vessel.transform.position - spawnPoint, -geeDirection), -geeDirection) * vessel.transform.rotation); // Re-orient the vessel to the right direction.
@@ -1083,7 +1087,7 @@ namespace BDArmory.Control
                 scoreData[spawnCount] = BDACompetitionMode.Instance.Scores[vesselName]; // Save the Score instance for the vessel.
                 if (newSpawn)
                 {
-                    BDACompetitionMode.Instance.Scores[vesselName] = new ScoringData { lastFiredTime = Planetarium.GetUniversalTime(), previousPartCount = vessel.parts.Count(), tagIsIt = scoreData[spawnCount].tagIsIt };
+                    BDACompetitionMode.Instance.Scores[vesselName] = new ScoringData { vesselRef = vessel, weaponManagerRef = vessel.FindPartModuleImplementing<MissileFire>(), lastFiredTime = Planetarium.GetUniversalTime(), previousPartCount = vessel.parts.Count(), tagIsIt = scoreData[spawnCount].tagIsIt };
                     continuousSpawningScores[vesselName].cumulativeTagTime = scoreData.Sum(kvp => kvp.Value.tagTotalTime);
                     continuousSpawningScores[vesselName].cumulativeHits = scoreData.Sum(kvp => kvp.Value.Score);
                     continuousSpawningScores[vesselName].cumulativeDamagedPartsDueToRamming = scoreData.Sum(kvp => kvp.Value.totalDamagedPartsDueToRamming);
@@ -1436,10 +1440,11 @@ namespace BDArmory.Control
                 if (part != null)
                 {
                     // Create the ProtoCrewMember
-                    ProtoCrewMember crewMember = HighLogic.CurrentGame.CrewRoster.GetNewKerbal();
+                    ProtoCrewMember crewMember = HighLogic.CurrentGame.CrewRoster.GetNextOrNewKerbal(ProtoCrewMember.KerbalType.Crew);
                     crewMember.gender = UnityEngine.Random.Range(0, 100) > 50
                         ? ProtoCrewMember.Gender.Female
                         : ProtoCrewMember.Gender.Male;
+                    KerbalRoster.SetExperienceTrait(crewMember, KerbalRoster.pilotTrait);
                     //crewMember.trait = "Pilot";
 
                     // Add them to the part
@@ -1487,11 +1492,12 @@ namespace BDArmory.Control
                 foreach (CrewData cd in vesselData.crew)
                 {
                     // Create the ProtoCrewMember
-                    ProtoCrewMember crewMember = HighLogic.CurrentGame.CrewRoster.GetNewKerbal(ProtoCrewMember.KerbalType.Crew);
+                    ProtoCrewMember crewMember = HighLogic.CurrentGame.CrewRoster.GetNextOrNewKerbal(ProtoCrewMember.KerbalType.Crew);
                     if (cd.name != null)
                     {
                         crewMember.KerbalRef.name = cd.name;
                     }
+                    KerbalRoster.SetExperienceTrait(crewMember, KerbalRoster.pilotTrait);
 
                     crewArray[i++] = crewMember;
                 }

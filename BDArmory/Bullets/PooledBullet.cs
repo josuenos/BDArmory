@@ -185,6 +185,11 @@ namespace BDArmory.Bullets
             }
         }
 
+        void OnDisable()
+        {
+            sourceVessel = null;
+        }
+
         void OnDestroy()
         {
             StopCoroutine(FrameDelayedRoutine());
