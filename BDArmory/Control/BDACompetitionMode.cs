@@ -1319,7 +1319,7 @@ namespace BDArmory.Control
         {
             try
             {
-                if (debris != null && debris.vesselType == VesselType.Debris && debris.FindPartModuleImplementing<MissileBase>()==null)
+                if (debris != null && debris.vesselType == VesselType.Debris)
                 {
                     StartCoroutine(DelayedVesselRemovalCoroutine(debris, BDArmorySettings.DEBRIS_CLEANUP_DELAY));
                 }
