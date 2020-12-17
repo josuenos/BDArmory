@@ -3023,8 +3023,7 @@ namespace BDArmory.Modules
 
 		void SetupShellPool()
 		{
-			GameObject templateShell =
-				(GameObject)Instantiate(GameDatabase.Instance.GetModel("BDArmory/Models/shell/model"));
+			GameObject templateShell = GameDatabase.Instance.GetModel("BDArmory/Models/shell/model");
 			templateShell.SetActive(false);
 			templateShell.AddComponent<ShellCasing>();
 			shellPool = ObjectPool.CreateObjectPool(templateShell, 50, true, true);
