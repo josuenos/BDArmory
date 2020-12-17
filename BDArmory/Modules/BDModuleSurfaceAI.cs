@@ -400,7 +400,7 @@ namespace BDArmory.Modules
                                             if (Vector3.Angle((Vector3)gun.FiringSolutionVector, vessel.transform.up) < 20)
                                                 targetDirection = (Vector3)gun.FiringSolutionVector;
                                         }
-                                        break;                                    
+                                        break;
                                 }
                             }
                             targetVelocity = Mathf.Clamp(targetVelocity, PoweredSteering ? CruiseSpeed / 5 : 0, MaxSpeed); // maintain a bit of speed if using powered steering

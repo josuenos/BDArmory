@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using BDArmory.Bullets;
 using BDArmory.Competition;
 using BDArmory.Control;
 using BDArmory.Core;
@@ -13,52 +14,57 @@ using BDArmory.UI;
 using UniLinq;
 using UnityEngine;
 
-namespace BDArmory.Modules
+namespace BDArmory.Bullets
 {
-	public class RocketLauncher : EngageableWeapon
+	public class PooledRocket : MonoBehaviour
 	{
+		public RocketInfo rocket; //get tracers, expFX urls moved to BulletInfo
+								  //Seeker/homing rocket code (Image-Recognition tracking?)
 
-	}
-	public class Rocket : MonoBehaviour
-	{
 		public Transform spawnTransform;
 		public Vessel sourceVessel;
 		public string sourceVesselName;
-		public float mass;
+
+		public string rocketName;
+		public float rocketMass;
+		public float caliber;
 		public float thrust;
 		public float thrustTime;
-		public float blastRadius;
-		public float blastForce;
-		public float blastHeat;
-		public bool proximityDetonation;
+		public bool shaped;
 		public float maxAirDetonationRange;
+		public bool flak;
 		public float detonationRange;
-		public string explModelPath;
-		public string explSoundPath;
-		public string rocketName;
-
+		public float tntMass;
+		public float bulletDmgMult = 1;
+		public float blastRadius = 0;
 		public float randomThrustDeviation = 0.05f;
 
-		public Rigidbody parentRB;
+		public string explModelPath;
+		public string explSoundPath;
 
 		float startTime;
-		public AudioSource audioSource;
+		float stayTime = 0.04f;
+		float lifeTime = 10;
 
 		Vector3 prevPosition;
 		Vector3 currPosition;
 		Vector3 startPosition;
+		public Vector3 currentVelocity;
 
-		float stayTime = 0.04f;
-		float lifeTime = 10;
+		private double distanceFromStart = 0;
 
 		//bool isThrusting = true;
 
 		Rigidbody rb;
+		public Rigidbody parentRB;
 
 		KSPParticleEmitter[] pEmitters;
 
 		float randThrustSeed;
 
+		public AudioSource audioSource;
+
+		//void OnEnable()
 		void Start()
 		{
 			BDArmorySetup.numberOfParticleEmitters++;
@@ -66,33 +72,32 @@ namespace BDArmory.Modules
 			rb = gameObject.AddComponent<Rigidbody>();
 			pEmitters = gameObject.GetComponentsInChildren<KSPParticleEmitter>();
 
-			IEnumerator<KSPParticleEmitter> pe = pEmitters.AsEnumerable().GetEnumerator();
-			while (pe.MoveNext())
-			{
-				if (pe.Current == null) continue;
-				if (FlightGlobals.getStaticPressure(transform.position) == 0 && pe.Current.useWorldSpace)
+			using (var pe = pEmitters.AsEnumerable().GetEnumerator())
+				while (pe.MoveNext())
 				{
-					pe.Current.emit = false;
+					if (pe.Current == null) continue;
+					if (FlightGlobals.getStaticPressure(transform.position) == 0 && pe.Current.useWorldSpace)
+					{
+						pe.Current.emit = false;
+					}
+					else if (pe.Current.useWorldSpace)
+					{
+						BDAGaplessParticleEmitter gpe = pe.Current.gameObject.AddComponent<BDAGaplessParticleEmitter>();
+						gpe.rb = rb;
+						gpe.emit = true;
+					}
+					else
+					{
+						EffectBehaviour.AddParticleEmitter(pe.Current);
+					}
 				}
-				else if (pe.Current.useWorldSpace)
-				{
-					BDAGaplessParticleEmitter gpe = pe.Current.gameObject.AddComponent<BDAGaplessParticleEmitter>();
-					gpe.rb = rb;
-					gpe.emit = true;
-				}
-				else
-				{
-					EffectBehaviour.AddParticleEmitter(pe.Current);
-				}
-			}
-			pe.Dispose();
 
 			prevPosition = transform.position;
 			currPosition = transform.position;
 			startPosition = transform.position;
 			startTime = Time.time;
 
-			rb.mass = mass;
+			rb.mass = rocketMass;
 			rb.isKinematic = true;
 			//rigidbody.velocity = startVelocity;
 			if (!FlightGlobals.RefFrameIsRotating) rb.useGravity = false;
@@ -115,7 +120,6 @@ namespace BDArmory.Modules
 				sourceVesselName = null;
 			}
 		}
-
 		void FixedUpdate()
 		{
 			//floating origin and velocity offloading corrections
@@ -171,29 +175,11 @@ namespace BDArmory.Modules
 				}
 			}
 
-
 			if (Time.time - startTime > thrustTime)
 			{
-				//isThrusting = false;
-				using (IEnumerator<KSPParticleEmitter> pEmitter = pEmitters.AsEnumerable().GetEnumerator())
-					while (pEmitter.MoveNext())
-					{
-						if (pEmitter.Current == null) continue;
-						if (pEmitter.Current.useWorldSpace)
-						{
-							pEmitter.Current.minSize = Mathf.MoveTowards(pEmitter.Current.minSize, 0.1f, 0.05f);
-							pEmitter.Current.maxSize = Mathf.MoveTowards(pEmitter.Current.maxSize, 0.2f, 0.05f);
-						}
-						else
-						{
-							pEmitter.Current.minSize = Mathf.MoveTowards(pEmitter.Current.minSize, 0, 0.1f);
-							pEmitter.Current.maxSize = Mathf.MoveTowards(pEmitter.Current.maxSize, 0, 0.1f);
-							if (pEmitter.Current.maxSize == 0)
-							{
-								pEmitter.Current.emit = false;
-							}
-						}
-					}
+				foreach (var pe in pEmitters)
+					if (pe != null)
+						pe.emit = false;
 			}
 
 			if (Time.time - startTime > 0.1f + stayTime)
@@ -237,7 +223,7 @@ namespace BDArmory.Modules
 						}
 
 
-						if (hitPart == null) 
+						if (hitPart == null)//TODO - expand collision/damage code; add ability for rockets to do kinetic(bullet) damage - useful for gyrojet rounds/ fast kinetic impactor rockets, or rockets against thin-armored stuff in general
 						{
 							Detonate(hit.point, false);
 						}
@@ -268,7 +254,7 @@ namespace BDArmory.Modules
 										aData.PinataHits++;
 									}
 
-								}							
+								}
 							}
 						}
 					}
@@ -303,7 +289,7 @@ namespace BDArmory.Modules
 
 			if (distanceFromStart <= blastRadius) return false;
 
-			if (proximityDetonation)
+			if (flak)
 			{
 				using (var hitsEnu = Physics.OverlapSphere(transform.position, detonationRange, 557057).AsEnumerable().GetEnumerator())
 				{
@@ -353,20 +339,32 @@ namespace BDArmory.Modules
 			BDArmorySetup.numberOfParticleEmitters--;
 			if (!missed)
 			{
-				ExplosionFx.CreateExplosion(pos, BlastPhysicsUtils.CalculateExplosiveMass(blastRadius), explModelPath, explSoundPath, ExplosionSourceType.Bullet, 70, null, sourceVesselName);
+				Vector3 direction = default(Vector3);
+				if (shaped)
+				{
+					direction = (pos + rb.velocity * Time.deltaTime).normalized;
+				}
+				if (tntMass > 0 )
+				{
+					ExplosionFx.CreateExplosion(pos, tntMass, explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, direction);
+				}
 			} // needs to be Explosiontype Bullet since missile only returns Module MissileLauncher
-
+			foreach (var pe in pEmitters)
+				if (pe != null)
+					pe.emit = false;
+			sourceVessel = null;
 			using (IEnumerator<KSPParticleEmitter> emitter = pEmitters.AsEnumerable().GetEnumerator())
 				while (emitter.MoveNext())
 				{
 					if (emitter.Current == null) continue;
 					if (!emitter.Current.useWorldSpace) continue;
 					emitter.Current.gameObject.AddComponent<BDAParticleSelfDestruct>();
+					emitter.Current.gameObject.DestroyGameObject();
 					emitter.Current.transform.parent = null;
 				}
 			Destroy(gameObject); //destroy rocket on collision
-		}
 
+		}
 		void SetupAudio()
 		{
 			audioSource = gameObject.AddComponent<AudioSource>();

@@ -1,0 +1,38 @@
+changes to moduleweapon/missile fire documented elsewhere
+
+-tightened up Ai accuracy - can now be tuned
+	
+-added cluster ammo weighting to bool smartweaponselect
+
+rockelauncher.cs removed
+added pooledrocket.cs that contains rocket code
+-rockets now have rocketdefs.cfg
+
+-airdetonation/proximity detonation now per-ammotype, set in bulletdef via fuze setting
+-changes to bulletdefs - added a fuze setting: None, Timed, Proximity, Flak
+	-!!This will break all BDA mods!!
+-tracer stats moved to bulletdefs following ammoswap implementation
+-tracer width now dynamically determined based on caliber; can be overridded in weapon cfg (laser support, mainly)
+
+-legacyblastpower/heat/radius depreciated, everything now uses tntmass
+-subprojectileCount now works for rockets
+
+ammo swap now supports rockets
+	-adds Rocketinfo.Load() to BDArmorySetup.cs
+	-rocket models now defined in rocketdef.cfg
+ammo swap now has weborc hook for filering selected ammo types
+
+
+todo: 
+get rockets pooled. 
+	attempting to set up the pool from moduleWeapon sorta worked, but broke model loading; 	rocketpod rockets loaded w/ wrong orientation/mesh wouldn't load, but emitter transform 	would
+	-see about initializing the pool from within rocket.cs - see ExplosionFX's self-	initialization of the pool
+
+Add choker rockers, laser-guided homing rockets, ???
+add rocket kinetic damage/penetration
+
+set ability to ammoswap inflight to a bool, default false so that most weapons have to be loaded in editor, but things like Abrams turret can select ammo inflight
+
+fix rocketpods drawing from non-self ammo sources - ie H70 launcher getting ammo from a h70 turret
+
+finish the electrolaser code - either have it be a temporary EMP effect, or have it be the beam has to add emp damage until it crosses a threshold, at which point ship gets EMP'd

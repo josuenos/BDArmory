@@ -12,19 +12,19 @@ namespace BDArmory.Bullets
         public float bulletVelocity { get; private set; }
         public bool explosive { get; private set; }
         public float tntMass { get; private set; }
-        public float blastPower { get; private set; }
-        public float blastHeat { get; private set; }
-        public float blastRadius { get; private set; }
+        public string fuzeType { get; private set; }
         public float apBulletMod { get; private set; }
-        public int SubprojectileCount { get; private set; }
+        public int subProjectileCount { get; private set; }
         public string bulletDragTypeName { get; private set; }
+        public string projectileColor { get; private set; }
+        public string startColor { get; private set; }
+        public bool fadeColor { get; private set; }
 
         public static BulletInfos bullets;
 
         public BulletInfo(string name, float caliber, float bulletVelocity, float bulletMass,
-                          bool explosive, float tntMass, float blastPower, float blastHeat, float blastRadius,
-                          float apBulletDmg, int SubprojectileCount, string bulletDragTypeName)
-
+                          bool explosive, float tntMass, string fuzeType, float apBulletDmg, 
+                          int subProjectileCount,string bulletDragTypeName, string projectileColor, string startColor, bool fadeColor)
         {
             this.name = name;
             this.caliber = caliber;
@@ -32,12 +32,13 @@ namespace BDArmory.Bullets
             this.bulletMass = bulletMass;
             this.explosive = explosive;
             this.tntMass = tntMass;
-            this.blastPower = blastPower;
-            this.blastHeat = blastHeat;
-            this.blastRadius = blastRadius;
+            this.fuzeType = fuzeType;
             this.apBulletMod = apBulletDmg;
-            this.SubprojectileCount = SubprojectileCount;
+            this.subProjectileCount = subProjectileCount;
             this.bulletDragTypeName = bulletDragTypeName;
+            this.projectileColor = projectileColor;
+            this.startColor = startColor;
+            this.fadeColor = fadeColor;
         }
 
         public static void Load()
@@ -57,12 +58,13 @@ namespace BDArmory.Bullets
                         float.Parse(node.GetValue("bulletMass")),
                         Convert.ToBoolean(node.GetValue("explosive")),
                         float.Parse(node.GetValue("tntMass")),
-                        float.Parse(node.GetValue("blastPower")),
-                        float.Parse(node.GetValue("blastHeat")),
-                        float.Parse(node.GetValue("blastRadius")),
+                        node.GetValue("fuzeType"),
                         float.Parse(node.GetValue("apBulletMod")),
-                        int.Parse(node.GetValue("SubprojectileCount")),
-                        node.GetValue("bulletDragTypeName")
+                        int.Parse(node.GetValue("subProjectileCount")),
+                        node.GetValue("bulletDragTypeName"),
+                        node.GetValue("projectileColor"),
+                        node.GetValue("startColor"),
+                        Convert.ToBoolean(node.GetValue("fadeColor"))
                         )
                         );
                 }
