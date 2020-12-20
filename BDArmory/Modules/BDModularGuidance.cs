@@ -5,8 +5,10 @@ using BDArmory.Core.Extension;
 using BDArmory.Guidances;
 using BDArmory.Misc;
 using BDArmory.Radar;
+using BDArmory.Targeting;
 using BDArmory.UI;
 using KSP.UI.Screens;
+using SaveUpgradePipeline;
 using UniLinq;
 using UnityEngine;
 
@@ -24,6 +26,9 @@ namespace BDArmory.Modules
         private Transform _velocityTransform;
 
         public Vessel LegacyTargetVessel;
+
+        private MissileFire weaponManager = null;
+        private bool mfChecked = false;
 
         private readonly List<Part> _vesselParts = new List<Part>();
 
@@ -190,7 +195,8 @@ namespace BDArmory.Modules
 
         void Update()
         {
-            CheckDetonationState();
+            if (!HasFired)
+                CheckDetonationState();
         }
 
         private void CheckNextStage()
@@ -396,7 +402,7 @@ namespace BDArmory.Modules
                 activeRadarLockTrackCurve.Add(0f, 0f);
                 activeRadarLockTrackCurve.Add(activeRadarRange, RadarUtils.MISSILE_DEFAULT_LOCKABLE_RCS);           // TODO: tune & balance constants!
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                    Debug.Log("[BDArmory]: OnStart missile " + shortName + ": setting default locktrackcurve with maxrange/minrcs: " + activeRadarLockTrackCurve.maxTime + "/" + RadarUtils.MISSILE_DEFAULT_LOCKABLE_RCS);
+                    Debug.Log("[BDModularGuidance]: OnStart missile " + shortName + ": setting default locktrackcurve with maxrange/minrcs: " + activeRadarLockTrackCurve.maxTime + "/" + RadarUtils.MISSILE_DEFAULT_LOCKABLE_RCS);
             }
 
         }
@@ -561,7 +567,7 @@ namespace BDArmory.Modules
                 TimeToImpact = timeToImpact;
                 if (Vector3.Angle(aamTarget - vessel.CoM, vessel.transform.forward) > maxOffBoresight * 0.75f)
                 {
-                    Debug.LogFormat("[BDArmory]: Missile with Name={0} has exceeded the max off boresight, checking missed target ", vessel.vesselName);
+                    Debug.LogFormat("[BDModularGuidance]: Missile with Name={0} has exceeded the max off boresight, checking missed target ", vessel.vesselName);
                     aamTarget = TargetPosition;
                 }
                 DrawDebugLine(vessel.CoM, aamTarget);
@@ -585,7 +591,7 @@ namespace BDArmory.Modules
 
                     if (targetViewAngle > maxOffBoresight)
                     {
-                        Debug.Log("[BDArmory]: AGM Missile guidance failed - target out of view");
+                        Debug.Log("[BDModularGuidance]: AGM Missile guidance failed - target out of view");
                         guidanceActive = false;
                     }
                 }
@@ -623,7 +629,16 @@ namespace BDArmory.Modules
 
             if (MissileState != MissileStates.PostThrust) return;
 
-            Debug.Log("[BDArmory]: Missile CheckMiss showed miss");
+            Debug.Log("[BDModularGuidance]: Missile CheckMiss showed miss for " + vessel.vesselName + " with target at " + (targetPosition - vessel.CoM).ToString("0.0"));
+
+            var pilotAI = vessel.FindPartModuleImplementing<BDModulePilotAI>(); // Get the pilot AI if the  missile has one.
+            if (pilotAI != null)
+            {
+                ResetMissile();
+                pilotAI.ActivatePilot();
+                return;
+            }
+
             HasMissed = true;
             guidanceActive = false;
             TargetMf = null;
@@ -631,14 +646,50 @@ namespace BDArmory.Modules
             detonationTime = TimeIndex + 1.5f;
         }
 
+        private void ResetMissile()
+        {
+            Debug.Log("[BDModularGuidance]: Resetting missile " + vessel.vesselName);
+            heatTarget = TargetSignatureData.noTarget;
+            vrd = null;
+            radarTarget = TargetSignatureData.noTarget;
+            HasFired = false;
+            StagesNumber = 1;
+            _nextStage = 1;
+            TargetAcquired = false;
+            TargetMf = null;
+            TimeFired = -1;
+            _missileIgnited = false;
+            lockFailTimer = -1;
+            guidanceActive = false;
+            HasMissed = false;
+            HasExploded = false;
+            DetonationDistanceState = DetonationDistanceStates.Cruising;
+            BDATargetManager.FiredMissiles.Remove(this);
+            MissileState = MissileStates.Idle;
+            if (mfChecked && weaponManager != null)
+            {
+                Debug.Log("[BDModularGuidance]: disabling target lock for " + vessel.vesselName);
+                weaponManager.guardFiringMissile = false; // Disable target lock.
+                mfChecked = false;
+            }
+        }
+
         private void CheckMiss()
         {
             if (HasMissed) return;
 
-
             if (MissileState == MissileStates.PostThrust && (vessel.LandedOrSplashed || vessel.Velocity().magnitude < 10f))
             {
-                Debug.Log("[BDArmory]: Missile CheckMiss showed miss");
+                Debug.Log("[BDModularGuidance]: Missile CheckMiss showed miss for " + vessel.vesselName);
+
+                var pilotAI = vessel.FindPartModuleImplementing<BDModulePilotAI>(); // Get the pilot AI if the  missile has one.
+                if (pilotAI != null)
+                {
+                    ResetMissile();
+                    pilotAI.ActivatePilot();
+                    return;
+                }
+
                 HasMissed = true;
                 guidanceActive = false;
                 TargetMf = null;
@@ -653,6 +704,17 @@ namespace BDArmory.Modules
             debugString.Length = 0;
             if (guidanceActive && MissileReferenceTransform != null && _velocityTransform != null)
             {
+                if (!mfChecked)
+                {
+                    weaponManager = vessel.FindPartModuleImplementing<MissileFire>();
+                    mfChecked = true;
+                }
+                if (mfChecked && weaponManager != null && !weaponManager.guardFiringMissile)
+                {
+                    Debug.Log("[BDModularGuidance]: enabling target lock for " + vessel.vesselName);
+                    weaponManager.guardFiringMissile = true; // Enable target lock.
+                }
+
                 if (vessel.Velocity().magnitude < MinSpeedGuidance)
                 {
                     if (!_minSpeedAchieved)
@@ -708,9 +770,9 @@ namespace BDArmory.Modules
                     }
                 }
                 s.mainThrottle = Throttle;
-            }
 
-            CheckMiss();
+                CheckMiss();
+            }
         }
 
         private void SetRoll()
@@ -798,7 +860,7 @@ namespace BDArmory.Modules
         /// </summary>
         public void ExecuteNextStage()
         {
-            Debug.LogFormat("[BDArmory]: BDModularGuidance - executing next stage {0}", _nextStage);
+            Debug.LogFormat("[BDModularGuidance]: Executing next stage {0} for {1}", _nextStage, vessel.vesselName);
             vessel.ActionGroups.ToggleGroup(
                 (KSPActionGroup)Enum.Parse(typeof(KSPActionGroup), "Custom0" + (int)_nextStage));
 
@@ -823,6 +885,20 @@ namespace BDArmory.Modules
         public void AgFire(KSPActionParam param)
         {
             FireMissile();
+        }
+
+        /// <summary>
+        ///     Reset the missile if it has a pilot AI.
+        /// </summary>
+        [KSPAction("Reset Missile")]
+        public void AGReset(KSPActionParam param)
+        {
+            var pilotAI = vessel.FindPartModuleImplementing<BDModulePilotAI>(); // Get the pilot AI if the  missile has one.
+            if (pilotAI != null)
+            {
+                ResetMissile();
+                pilotAI.ActivatePilot();
+            }
         }
 
         #endregion KSP ACTIONS
@@ -875,6 +951,7 @@ namespace BDArmory.Modules
                 }
 
                 TimeFired = Time.time;
+                guidanceActive = true;
                 MissileState = MissileStates.Drop;
 
                 Misc.Misc.RefreshAssociatedWindows(part);
@@ -1001,16 +1078,19 @@ namespace BDArmory.Modules
             if (HasExploded || !HasFired) return;
             if (SourceVessel == null) SourceVessel = vessel;
 
-            HasExploded = true;
             if (StageToTriggerOnProximity != 0)
             {
-                vessel.ActionGroups.ToggleGroup(
-                    (KSPActionGroup)Enum.Parse(typeof(KSPActionGroup), "Custom0" + (int)StageToTriggerOnProximity));
+                vessel.ActionGroups.ToggleGroup((KSPActionGroup)Enum.Parse(typeof(KSPActionGroup), "Custom0" + (int)StageToTriggerOnProximity));
+                HasExploded = true;
             }
             else
             {
-                vessel.FindPartModulesImplementing<BDExplosivePart>().ForEach(explosivePart => explosivePart.DetonateIfPossible());
-                AutoDestruction();
+                vessel.FindPartModulesImplementing<BDExplosivePart>().ForEach(explosivePart => { if (!explosivePart.manualOverride) explosivePart.DetonateIfPossible(); });
+                if (vessel.FindPartModulesImplementing<BDExplosivePart>().Any(explosivePart => explosivePart.hasDetonated))
+                {
+                    HasExploded = true;
+                    AutoDestruction();
+                }
             }
         }
 

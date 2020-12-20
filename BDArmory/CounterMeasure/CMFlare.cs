@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BDArmory.Core;
 using BDArmory.FX;
 using BDArmory.Misc;
 using BDArmory.UI;
@@ -32,14 +33,39 @@ namespace BDArmory.CounterMeasure
         {
             // OLD:
             //thermal = BDArmorySetup.FLARE_THERMAL*UnityEngine.Random.Range(0.45f, 1.25f);
-            // NEW: generate flare within spectrum of emitting vessel's heat signature
-            thermal = BDATargetManager.GetVesselHeatSignature(sourceVessel) * UnityEngine.Random.Range(0.65f, 1.75f);
+            // NEW (1.9.1 and before): generate flare within spectrum of emitting vessel's heat signature
+            //thermal = BDATargetManager.GetVesselHeatSignature(sourceVessel) * UnityEngine.Random.Range(0.65f, 1.75f);
+
+            // NEW NEW: Dynamic min/max based on engine heat, with larger multiplier for colder engines, and smaller for naturally hot engines
+            // since range of values are too small for smaller heat values, and flares tend to decay to even colder values, rendering them useless
+
+            /* Alternate flare gen code, adjusts curve towards high end up to 5000K heat engines. Polynomial versions available.
+
+            thermal = BDATargetManager.GetVesselHeatSignature(sourceVessel);
+            //float thermalMinMult = Mathf.Clamp(-0.166f * (float)Math.Log(thermal) + 1.9376f, 0.5f, 0.82f);
+            //float thermalMaxMult = Mathf.Clamp(0.3534f * (float)Math.Log(thermal) - 1.0251f, 1.35f, 2.0f);
+
+            thermal *= UnityEngine.Random.Range(thermalMinMult, thermalMaxMult);
+
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                Debug.Log("[BDArmory]: New flare generated from " + sourceVessel.GetDisplayName() + ":" + BDATargetManager.GetVesselHeatSignature(sourceVessel).ToString("0.0") + ", heat: " + thermal.ToString("0.0") + " mult: " + thermalMinMult + "-" + thermalMaxMult);
+            */
+
+            // NEW (1.10 and later): generate flare within spectrum of emitting vessel's heat signature, but narrow range for low heats
+
+            thermal = BDATargetManager.GetVesselHeatSignature(sourceVessel);
+            // float minMult = Mathf.Clamp(-0.265f * Mathf.Log(sourceHeat) + 2.3f, 0.65f, 0.8f);
+            float thermalMinMult = Mathf.Clamp(((0.00093f * thermal * thermal - 1.4457f * thermal + 1141.95f) / 1000f), 0.65f, 0.8f); // Equivalent to above, but uses polynomial for speed
+            thermal *= UnityEngine.Random.Range(thermalMinMult, 1.75f - thermalMinMult + 0.65f);
+
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                Debug.Log("[BDArmory]: New flare generated from " + sourceVessel.GetDisplayName() + ":" + BDATargetManager.GetVesselHeatSignature(sourceVessel).ToString("0.0") + ", heat: " + thermal.ToString("0.0"));
         }
 
         void OnEnable()
         {
             startThermal = thermal;
-            minThermal = startThermal * 0.3f;
+            minThermal = startThermal * 0.34f; // 0.3 is original value, but doesn't work well for Tigers, 0.4f gives decent performance for Tigers, 0.65 decay gives best flare performance overall based on some monte carlo analysis
 
             if (gaplessEmitters == null || pEmitters == null)
             {
@@ -47,24 +73,23 @@ namespace BDArmory.CounterMeasure
 
                 pEmitters = new List<KSPParticleEmitter>();
 
-                IEnumerator<KSPParticleEmitter> pe = gameObject.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator();
-                while (pe.MoveNext())
-                {
-                    if (pe.Current == null) continue;
-                    if (pe.Current.useWorldSpace)
+                using (var pe = gameObject.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator())
+                    while (pe.MoveNext())
                     {
-                        BDAGaplessParticleEmitter gpe = pe.Current.gameObject.AddComponent<BDAGaplessParticleEmitter>();
-                        gaplessEmitters.Add(gpe);
-                        gpe.emit = true;
+                        if (pe.Current == null) continue;
+                        if (pe.Current.useWorldSpace)
+                        {
+                            BDAGaplessParticleEmitter gpe = pe.Current.gameObject.AddComponent<BDAGaplessParticleEmitter>();
+                            gaplessEmitters.Add(gpe);
+                            gpe.emit = true;
+                        }
+                        else
+                        {
+                            EffectBehaviour.AddParticleEmitter(pe.Current);
+                            pEmitters.Add(pe.Current);
+                            pe.Current.emit = true;
+                        }
                     }
-                    else
-                    {
-                        EffectBehaviour.AddParticleEmitter(pe.Current);
-                        pEmitters.Add(pe.Current);
-                        pe.Current.emit = true;
-                    }
-                }
-                pe.Dispose();
             }
             List<BDAGaplessParticleEmitter>.Enumerator gEmitter = gaplessEmitters.GetEnumerator();
             while (gEmitter.MoveNext())

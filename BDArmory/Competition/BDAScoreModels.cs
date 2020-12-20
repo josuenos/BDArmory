@@ -190,11 +190,20 @@ namespace BDArmory.Competition
         public int hits_in;
         public double dmg_out;
         public double dmg_in;
+        public int ram_parts_out;
+        public int ram_parts_in;
+        public int mis_parts_out;
+        public int mis_parts_in;
+        public double mis_dmg_out;
+        public double mis_dmg_in;
         public int assists;
         public int kills;
         public int deaths;
         public float distance;
         public string weapon;
+        public float death_order;
+        public float death_time;
+        public int wins;
 
         public string ToJSON()
         {
