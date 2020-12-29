@@ -25,6 +25,7 @@ namespace BDArmory.Targeting
         public float radarLockbreakFactor;
         public float radarJammingDistance;
         public bool alreadyScheduledRCSUpdate = false;
+        public double lastRCSUpdate = 0f;
 
         public bool isLandedOrSurfaceSplashed
         {

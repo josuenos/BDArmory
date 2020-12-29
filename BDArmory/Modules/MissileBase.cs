@@ -543,6 +543,8 @@ namespace BDArmory.Modules
 
             if (radarTarget.exists)
             {
+                radarTarget.targetInfo = RadarUtils.GetVesselRadarSignatureAtAspect(radarTarget.vessel, vessel);
+                
                 // locked-on before launch, passive radar guidance or waiting till in active radar range:
                 if (!ActiveRadar && ((radarTarget.predictedPosition - transform.position).sqrMagnitude > Mathf.Pow(activeRadarRange, 2) || angleToTarget > maxOffBoresight * 0.75f))
                 {

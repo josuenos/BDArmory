@@ -47,6 +47,7 @@ namespace BDArmory.Radar
         internal static float rcsTotal;               // dito
 
         internal const float RCS_NORMALIZATION_FACTOR = 16.0f;       //IMPORTANT FOR RCS CALCULATION! DO NOT CHANGE! (1x1 structural panel frontally facing should yield 1 m^2 of rcs!)
+        // internal const float RCS_NORMALIZATION_FACTOR = 64.0f;       //IMPORTANT FOR RCS CALCULATION! DO NOT CHANGE! (1 m^2 cross section sphere (1.13m diameter) should yield 1 m^2 of rcs!)
         internal const float RCS_MISSILES = 999f;                    //default rcs value for missiles if not configured in the part config
         internal const float RWR_PING_RANGE_FACTOR = 2.0f;
         internal const float RADAR_IGNORE_DISTANCE_SQR = 100f;
@@ -191,7 +192,7 @@ namespace BDArmory.Radar
         ///         and there we dont have a VESSEL, only a SHIPCONSTRUCT, so the EditorRcSWindow passes the transform separately.
         /// </summary>
         /// <param name="inEditorZoom">when true, we try to make the rendered vessel fill the rendertexture completely, for a better detailed view. This does skew the computed cross section, so it is only for a good visual in editor!</param>
-        public static float RenderVesselRadarSnapshot(Vessel v, Transform t, bool inEditorZoom = false)
+        public static float RenderVesselRadarSnapshot(Vessel v, Transform t, bool inEditorZoom = false, Vessel ownShip = null)
         {
             const float radarDistance = 1000f;
             const float radarFOV = 2.0f;
@@ -229,63 +230,164 @@ namespace BDArmory.Radar
                 return 0f;
             }
 
-            // pass1: frontal
-            RenderSinglePass(t, inEditorZoom, t.up, vesselbounds, radarDistance, radarFOV, rcsRenderingFrontal, drawTextureFrontal);
-            // pass2: lateral
-            RenderSinglePass(t, inEditorZoom, t.right, vesselbounds, radarDistance, radarFOV, rcsRenderingLateral, drawTextureLateral);
-            // pass3: Ventral
-            RenderSinglePass(t, inEditorZoom, t.forward, vesselbounds, radarDistance, radarFOV, rcsRenderingVentral, drawTextureVentral);
-
-            //additional 45� offset renderings:
-            RenderSinglePass(t, inEditorZoom, (t.up + t.right), vesselbounds, radarDistance, radarFOV, rcsRenderingFrontal, drawTextureFrontal45);
-            RenderSinglePass(t, inEditorZoom, (t.right + t.forward), vesselbounds, radarDistance, radarFOV, rcsRenderingLateral, drawTextureLateral45);
-            RenderSinglePass(t, inEditorZoom, (t.forward - t.up), vesselbounds, radarDistance, radarFOV, rcsRenderingVentral, drawTextureVentral45);
-
-            // revert presentation (only if outside editor and thus vessel is a real vessel)
-            if (HighLogic.LoadedSceneIsFlight)
-                v.SetPosition(v.transform.position - presentationPosition);
-
-            // Count pixel colors to determine radar returns (only for normal non-zoomed rendering!)
-            if (!inEditorZoom)
+            // If we weren't passed an ownship, use old method, otherwise calculate RCS at aspect
+            if (ownShip == null)
             {
-                rcsFrontal = 0;
-                rcsLateral = 0;
-                rcsVentral = 0;
-                rcsFrontal45 = 0;
-                rcsLateral45 = 0;
-                rcsVentral45 = 0;
+                // pass1: frontal
+                RenderSinglePass(t, inEditorZoom, t.up, vesselbounds, radarDistance, radarFOV, rcsRenderingFrontal, drawTextureFrontal);
+                // pass2: lateral
+                RenderSinglePass(t, inEditorZoom, t.right, vesselbounds, radarDistance, radarFOV, rcsRenderingLateral, drawTextureLateral);
+                // pass3: Ventral
+                RenderSinglePass(t, inEditorZoom, t.forward, vesselbounds, radarDistance, radarFOV, rcsRenderingVentral, drawTextureVentral);
 
-                for (int x = 0; x < radarResolution; x++)
+                //additional 45� offset renderings:
+                RenderSinglePass(t, inEditorZoom, (t.up + t.right), vesselbounds, radarDistance, radarFOV, rcsRenderingFrontal, drawTextureFrontal45);
+                RenderSinglePass(t, inEditorZoom, (t.right + t.forward), vesselbounds, radarDistance, radarFOV, rcsRenderingLateral, drawTextureLateral45);
+                RenderSinglePass(t, inEditorZoom, (t.forward - t.up), vesselbounds, radarDistance, radarFOV, rcsRenderingVentral, drawTextureVentral45);
+
+                // revert presentation (only if outside editor and thus vessel is a real vessel)
+                if (HighLogic.LoadedSceneIsFlight)
+                    v.SetPosition(v.transform.position - presentationPosition);
+
+                // Count pixel colors to determine radar returns (only for normal non-zoomed rendering!)
+                if (!inEditorZoom)
                 {
-                    for (int y = 0; y < radarResolution; y++)
-                    {
-                        rcsFrontal += drawTextureFrontal.GetPixel(x, y).maxColorComponent;
-                        rcsLateral += drawTextureLateral.GetPixel(x, y).maxColorComponent;
-                        rcsVentral += drawTextureVentral.GetPixel(x, y).maxColorComponent;
+                    rcsFrontal = 0;
+                    rcsLateral = 0;
+                    rcsVentral = 0;
+                    rcsFrontal45 = 0;
+                    rcsLateral45 = 0;
+                    rcsVentral45 = 0;
 
-                        rcsFrontal45 += drawTextureFrontal45.GetPixel(x, y).maxColorComponent;
-                        rcsLateral45 += drawTextureLateral45.GetPixel(x, y).maxColorComponent;
-                        rcsVentral45 += drawTextureVentral45.GetPixel(x, y).maxColorComponent;
+                    for (int x = 0; x < radarResolution; x++)
+                    {
+                        for (int y = 0; y < radarResolution; y++)
+                        {
+                            rcsFrontal += drawTextureFrontal.GetPixel(x, y).maxColorComponent;
+                            rcsLateral += drawTextureLateral.GetPixel(x, y).maxColorComponent;
+                            rcsVentral += drawTextureVentral.GetPixel(x, y).maxColorComponent;
+
+                            rcsFrontal45 += drawTextureFrontal45.GetPixel(x, y).maxColorComponent;
+                            rcsLateral45 += drawTextureLateral45.GetPixel(x, y).maxColorComponent;
+                            rcsVentral45 += drawTextureVentral45.GetPixel(x, y).maxColorComponent;
+                        }
+                    }
+
+                    // normalize rcs value, so that the structural 1x1 panel facing the radar exactly gives a return of 1 m^2:
+                    rcsFrontal /= RCS_NORMALIZATION_FACTOR;
+                    rcsLateral /= RCS_NORMALIZATION_FACTOR;
+                    rcsVentral /= RCS_NORMALIZATION_FACTOR;
+
+                    rcsFrontal45 /= RCS_NORMALIZATION_FACTOR;
+                    rcsLateral45 /= RCS_NORMALIZATION_FACTOR;
+                    rcsVentral45 /= RCS_NORMALIZATION_FACTOR;
+
+                    rcsTotal = (Mathf.Max(rcsFrontal, rcsFrontal45) + Mathf.Max(rcsLateral, rcsLateral45) + Mathf.Max(rcsVentral, rcsVentral45)) / 3f;
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                    {
+                        Debug.Log($"[BDArmory]: - Vessel rcs is (frontal/lateral/ventral), (frontal45/lateral45/ventral45): {rcsFrontal}/{rcsLateral}/{rcsVentral}, {rcsFrontal45}/{rcsLateral45}/{rcsVentral45} = rcsTotal: {rcsTotal}");
                     }
                 }
+            }
+            else
+            {
+                RenderSinglePass(t, inEditorZoom, (ownShip.transform.position-t.position).normalized, vesselbounds, radarDistance, radarFOV, rcsRenderingFrontal, drawTextureFrontal);
 
-                // normalize rcs value, so that the structural 1x1 panel facing the radar exactly gives a return of 1 m^2:
-                rcsFrontal /= RCS_NORMALIZATION_FACTOR;
-                rcsLateral /= RCS_NORMALIZATION_FACTOR;
-                rcsVentral /= RCS_NORMALIZATION_FACTOR;
+                // revert presentation (only if outside editor and thus vessel is a real vessel)
+                if (HighLogic.LoadedSceneIsFlight)
+                    v.SetPosition(v.transform.position - presentationPosition);
 
-                rcsFrontal45 /= RCS_NORMALIZATION_FACTOR;
-                rcsLateral45 /= RCS_NORMALIZATION_FACTOR;
-                rcsVentral45 /= RCS_NORMALIZATION_FACTOR;
-
-                rcsTotal = (Mathf.Max(rcsFrontal, rcsFrontal45) + Mathf.Max(rcsLateral, rcsLateral45) + Mathf.Max(rcsVentral, rcsVentral45)) / 3f;
-                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                // Count pixel colors to determine radar returns (only for normal non-zoomed rendering!)
+                if (!inEditorZoom)
                 {
-                    Debug.Log($"[BDArmory]: - Vessel rcs is (frontal/lateral/ventral), (frontal45/lateral45/ventral45): {rcsFrontal}/{rcsLateral}/{rcsVentral}, {rcsFrontal45}/{rcsLateral45}/{rcsVentral45} = rcsTotal: {rcsTotal}");
+                    rcsFrontal = 0;
+
+                    for (int x = 0; x < radarResolution; x++)
+                    {
+                        for (int y = 0; y < radarResolution; y++)
+                        {
+                            rcsFrontal += drawTextureFrontal.GetPixel(x, y).maxColorComponent;
+                        }
+                    }
+
+                    // normalize rcs value, so that the structural 1x1 panel facing the radar exactly gives a return of 1 m^2:
+                    rcsTotal = rcsFrontal/RCS_NORMALIZATION_FACTOR;
+
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                    {
+                        Debug.Log($"[BDArmory]: - Vessel rcs = rcsTotal: {rcsTotal}");
+                    }
+
+                    
                 }
             }
 
             return rcsTotal;
+        }
+
+        /// <summary>
+        /// Get a vessel radar siganture for its actual aspect, including all modifiers (ECM, stealth, ...)
+        /// </summary>
+        public static TargetInfo GetVesselRadarSignatureAtAspect(Vessel v, Vessel ownShip)
+        {
+            //1. baseSig = GetVesselRadarCrossSection
+            TargetInfo ti = GetVesselRadarCrossSectionAtAspect(v, ownShip);
+
+            //2. modifiedSig = GetVesselModifiedSignature(baseSig)    //ECM-jammers with rcs reduction effect; other rcs reductions (stealth)
+            float modifiedSig = GetVesselModifiedSignature(v, ti);
+
+            //if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                // Debug.Log("[BDRCS]: Calculated base, modified signatures for " + v.GetDisplayName() + " from " + ownShip.GetDisplayName() + " are: " + ti.radarBaseSignature.ToString() + ", " + ti.radarModifiedSignature.ToString());
+
+            return ti;
+        }
+
+        /// <summary>
+        /// Internal method: get a vessel base radar signature at aspect
+        /// </summary>
+        private static TargetInfo GetVesselRadarCrossSectionAtAspect(Vessel v, Vessel ownShip)
+        {
+            //read vesseltargetinfo, or render against radar cameras
+            TargetInfo ti = v.gameObject.GetComponent<TargetInfo>();
+
+            if (ti == null)
+            {
+                // add targetinfo to vessel
+                ti = v.gameObject.AddComponent<TargetInfo>();
+            }
+
+            if (ti.isMissile)
+            {
+                // missile handling: get signature from missile config, unless it is radaractive, then use old legacy special handling.
+                // LEGACY special handling missile: should always be detected, hence signature is set to maximum
+                MissileBase missile = ti.MissileBaseModule;
+                if (missile != null)
+                {
+                    if (missile.ActiveRadar)
+                        ti.radarBaseSignature = RCS_MISSILES;
+                    else
+                        ti.radarBaseSignature = missile.missileRadarCrossSection;
+                }
+            }
+            else if (ti.radarBaseSignature == -1 || ti.lastRCSUpdate == 0f || (Planetarium.GetUniversalTime() - ti.lastRCSUpdate <= 2d))
+            {
+                // is it just some debris? then dont bother doing a real rcs rendering and just fake it with the parts mass
+                if (v.vesselType == VesselType.Debris && !v.IsControllable)
+                {
+                    ti.radarBaseSignature = v.GetTotalMass();
+                }
+                else
+                {
+                    // perform radar rendering to obtain base cross section
+                    ti.radarBaseSignature = RenderVesselRadarSnapshot(v, v.transform, false, ownShip);
+                }
+
+                ti.radarBaseSignatureNeedsUpdate = false;
+                ti.alreadyScheduledRCSUpdate = false;
+                ti.lastRCSUpdate = Planetarium.GetUniversalTime();
+            }
+
+            return ti;
         }
 
         /// <summary>
@@ -454,7 +556,7 @@ namespace BDArmory.Radar
                             continue;
 
                         // get vessel's radar signature
-                        TargetInfo ti = GetVesselRadarSignature(loadedvessels.Current);
+                        TargetInfo ti = GetVesselRadarSignatureAtAspect(loadedvessels.Current, radar.vessel);
                         float signature = ti.radarModifiedSignature;
                         signature *= GetRadarGroundClutterModifier(radar, radar.referenceTransform, ray.origin, loadedvessels.Current.CoM, ti);
                         // no ecm lockbreak factor here
@@ -541,7 +643,7 @@ namespace BDArmory.Radar
                             continue;
 
                         // get vessel's radar signature
-                        TargetInfo ti = GetVesselRadarSignature(loadedvessels.Current);
+                        TargetInfo ti = GetVesselRadarSignatureAtAspect(loadedvessels.Current, missile.vessel);
                         float signature = ti.radarModifiedSignature;
                         // no ground clutter modifier for missiles
                         signature *= ti.radarLockbreakFactor;    //multiply lockbreak factor from active ecm
@@ -631,7 +733,7 @@ namespace BDArmory.Radar
                             continue;
 
                         // get vessel's radar signature
-                        TargetInfo ti = GetVesselRadarSignature(loadedvessels.Current);
+                        TargetInfo ti = GetVesselRadarSignatureAtAspect(loadedvessels.Current, radar.vessel);
                         float signature = ti.radarModifiedSignature;
                         //do not multiply chaff factor here
                         signature *= GetRadarGroundClutterModifier(radar, referenceTransform, position, loadedvessels.Current.CoM, ti);
@@ -766,7 +868,7 @@ namespace BDArmory.Radar
                 }
 
                 // get vessel's radar signature
-                TargetInfo ti = GetVesselRadarSignature(lockedVessel);
+                TargetInfo ti = GetVesselRadarSignatureAtAspect(lockedVessel, radar.vessel);
                 float signature = ti.radarModifiedSignature;
                 signature *= GetRadarGroundClutterModifier(radar, radar.referenceTransform, ray.origin, lockedVessel.CoM, ti);
                 signature *= ti.radarLockbreakFactor;    //multiply lockbreak factor from active ecm

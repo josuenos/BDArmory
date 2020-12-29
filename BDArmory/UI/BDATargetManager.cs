@@ -526,6 +526,14 @@ namespace BDArmory.UI
 
             debugString.Append($"ECM Lockbreak Strength: " + FlightGlobals.ActiveVessel.gameObject.GetComponent<VesselECMJInfo>()?.lockBreakStrength);
             debugString.Append(Environment.NewLine);
+
+            if (FlightGlobals.ActiveVessel.FindPartModuleImplementing<MissileFire>()?.currentTarget!=null)
+            {
+                var radarData = RadarUtils.GetVesselRadarSignatureAtAspect(FlightGlobals.ActiveVessel.FindPartModuleImplementing<MissileFire>().currentTarget.Vessel, FlightGlobals.ActiveVessel);
+                debugString.Append($"Target Baseline Radar Signature: " + radarData.radarBaseSignature);
+                debugString.Append($"Target Modified Radar Signature: " + radarData.radarModifiedSignature);
+                debugString.Append(Environment.NewLine);
+            }   
         }
 
         public void SaveGPSTargets(ConfigNode saveNode = null)
