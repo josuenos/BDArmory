@@ -623,7 +623,7 @@ namespace BDArmory.Radar
 
             if (lockingRadar != null)
             {
-                return lockingRadar.TryLockTarget(radarTarget.targetData.predictedPosition);
+                return lockingRadar.TryLockTarget(radarTarget.targetData.predictedPosition, radarTarget.vessel);
             }
 
             UpdateLockedTargets();

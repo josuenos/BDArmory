@@ -276,7 +276,11 @@ namespace BDArmory.Control
                         lastTerrainDistance = terrainDistance;
                         yield return new WaitForFixedUpdate();
                         terrainDistance = Physics.Raycast(ray, out hit, 2f * (float)(spawnConfig.altitude + distanceToCoMainBody), 1 << 15) ? hit.distance : -1f; // Oceans shouldn't be more than 10km deep...
-                        if (terrainDistance < 0f) break; // Raycast is failing. If we're spawning airborne, then this won't matter too much.
+                        if (terrainDistance < 0f) // Raycast is failing to find terrain.
+                        {
+                            if (Planetarium.GetUniversalTime() - startTime < 1) continue; // Give the terrain renderer a chance to spawn the terrain.
+                            else break;
+                        }
                         if (Math.Abs(lastTerrainDistance - terrainDistance) > 0.1f)
                             lastStableTimeStart = Planetarium.GetUniversalTime(); // Reset the stable time tracker.
                         stableTime = Planetarium.GetUniversalTime() - lastStableTimeStart;
@@ -592,6 +596,7 @@ namespace BDArmory.Control
                 if (spawnConfig.assignTeams)
                 {
                     // Assign the vessels to their own teams.
+                    Debug.Log("[VesselSpawner]: Assigning each vessel to its own team.");
                     LoadedVesselSwitcher.Instance.MassTeamSwitch(true);
                     yield return new WaitForFixedUpdate();
                 }
@@ -1265,12 +1270,10 @@ namespace BDArmory.Control
             if (startCompetition) // Start the competition.
             {
                 var competitionStartDelayStart = Planetarium.GetUniversalTime();
-
                 while (Planetarium.GetUniversalTime() - competitionStartDelayStart < competitionStartDelay - Time.fixedDeltaTime)
                 {
                     var timeLeft = competitionStartDelay - (Planetarium.GetUniversalTime() - competitionStartDelayStart);
                     if ((int)(timeLeft - Time.fixedDeltaTime) < (int)timeLeft)
-
                         BDACompetitionMode.Instance.competitionStatus.Add("Competition starting in T-" + timeLeft.ToString("0") + "s");
                     yield return new WaitForFixedUpdate();
                 }

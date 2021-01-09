@@ -436,6 +436,7 @@ namespace BDArmory.UI
             }
 
             BulletInfo.Load();
+            RocketInfo.Load();
 
             // Spawn fields
             spawnFields = new Dictionary<string, SpawnField> {
@@ -538,24 +539,13 @@ namespace BDArmory.UI
                     !ActiveWeaponManager.guardMode)
                 {
                     if (ActiveWeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.Gun ||
+                        ActiveWeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.Rocket ||
                         ActiveWeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.DefenseLaser)
                     {
                         ModuleWeapon mw =
                             ActiveWeaponManager.selectedWeapon.GetPart().FindModuleImplementing<ModuleWeapon>();
                         if (mw.weaponState == ModuleWeapon.WeaponStates.Enabled && mw.maxPitch > 1 && !mw.slaved &&
                             !mw.aiControlled)
-                        {
-                            //Screen.showCursor = false;
-                            Cursor.visible = false;
-                            drawCursor = true;
-                            return;
-                        }
-                    }
-                    else if (ActiveWeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.Rocket)
-                    {
-                        RocketLauncher rl =
-                            ActiveWeaponManager.selectedWeapon.GetPart().FindModuleImplementing<RocketLauncher>();
-                        if (rl.readyToFire && rl.turret)
                         {
                             //Screen.showCursor = false;
                             Cursor.visible = false;
@@ -793,7 +783,9 @@ namespace BDArmory.UI
                 //if weapon can ripple, show option and slider.
                 if (ActiveWeaponManager.hasLoadedRippleData && ActiveWeaponManager.canRipple)
                 {
-                    if (ActiveWeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.Gun)
+                    if (ActiveWeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.Gun
+                        || ActiveWeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.Rocket
+                        || ActiveWeaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.DefenseLaser) //remove rocket ripple slider - moved to editor
                     {
                         string rippleText = ActiveWeaponManager.rippleFire
                             ? Localizer.Format("#LOC_BDArmory_WMWindow_rippleText1", ActiveWeaponManager.gunRippleRpm.ToString("0"))//"Barrage: " +  + " RPM"
@@ -967,7 +959,7 @@ namespace BDArmory.UI
                     ActiveWeaponManager.AutoFireCosAngleAdjustment =
                         GUI.HorizontalSlider(
                             new Rect(leftIndent + (90), (guardLines * entryHeight), contentWidth - 90 - 38, entryHeight),
-                            ActiveWeaponManager.AutoFireCosAngleAdjustment, 0, 2);
+                            ActiveWeaponManager.AutoFireCosAngleAdjustment, 0, 4);
                     ActiveWeaponManager.AutoFireCosAngleAdjustment = Mathf.Round(ActiveWeaponManager.AutoFireCosAngleAdjustment * 20) / 20;
                     if (ActiveWeaponManager.AutoFireCosAngleAdjustment != oldAutoFireCosAngleAdjustment)
                         ActiveWeaponManager.OnAFCAAUpdated(null, null);
@@ -1697,6 +1689,14 @@ namespace BDArmory.UI
                     OnVolumeChange();
                 }
                 BDArmorySettings.BDARMORY_WEAPONS_VOLUME = weaponVol;
+
+                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                {
+                    if (GUI.Button(SLeftRect(++line), "Run DEBUG checks"))// Run DEBUG checks
+                    {
+                        BDACompetitionMode.Instance.RunDebugChecks();
+                    }
+                }
             }
 
             //competition mode

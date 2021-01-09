@@ -794,9 +794,15 @@ namespace BDArmory.Control
             if (vessel.FindPartModuleImplementing<KerbalEVA>() != null) return; // Check for Kerbals on the outside.
             // Check for drones
             var commandModules = vessel.FindPartModulesImplementing<ModuleCommand>();
+            var craftbricked = vessel.FindPartModuleImplementing<ModuleDrainEC>();
             if (commandModules.All(c => c.GetControlSourceState() == CommNet.VesselControlState.None))
                 if (Scores.ContainsKey(vessel.vesselName) && Scores[vessel.vesselName]?.weaponManagerRef != null)
                     StartCoroutine(DelayedExplodeWM(Scores[vessel.vesselName].weaponManagerRef, 5f)); // Uncontrolled vessel, destroy its weapon manager in 5s.
+            if (craftbricked != null && craftbricked.bricked)
+            {
+                if (Scores.ContainsKey(vessel.vesselName) && Scores[vessel.vesselName]?.weaponManagerRef != null)
+                    StartCoroutine(DelayedExplodeWM(Scores[vessel.vesselName].weaponManagerRef, 2f)); // vessel fried by EMP, destroy its weapon manager in 2s.
+            }
         }
 
         IEnumerator DelayedExplodeWM(MissileFire weaponManager, float delay = 1f)
@@ -1930,7 +1936,6 @@ namespace BDArmory.Control
                 return;
             }
             CheckMemoryUsage();
-            CheckNumbersOfThings();
             if (VesselSpawner.Instance.vesselsSpawningContinuously) // Dump continuous spawning scores instead.
             {
                 VesselSpawner.Instance.DumpContinuousSpawningScores(tag);
@@ -2744,31 +2749,37 @@ namespace BDArmory.Control
         public void CheckNumbersOfThings() // DEBUG
         {
             List<string> strings = new List<string>();
-            // strings.Add("FlightGlobals.Vessels: " + FlightGlobals.Vessels.Count);
-            // strings.Add("Non-competitors to remove: " + nonCompetitorsToRemove.Count);
-            // strings.Add("EffectBehaviour<ParticleSystem>: " + EffectBehaviour.FindObjectsOfType<ParticleSystem>().Length);
-            // strings.Add("EffectBehaviour<KSPParticleEmitter>: " + EffectBehaviour.FindObjectsOfType<KSPParticleEmitter>().Length);
-            // strings.Add("KSPParticleEmitters: " + FindObjectsOfType<KSPParticleEmitter>().Length);
-            // strings.Add("KSPParticleEmitters including inactive: " + Resources.FindObjectsOfTypeAll(typeof(KSPParticleEmitter)).Length);
-            // Debug.Log("DEBUG " + string.Join(", ", strings));
-            // Dictionary<string, int> emitterNames = new Dictionary<string, int>();
-            // foreach (var pe in Resources.FindObjectsOfTypeAll(typeof(KSPParticleEmitter)).Cast<KSPParticleEmitter>())
-            // {
-            //     if (!pe.isActiveAndEnabled)
-            //     {
-            //         if (emitterNames.ContainsKey(pe.gameObject.name))
-            //             ++emitterNames[pe.gameObject.name];
-            //         else
-            //             emitterNames.Add(pe.gameObject.name, 1);
-            //     }
-            // }
-            // Debug.Log("DEBUG inactive/disabled emitter names: " + string.Join(", ", emitterNames.Select(pe => pe.Key + ":" + pe.Value)));
+            strings.Add("FlightGlobals.Vessels: " + FlightGlobals.Vessels.Count);
+            strings.Add("Non-competitors to remove: " + nonCompetitorsToRemove.Count);
+            strings.Add("EffectBehaviour<ParticleSystem>: " + EffectBehaviour.FindObjectsOfType<ParticleSystem>().Length);
+            strings.Add("EffectBehaviour<KSPParticleEmitter>: " + EffectBehaviour.FindObjectsOfType<KSPParticleEmitter>().Length);
+            strings.Add("KSPParticleEmitters: " + FindObjectsOfType<KSPParticleEmitter>().Length);
+            strings.Add("KSPParticleEmitters including inactive: " + Resources.FindObjectsOfTypeAll(typeof(KSPParticleEmitter)).Length);
+            Debug.Log("DEBUG " + string.Join(", ", strings));
+            Dictionary<string, int> emitterNames = new Dictionary<string, int>();
+            foreach (var pe in Resources.FindObjectsOfTypeAll(typeof(KSPParticleEmitter)).Cast<KSPParticleEmitter>())
+            {
+                if (!pe.isActiveAndEnabled)
+                {
+                    if (emitterNames.ContainsKey(pe.gameObject.name))
+                        ++emitterNames[pe.gameObject.name];
+                    else
+                        emitterNames.Add(pe.gameObject.name, 1);
+                }
+            }
+            Debug.Log("DEBUG inactive/disabled emitter names: " + string.Join(", ", emitterNames.Select(pe => pe.Key + ":" + pe.Value)));
 
-            // strings.Clear();
-            // strings.Add("Parts: " + FindObjectsOfType<Part>().Length + " active of " + Resources.FindObjectsOfTypeAll(typeof(Part)).Length);
-            // strings.Add("Vessels: " + FindObjectsOfType<Vessel>().Length + " active of " + Resources.FindObjectsOfTypeAll(typeof(Vessel)).Length);
-            // strings.Add("CometVessels: " + FindObjectsOfType<CometVessel>().Length);
-            // Debug.Log("DEBUG " + string.Join(", ", strings));
+            strings.Clear();
+            strings.Add("Parts: " + FindObjectsOfType<Part>().Length + " active of " + Resources.FindObjectsOfTypeAll(typeof(Part)).Length);
+            strings.Add("Vessels: " + FindObjectsOfType<Vessel>().Length + " active of " + Resources.FindObjectsOfTypeAll(typeof(Vessel)).Length);
+            strings.Add("CometVessels: " + FindObjectsOfType<CometVessel>().Length);
+            Debug.Log("DEBUG " + string.Join(", ", strings));
+        }
+
+        public void RunDebugChecks()
+        {
+            CheckMemoryUsage();
+            CheckNumbersOfThings();
         }
     }
 }

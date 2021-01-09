@@ -3,7 +3,6 @@ using BDArmory.Control;
 using BDArmory.Core;
 using BDArmory.Core.Extension;
 using BDArmory.CounterMeasure;
-using BDArmory.FX;
 using BDArmory.Misc;
 using BDArmory.Modules;
 using BDArmory.Shaders;
@@ -324,7 +323,7 @@ namespace BDArmory.Radar
             // set rotation as well, otherwise the CalcVesselBounds results won't match those from the editor
             if (HighLogic.LoadedSceneIsFlight)
             {
-                priorRotation = v.srfRelRotation;
+                priorRotation = t.rotation;
                 v.SetPosition(v.transform.position + presentationPosition);
                 //v.SetRotation(Quaternion.Euler(Mathf.PI/2, 0, 0));
                 v.SetRotation(new Quaternion(-0.7f, 0f, 0f, -0.7f));
@@ -378,13 +377,9 @@ namespace BDArmory.Radar
                 // Count pixel colors to determine radar returns
                 rcsVariable = 0;
 
-                for (int x = 0; x < radarResolution; x++)
-                {
-                    for (int y = 0; y < radarResolution; y++)
-                    {
-                        rcsVariable += drawTextureVariable.GetPixel(x, y).maxColorComponent;
-                    }
-                }
+                var pixels = drawTextureVariable.GetPixels();
+                for (int pixel = 0; pixel < pixels.Length; ++pixel)
+                    rcsVariable += pixels[pixel].maxColorComponent;
 
                 // normalize rcs value, so that a sphere with cross section of 1 m^2 gives a return of 1 m^2:
                 rcsVariable /= RCS_NORMALIZATION_FACTOR;
@@ -1304,6 +1299,7 @@ namespace BDArmory.Radar
                                     using (List<ModuleWeapon>.Enumerator weapon = loadedvessels.Current.FindPartModulesImplementing<ModuleWeapon>().GetEnumerator())
                                         while (weapon.MoveNext())
                                         {
+                                            if (weapon.Current == null || weapon.Current.weaponManager == null) continue;
                                             // If we're being targeted, calculate a miss distance
                                             if (weapon.Current.weaponManager.currentTarget != null && weapon.Current.weaponManager.currentTarget.Vessel == myWpnManager.vessel
                                                 && MissDistance(weapon.Current, myWpnManager.vessel) < results.missDistance)
@@ -1314,7 +1310,6 @@ namespace BDArmory.Radar
                                                 results.threatWeaponManager = weapon.Current.weaponManager;
                                                 results.missDistance = MissDistance(weapon.Current, myWpnManager.vessel);
                                             }
-
                                         }
                                 }
                             }
