@@ -18,6 +18,7 @@ namespace BDArmory.Targeting
         public Dictionary<BDTeam, float> detectedTime = new Dictionary<BDTeam, float>();
 
         public float radarBaseSignature = -1;
+        public FloatCurve radarBaseSignatureCurve = null;
         public bool radarBaseSignatureNeedsUpdate = true;
         public float radarModifiedSignature;
         public float radarLockbreakFactor;

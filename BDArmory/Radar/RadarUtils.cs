@@ -36,7 +36,7 @@ namespace BDArmory.Radar
         private static Texture2D drawTexture3;
         public static Texture2D GetTexture3 { get { return drawTexture3; } }
 
-        internal static float rcsTotal;               // dito
+        internal static FloatCurve rcsTotal;               // RCS is float curve for elevations -90 to 90 deg, 3rd quartile value for 0-180 deg azimuths
 
         internal const float RCS_NORMALIZATION_FACTOR = 4.0f;       //IMPORTANT FOR RCS CALCULATION! DO NOT CHANGE! (sphere with 1m^2 cross section should have 1m^2 RCS)
         internal const float RCS_MISSILES = 999f;                    //default rcs value for missiles if not configured in the part config
@@ -44,6 +44,10 @@ namespace BDArmory.Radar
         internal const float RADAR_IGNORE_DISTANCE_SQR = 100f;
         internal const float ACTIVE_MISSILE_PING_PERISTS_TIME = 0.2f;
         internal const float MISSILE_DEFAULT_LOCKABLE_RCS = 5f;
+
+        // RCS Az and El
+        private static float[] rcsAz = new float[37] { 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180 };
+        private static float[] rcsEl = new float[13] {-90, -75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90};
 
         // RCS Aspects
         private static float[,] rcsAspects = new float[95, 2] {
