@@ -36,30 +36,6 @@ namespace BDArmory.Radar
         private static Texture2D drawTexture3;
         public static Texture2D GetTexture3 { get { return drawTexture3; } }
 
-        // Legacy variables
-        private static Texture2D drawTextureFrontal;
-        public static Texture2D GetTextureFrontal { get { return drawTextureFrontal; } }
-        private static Texture2D drawTextureLateral;
-        public static Texture2D GetTextureLateral { get { return drawTextureLateral; } }
-        private static Texture2D drawTextureVentral;
-        public static Texture2D GetTextureVentral { get { return drawTextureVentral; } }
-
-        // additional anti-exploit 45� offset renderings
-        private static Texture2D drawTextureFrontal45;
-        public static Texture2D GetTextureFrontal45 { get { return drawTextureFrontal45; } }
-        private static Texture2D drawTextureLateral45;
-        public static Texture2D GetTextureLateral45 { get { return drawTextureLateral45; } }
-        private static Texture2D drawTextureVentral45;
-        public static Texture2D GetTextureVentral45 { get { return drawTextureVentral45; } }
-        
-        internal static float rcsFrontal;             // internal so that editor analysis window has access to the details
-        internal static float rcsLateral;             // dito
-        internal static float rcsVentral;             // dito
-        internal static float rcsFrontal45;             // dito
-        internal static float rcsLateral45;             // dito
-        internal static float rcsVentral45;             // dito
-        // End legacy variables
-
         internal static float rcsTotal;               // dito
 
         internal const float RCS_NORMALIZATION_FACTOR = 4.0f;       //IMPORTANT FOR RCS CALCULATION! DO NOT CHANGE! (sphere with 1m^2 cross section should have 1m^2 RCS)
@@ -523,110 +499,6 @@ namespace BDArmory.Radar
         }
 
         /// <summary>
-        /// Internal method: do the actual radar snapshot rendering from 3 sides and store it in a vesseltargetinfo attached to the vessel
-        ///
-        /// Note: Transform t is passed separatedly (instead of using v.transform), as the method need to be called from the editor
-        ///         and there we dont have a VESSEL, only a SHIPCONSTRUCT, so the EditorRcSWindow passes the transform separately.
-        /// </summary>
-        /// <param name="inEditorZoom">when true, we try to make the rendered vessel fill the rendertexture completely, for a better detailed view. This does skew the computed cross section, so it is only for a good visual in editor!</param>
-        public static float RenderVesselRadarSnapshotLegacy(Vessel v, Transform t, bool inEditorZoom = false)
-        {
-            const float radarDistance = 1000f;
-            const float radarFOV = 2.0f;
-            Vector3 presentationPosition = -t.forward * radarDistance;
-
-            SetupResources();
-
-            //move vessel up for clear rendering shot (only if outside editor and thus vessel is a real vessel)
-            if (HighLogic.LoadedSceneIsFlight)
-                v.SetPosition(v.transform.position + presentationPosition);
-
-            Bounds vesselbounds = CalcVesselBounds(v, t);
-            if (BDArmorySettings.DRAW_DEBUG_LABELS)
-            {
-                if (HighLogic.LoadedSceneIsFlight)
-                    Debug.Log($"[BDArmory]: Rendering radar snapshot of vessel {v.name}, type {v.vesselType}");
-                else
-                    Debug.Log("[BDArmory]: Rendering radar snapshot of vessel");
-                Debug.Log("[BDArmory]: - bounds: " + vesselbounds.ToString());
-                //Debug.Log("[BDArmory]: - size: " + vesselbounds.size + ", magnitude: " + vesselbounds.size.magnitude);
-            }
-
-            if (vesselbounds.size.sqrMagnitude == 0f)
-            {
-                // SAVE US THE RENDERING, result will be zero anyway...
-                if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                {
-                    Debug.Log("[BDArmory]: - rcs is zero.");
-                }
-
-                // revert presentation (only if outside editor and thus vessel is a real vessel)
-                if (HighLogic.LoadedSceneIsFlight)
-                    v.SetPosition(v.transform.position - presentationPosition);
-
-                return 0f;
-            }
-
-            // pass1: frontal
-            RenderSinglePass(t, inEditorZoom, t.up, vesselbounds, radarDistance, radarFOV, rcsRenderingFrontal, drawTextureFrontal);
-            // pass2: lateral
-            RenderSinglePass(t, inEditorZoom, t.right, vesselbounds, radarDistance, radarFOV, rcsRenderingLateral, drawTextureLateral);
-            // pass3: Ventral
-            RenderSinglePass(t, inEditorZoom, t.forward, vesselbounds, radarDistance, radarFOV, rcsRenderingVentral, drawTextureVentral);
-
-            //additional 45� offset renderings:
-            RenderSinglePass(t, inEditorZoom, (t.up + t.right), vesselbounds, radarDistance, radarFOV, rcsRenderingFrontal, drawTextureFrontal45);
-            RenderSinglePass(t, inEditorZoom, (t.right + t.forward), vesselbounds, radarDistance, radarFOV, rcsRenderingLateral, drawTextureLateral45);
-            RenderSinglePass(t, inEditorZoom, (t.forward - t.up), vesselbounds, radarDistance, radarFOV, rcsRenderingVentral, drawTextureVentral45);
-
-            // revert presentation (only if outside editor and thus vessel is a real vessel)
-            if (HighLogic.LoadedSceneIsFlight)
-                v.SetPosition(v.transform.position - presentationPosition);
-
-            // Count pixel colors to determine radar returns (only for normal non-zoomed rendering!)
-            if (!inEditorZoom)
-            {
-                rcsFrontal = 0;
-                rcsLateral = 0;
-                rcsVentral = 0;
-                rcsFrontal45 = 0;
-                rcsLateral45 = 0;
-                rcsVentral45 = 0;
-
-                for (int x = 0; x < radarResolution; x++)
-                {
-                    for (int y = 0; y < radarResolution; y++)
-                    {
-                        rcsFrontal += drawTextureFrontal.GetPixel(x, y).maxColorComponent;
-                        rcsLateral += drawTextureLateral.GetPixel(x, y).maxColorComponent;
-                        rcsVentral += drawTextureVentral.GetPixel(x, y).maxColorComponent;
-
-                        rcsFrontal45 += drawTextureFrontal45.GetPixel(x, y).maxColorComponent;
-                        rcsLateral45 += drawTextureLateral45.GetPixel(x, y).maxColorComponent;
-                        rcsVentral45 += drawTextureVentral45.GetPixel(x, y).maxColorComponent;
-                    }
-                }
-
-                // normalize rcs value, so that the structural 1x1 panel facing the radar exactly gives a return of 1 m^2:
-                rcsFrontal /= RCS_NORMALIZATION_FACTOR;
-                rcsLateral /= RCS_NORMALIZATION_FACTOR;
-                rcsVentral /= RCS_NORMALIZATION_FACTOR;
-
-                rcsFrontal45 /= RCS_NORMALIZATION_FACTOR;
-                rcsLateral45 /= RCS_NORMALIZATION_FACTOR;
-                rcsVentral45 /= RCS_NORMALIZATION_FACTOR;
-
-                rcsTotal = (Mathf.Max(rcsFrontal, rcsFrontal45) + Mathf.Max(rcsLateral, rcsLateral45) + Mathf.Max(rcsVentral, rcsVentral45)) / 3f;
-                if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                {
-                    Debug.Log($"[BDArmory]: - Vessel rcs is (frontal/lateral/ventral), (frontal45/lateral45/ventral45): {rcsFrontal}/{rcsLateral}/{rcsVentral}, {rcsFrontal45}/{rcsLateral45}/{rcsVentral45} = rcsTotal: {rcsTotal}");
-                }
-            }
-
-            return rcsTotal;
-        }
-
-        /// <summary>
         /// Internal helpder method
         /// </summary>
         private static void RenderSinglePass(Transform t, bool inEditorZoom, Vector3 cameraDirection, Bounds vesselbounds, float radarDistance, float radarFOV, RenderTexture rcsRendering, Texture2D rcsTexture)
@@ -715,38 +587,6 @@ namespace BDArmory.Radar
         }
 
         /// <summary>
-        /// LEGACY Initialization of required resources. Necessary once per scene.
-        /// </summary>
-        public static void SetupResourcesLegacy()
-        {
-            if (!rcsSetupCompleted)
-            {
-                //set up rendertargets and textures
-                rcsRenderingFrontal = new RenderTexture(radarResolution, radarResolution, 16);
-                rcsRenderingLateral = new RenderTexture(radarResolution, radarResolution, 16);
-                rcsRenderingVentral = new RenderTexture(radarResolution, radarResolution, 16);
-                drawTextureFrontal = new Texture2D(radarResolution, radarResolution, TextureFormat.RGB24, false);
-                drawTextureLateral = new Texture2D(radarResolution, radarResolution, TextureFormat.RGB24, false);
-                drawTextureVentral = new Texture2D(radarResolution, radarResolution, TextureFormat.RGB24, false);
-                drawTextureFrontal45 = new Texture2D(radarResolution, radarResolution, TextureFormat.RGB24, false);
-                drawTextureLateral45 = new Texture2D(radarResolution, radarResolution, TextureFormat.RGB24, false);
-                drawTextureVentral45 = new Texture2D(radarResolution, radarResolution, TextureFormat.RGB24, false);
-
-                rcsSetupCompleted = true;
-            }
-
-            if (radarCam == null)
-            {
-                //set up camera
-                radarCam = (new GameObject("RadarCamera")).AddComponent<Camera>();
-                radarCam.enabled = false;
-                radarCam.clearFlags = CameraClearFlags.SolidColor;
-                radarCam.backgroundColor = Color.black;
-                radarCam.cullingMask = 1 << 0;   // only layer 0 active, see: http://wiki.kerbalspaceprogram.com/wiki/API:Layers
-            }
-        }
-
-        /// <summary>
         /// Release of acquired resources. Necessary once at end of scene.
         /// </summary>
         public static void CleanupResources()
@@ -761,27 +601,6 @@ namespace BDArmory.Radar
                 Texture2D.Destroy(drawTexture1);
                 Texture2D.Destroy(drawTexture2);
                 Texture2D.Destroy(drawTexture3);
-                GameObject.Destroy(radarCam);
-                rcsSetupCompleted = false;
-            }
-        }
-
-        /// <summary>
-        /// LEGACY Release of acquired resources. Necessary once at end of scene.
-        /// </summary>
-        public static void CleanupResourcesLegacy()
-        {
-            if (rcsSetupCompleted)
-            {
-                RenderTexture.Destroy(rcsRenderingFrontal);
-                RenderTexture.Destroy(rcsRenderingLateral);
-                RenderTexture.Destroy(rcsRenderingVentral);
-                Texture2D.Destroy(drawTextureFrontal);
-                Texture2D.Destroy(drawTextureLateral);
-                Texture2D.Destroy(drawTextureVentral);
-                Texture2D.Destroy(drawTextureFrontal45);
-                Texture2D.Destroy(drawTextureLateral45);
-                Texture2D.Destroy(drawTextureVentral45);
                 GameObject.Destroy(radarCam);
                 rcsSetupCompleted = false;
             }
