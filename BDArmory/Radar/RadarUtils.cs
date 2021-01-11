@@ -22,9 +22,6 @@ namespace BDArmory.Radar
         private static RenderTexture rcsRendering2;
         private static RenderTexture rcsRendering3;
 
-        private static RenderTexture rcsRenderingFrontal;
-        private static RenderTexture rcsRenderingLateral;
-        private static RenderTexture rcsRenderingVentral;
         private static Camera radarCam;
 
         private static Texture2D drawTextureVariable;
@@ -36,9 +33,11 @@ namespace BDArmory.Radar
         private static Texture2D drawTexture3;
         public static Texture2D GetTexture3 { get { return drawTexture3; } }
 
-        internal static FloatCurve rcsTotal;               // RCS is float curve for elevations -90 to 90 deg, 3rd quartile value for 0-180 deg azimuths
+        internal static float rcsTotal;               // RCS is float curve for elevations -90 to 90 deg, 3rd quartile value for 0-180 deg azimuths
+        internal static FloatCurve rcsTotalCurve;
 
-        internal const float RCS_NORMALIZATION_FACTOR = 4.0f;       //IMPORTANT FOR RCS CALCULATION! DO NOT CHANGE! (sphere with 1m^2 cross section should have 1m^2 RCS)
+        internal const float RCS_NORMALIZATION_FACTOR = 3.65f;       //IMPORTANT FOR RCS CALCULATION! DO NOT CHANGE! (sphere with 1m^2 cross section should have 1m^2 RCS)
+        // internal const double RCS_CDF_VALUE = 50;                   // What CDF threshold to use when calculating RCS, 25 = 1rd quartile, 50 = 2nd quartile (median), 75 = 3rd quartile
         internal const float RCS_MISSILES = 999f;                    //default rcs value for missiles if not configured in the part config
         internal const float RWR_PING_RANGE_FACTOR = 2.0f;
         internal const float RADAR_IGNORE_DISTANCE_SQR = 100f;
@@ -48,6 +47,8 @@ namespace BDArmory.Radar
         // RCS Az and El
         private static float[] rcsAz = new float[37] { 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180 };
         private static float[] rcsEl = new float[13] {-90, -75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 90};
+        private static int numAz = rcsAz.Length; // Number of az aspects
+        private static int numEl = rcsEl.Length; // Number of el aspects
 
         // RCS Aspects
         private static float[,] rcsAspects = new float[95, 2] {
@@ -164,6 +165,30 @@ namespace BDArmory.Radar
             return ti;
         }
 
+
+        public static float GetVesselRadarSignatureAtAspect(TargetInfo ti, Vector3 radarPosition)
+        {
+            float signatureAtAspect;
+            
+            Vector3 directionOfRadar = radarPosition - ti.Vessel.ReferenceTransform.position;
+            Vector3 elComponent = Vector3.ProjectOnPlane(directionOfRadar, ti.Vessel.ReferenceTransform.right);
+
+            float elAngle = Vector3.SignedAngle(ti.Vessel.ReferenceTransform.up, elComponent, -ti.Vessel.ReferenceTransform.right);
+
+            if (elAngle > 90f)
+                elAngle = 180f - elAngle;
+            else if (elAngle < -90f)
+                elAngle = -180f - elAngle;
+
+            // Evaluate Float Curve
+            signatureAtAspect = ti.radarModifiedSignatureFactor * ti.radarBaseSignatureCurve.Evaluate(elAngle);
+
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                Debug.Log("[BDArmory: " + ti.Vessel.vesselName + " signature of " + signatureAtAspect.ToString("0.00") + "m^2 at " + elAngle.ToString("0.0") + "deg.");
+
+            return signatureAtAspect;
+        }
+
         /// <summary>
         /// Internal method: get a vessel base radar signature
         /// </summary>
@@ -194,7 +219,11 @@ namespace BDArmory.Radar
                 }
             }
 
-            if (ti.radarBaseSignature == -1 || ti.radarBaseSignatureNeedsUpdate)
+            if (BDACompetitionMode.Instance.competitionStarting && !BDACompetitionMode.Instance.competitionIsActive)
+                ti.radarBaseSignatureCompetitionUpdate = false; // Reset competition update if a new competition was started
+
+            // Run intensive RCS rendering if 1. It has not been done yet, 2. If the competition just started (capture vessel changes such as gear-raise or robotics)
+            if (ti.radarBaseSignature == -1 || ti.radarBaseSignatureNeedsUpdate || (!ti.radarBaseSignatureCompetitionUpdate && BDACompetitionMode.Instance.competitionIsActive))
             {
                 // is it just some debris? then dont bother doing a real rcs rendering and just fake it with the parts mass
                 if (v.vesselType == VesselType.Debris && !v.IsControllable)
@@ -204,11 +233,14 @@ namespace BDArmory.Radar
                 else
                 {
                     // perform radar rendering to obtain base cross section
-                    ti.radarBaseSignature = RenderVesselRadarSnapshot(v, v.transform);
+                    ti.radarBaseSignatureCurve = RenderVesselRadarSnapshot(v, v.transform);
+                    ti.radarBaseSignature = rcsTotal;
+                    ti.hasSignatureCurve = true;
                 }
 
                 ti.radarBaseSignatureNeedsUpdate = false;
                 ti.alreadyScheduledRCSUpdate = false;
+                ti.radarBaseSignatureCompetitionUpdate = true;
             }
 
             return ti;
@@ -243,6 +275,8 @@ namespace BDArmory.Radar
                 // Use clamp to prevent RCS reduction resulting in increased lockbreak factor, which negates value of RCS reduction)
                 ti.radarLockbreakFactor = Mathf.Clamp01(ti.radarBaseSignature / ti.radarModifiedSignature) * (1 - (vesseljammer.lockBreakStrength / ti.radarBaseSignature / 100));
             }
+
+            ti.radarModifiedSignatureFactor = ti.radarModifiedSignature / ti.radarBaseSignature;
 
             return ti.radarModifiedSignature;
         }
@@ -282,6 +316,7 @@ namespace BDArmory.Radar
             return jammingDistance;
         }
 
+
         /// <summary>
         /// Internal method: do the actual radar snapshot rendering from 3 sides and store it in a vesseltargetinfo attached to the vessel
         ///
@@ -289,7 +324,223 @@ namespace BDArmory.Radar
         ///         and there we dont have a VESSEL, only a SHIPCONSTRUCT, so the EditorRcSWindow passes the transform separately.
         /// </summary>
         /// <param name="inEditorZoom">when true, we try to make the rendered vessel fill the rendertexture completely, for a better detailed view. This does skew the computed cross section, so it is only for a good visual in editor!</param>
-        public static float RenderVesselRadarSnapshot(Vessel v, Transform t, bool inEditorZoom = false)
+        public static FloatCurve RenderVesselRadarSnapshot(Vessel v, Transform t, bool inEditorZoom = false)
+        {
+            const float radarDistance = 1000f;
+            const float radarFOV = 2.0f;
+            Vector3 presentationPosition = -t.forward * radarDistance;
+
+            SetupResources();
+
+            Quaternion priorRotation = Quaternion.Euler(0, 0, 0);
+
+            //move vessel up for clear rendering shot (only if outside editor and thus vessel is a real vessel)
+            // set rotation as well, otherwise the CalcVesselBounds results won't match those from the editor
+            if (HighLogic.LoadedSceneIsFlight)
+            {
+                priorRotation = t.rotation;
+                v.SetPosition(v.transform.position + presentationPosition);
+                v.SetRotation(new Quaternion(-0.7f, 0f, 0f, -0.7f));
+                t = v.transform;
+            }
+
+            Bounds vesselbounds = CalcVesselBounds(v, t);
+
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+            {
+                if (HighLogic.LoadedSceneIsFlight)
+                    Debug.Log($"[BDArmory]: Rendering radar snapshot of vessel {v.name}, type {v.vesselType}");
+                else
+                    Debug.Log("[BDArmory]: Rendering radar snapshot of vessel");
+                Debug.Log("[BDArmory]: - bounds: " + vesselbounds.ToString());
+                Debug.Log("[BDArmory]: - rotation: " + t.rotation.ToString());
+                //Debug.Log("[BDArmory]: - size: " + vesselbounds.size + ", magnitude: " + vesselbounds.size.magnitude);
+            }
+
+            // Initialize float curve
+            rcsTotalCurve = new FloatCurve();
+
+            if (vesselbounds.size.sqrMagnitude == 0f)
+            {
+                // SAVE US THE RENDERING, result will be zero anyway...
+                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                {
+                    Debug.Log("[BDArmory]: - rcs is zero.");
+                }
+
+                // revert presentation (only if outside editor and thus vessel is a real vessel)
+                if (HighLogic.LoadedSceneIsFlight)
+                    v.SetPosition(v.transform.position - presentationPosition);
+
+                // Zero value float curve
+                rcsTotalCurve.Add(-90, 0);
+                rcsTotalCurve.Add(90, 0);
+
+                return rcsTotalCurve;
+            }
+
+            // Initialize loop variables
+            float rcsVariable = 0f;
+            worstRCSAspects = new float[3, 3];
+            double[] rcsValues = new double[numAspects];
+            rcsTotal = 0;
+            Vector3 aspect;
+            int numAzForEl = numAz;
+            float currentAz = 0f;
+
+            // Loop through all aspects
+            for (int i = 0; i < numEl; i++)
+            {
+                
+                if (Mathf.Abs(rcsEl[i]) == 90f)
+                    numAzForEl = 1;
+                else
+                    numAzForEl = numAz;
+
+                rcsValues = new double[numAzForEl];
+
+                // Rotate vessel when in-editor for positive elevations to avoid floor of SPH appearing in RCS render
+                if (inEditorZoom && (rcsEl[i] > 0f))
+                {
+                    EditorLogic.RootPart.transform.Rotate(t.forward, 180);
+                    t = EditorLogic.RootPart.transform;
+                }
+
+                for (int j = 0; j < numAzForEl; j++)
+                {
+                    if (Mathf.Abs(rcsEl[i]) == 90f)
+                        currentAz = 0f;
+                    else
+                        currentAz = rcsAz[j]; ;
+
+                    // Determine camera vector for aspect
+                    aspect = Vector3.RotateTowards(t.up, -t.up, currentAz / 180f * Mathf.PI, 0);
+                    aspect = Vector3.RotateTowards(aspect, Vector3.Cross(t.right, t.up), -rcsEl[i] / 180f * Mathf.PI, 0);
+
+                    // Render aspect
+                    RenderSinglePass(t, false, aspect, vesselbounds, radarDistance, radarFOV, rcsRenderingVariable, drawTextureVariable);
+
+                    // Count pixel colors to determine radar returns
+                    rcsVariable = 0;
+
+                    var pixels = drawTextureVariable.GetPixels();
+                    for (int pixel = 0; pixel < pixels.Length; ++pixel)
+                        rcsVariable += pixels[pixel].maxColorComponent;
+
+                    // normalize rcs value, so that a sphere with cross section of 1 m^2 gives a return of 1 m^2:
+                    rcsVariable /= RCS_NORMALIZATION_FACTOR;
+                    rcsValues[j] = (double)rcsVariable;
+                    
+                    // Remember worst three RCS azimuths at -45, 0, 45 deg elevation to display in editor
+                    if (inEditorZoom)
+                    {
+                        if ((rcsEl[i] == -45f) && (rcsVariable > worstRCSAspects[0, 2]))
+                        {
+                            worstRCSAspects[0, 0] = currentAz;
+                            worstRCSAspects[0, 1] = rcsEl[i];
+                            worstRCSAspects[0, 2] = rcsVariable;
+                        }
+                        if ((rcsEl[i] == 0f) && (rcsVariable > worstRCSAspects[1, 2]))
+                        {
+                            worstRCSAspects[1, 0] = currentAz;
+                            worstRCSAspects[1, 1] = rcsEl[i];
+                            worstRCSAspects[1, 2] = rcsVariable;
+                        }
+                        if ((rcsEl[i] == 45f) && (rcsVariable > worstRCSAspects[2, 2]))
+                        {
+                            worstRCSAspects[2, 0] = currentAz;
+                            worstRCSAspects[2, 1] = rcsEl[i];
+                            worstRCSAspects[2, 2] = rcsVariable;
+                        }
+                    }
+
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                    {
+                        //Debug.Log($"[BDArmory]: RCS Aspect Vector for (az/el) {currentAz}/{rcsEl[i]}  is: " + aspect.ToString());
+                        Debug.Log($"[BDArmory]: - Vessel rcs for (az/el) is: {currentAz}/{rcsEl[i]} = rcsVariable: {rcsVariable}");
+                    }
+                }
+
+                // Rotate vessel when in-editor for positive elevations to avoid floor of SPH appearing in RCS render
+                if (inEditorZoom && (rcsEl[i] > 0f))
+                {
+                    EditorLogic.RootPart.transform.Rotate(t.forward, -180);
+                    t = EditorLogic.RootPart.transform;
+                }
+
+                // Record RCS CDF value at current elevation, add to float curve rcsTotalCurve
+                if (rcsValues.Length == 1)
+                    rcsTotalCurve.Add(rcsEl[i], (float)rcsValues[0]);
+                else
+                    rcsTotalCurve.Add(rcsEl[i], (float)CDFValue(rcsValues, BDArmorySettings.RCS_PERCENTILE_VALUE));
+            }
+
+            // Evaluate float curve for total RCS
+            rcsValues = new double[91];
+            for (int i = -45; i < 46; i++)
+            {
+                rcsValues[i+45] = (double)rcsTotalCurve.Evaluate((float)i);
+                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                {
+                    Debug.Log($"{i}, {rcsValues[i + 45]}");
+                }
+            }
+
+            rcsTotal = (float)CDFValue(rcsValues, BDArmorySettings.RCS_PERCENTILE_VALUE);
+
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+            {
+                Debug.Log($"[BDArmory]: - Vessel all-aspect rcs is: rcsTotal: {rcsTotal}");
+            }
+
+            // If we are in the editor, render the highest RCS azimuths for -45, 0, 45 deg elevation
+            if (inEditorZoom)
+            {
+                
+
+                // Determine camera vectors for aspects
+                Vector3 aspect1 = Vector3.RotateTowards(t.up, -t.up, worstRCSAspects[0, 0] / 180f * Mathf.PI, 0);
+                aspect1 = Vector3.RotateTowards(aspect1, Vector3.Cross(t.right, t.up), -worstRCSAspects[0, 1] / 180f * Mathf.PI, 0);
+                RenderSinglePass(t, inEditorZoom, aspect1, vesselbounds, radarDistance, radarFOV, rcsRendering1, drawTexture1);
+                Vector3 aspect2 = Vector3.RotateTowards(t.up, -t.up, worstRCSAspects[1, 0] / 180f * Mathf.PI, 0);
+                aspect2 = Vector3.RotateTowards(aspect2, Vector3.Cross(t.right, t.up), -worstRCSAspects[1, 1] / 180f * Mathf.PI, 0);
+                RenderSinglePass(t, inEditorZoom, aspect2, vesselbounds, radarDistance, radarFOV, rcsRendering2, drawTexture2);
+
+                // Rotate vessel when in-editor for positive elevations to avoid floor of SPH appearing in RCS render
+                EditorLogic.RootPart.transform.Rotate(t.forward, 180);
+                t = EditorLogic.RootPart.transform;
+
+                Vector3 aspect3 = Vector3.RotateTowards(t.up, -t.up, worstRCSAspects[2, 0] / 180f * Mathf.PI, 0);
+                aspect3 = Vector3.RotateTowards(aspect3, Vector3.Cross(t.right, t.up), -worstRCSAspects[2, 1] / 180f * Mathf.PI, 0);
+                RenderSinglePass(t, inEditorZoom, aspect3, vesselbounds, radarDistance, radarFOV, rcsRendering3, drawTexture3);
+                // Render three highest aspects
+
+                // Rotate vessel when in-editor for positive elevations to avoid floor of SPH appearing in RCS render
+                EditorLogic.RootPart.transform.Rotate(t.forward, -180);
+                t = EditorLogic.RootPart.transform;
+            }
+            else
+            {
+                // revert presentation (only if outside editor and thus vessel is a real vessel)
+                if (HighLogic.LoadedSceneIsFlight)
+                {
+                    v.SetRotation(priorRotation);
+                    v.SetPosition(v.transform.position - presentationPosition);
+                }
+            }
+
+            return rcsTotalCurve;
+        }
+
+
+        /// <summary>
+        /// Internal method: do the actual radar snapshot rendering from 3 sides and store it in a vesseltargetinfo attached to the vessel
+        ///
+        /// Note: Transform t is passed separatedly (instead of using v.transform), as the method need to be called from the editor
+        ///         and there we dont have a VESSEL, only a SHIPCONSTRUCT, so the EditorRcSWindow passes the transform separately.
+        /// </summary>
+        /// <param name="inEditorZoom">when true, we try to make the rendered vessel fill the rendertexture completely, for a better detailed view. This does skew the computed cross section, so it is only for a good visual in editor!</param>
+        public static float RenderVesselRadarSnapshotOld(Vessel v, Transform t, bool inEditorZoom = false)
         {
             const float radarDistance = 1000f;
             const float radarFOV = 2.0f;
@@ -502,6 +753,38 @@ namespace BDArmory.Radar
             }
         }
 
+        // Used to calculate CDF value for RCS dataset
+        internal static double CDFValue(double[] array, double dblPercentage)
+        {
+            System.Array.Sort(array);
+
+            if (dblPercentage >= 100.0d) return array[array.Length - 1];
+
+            double position = (double)(array.Length + 1) * dblPercentage / 100.0;
+            double leftNumber = 0.0d, rightNumber = 0.0d;
+
+            double n = dblPercentage / 100.0d * (array.Length - 1) + 1.0d;
+
+            if (position >= 1)
+            {
+                leftNumber = array[(int)System.Math.Floor(n) - 1];
+                rightNumber = array[(int)System.Math.Floor(n)];
+            }
+            else
+            {
+                leftNumber = array[0]; // first data
+                rightNumber = array[1]; // first data
+            }
+
+            if (leftNumber == rightNumber)
+                return leftNumber;
+            else
+            {
+                double part = n - System.Math.Floor(n);
+                return leftNumber + part * (rightNumber - leftNumber);
+            }
+        }
+
         /// <summary>
         /// Internal helpder method
         /// </summary>
@@ -669,6 +952,10 @@ namespace BDArmory.Radar
                         // get vessel's radar signature
                         TargetInfo ti = GetVesselRadarSignature(loadedvessels.Current);
                         float signature = ti.radarModifiedSignature;
+                        if (ti.hasSignatureCurve)
+                        {
+                            signature = GetVesselRadarSignatureAtAspect(ti, ray.origin);
+                        }
                         signature *= GetRadarGroundClutterModifier(radar, radar.referenceTransform, ray.origin, loadedvessels.Current.CoM, ti);
                         // no ecm lockbreak factor here
                         // no chaff factor here
@@ -756,6 +1043,10 @@ namespace BDArmory.Radar
                         // get vessel's radar signature
                         TargetInfo ti = GetVesselRadarSignature(loadedvessels.Current);
                         float signature = ti.radarModifiedSignature;
+                        if (ti.hasSignatureCurve)
+                        {
+                            signature = GetVesselRadarSignatureAtAspect(ti, ray.origin);
+                        }
                         // no ground clutter modifier for missiles
                         signature *= ti.radarLockbreakFactor;    //multiply lockbreak factor from active ecm
                                                                  //do not multiply chaff factor here
@@ -848,6 +1139,10 @@ namespace BDArmory.Radar
                         // get vessel's radar signature
                         TargetInfo ti = GetVesselRadarSignature(loadedvessels.Current);
                         float signature = ti.radarModifiedSignature;
+                        if (ti.hasSignatureCurve)
+                        {
+                            signature = GetVesselRadarSignatureAtAspect(ti, position);
+                        }
                         //do not multiply chaff factor here
                         signature *= GetRadarGroundClutterModifier(radar, referenceTransform, position, loadedvessels.Current.CoM, ti);
 
@@ -983,6 +1278,10 @@ namespace BDArmory.Radar
                 // get vessel's radar signature
                 TargetInfo ti = GetVesselRadarSignature(lockedVessel);
                 float signature = ti.radarModifiedSignature;
+                if (ti.hasSignatureCurve)
+                {
+                    signature = GetVesselRadarSignatureAtAspect(ti, ray.origin);
+                }
                 signature *= GetRadarGroundClutterModifier(radar, radar.referenceTransform, ray.origin, lockedVessel.CoM, ti);
                 signature *= ti.radarLockbreakFactor;    //multiply lockbreak factor from active ecm
                 //do not multiply chaff factor here

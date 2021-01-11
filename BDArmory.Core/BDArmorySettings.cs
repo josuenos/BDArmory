@@ -87,6 +87,7 @@ namespace BDArmory.Core
         [BDAPersistantSettingsField] public static float EXP_DMG_MOD_MISSILE = 6.75f;
         [BDAPersistantSettingsField] public static float EXP_IMP_MOD = 0.25f;
         [BDAPersistantSettingsField] public static bool EXTRA_DAMAGE_SLIDERS = false;
+        [BDAPersistantSettingsField] public static float RCS_PERCENTILE_VALUE = 50;                   // What CDF threshold to use when calculating RCS, 25 = 1rd quartile, 50 = 2nd quartile (median), 75 = 3rd quartile
 
         // FX
         [BDAPersistantSettingsField] public static bool FIRE_FX_IN_FLIGHT = false;

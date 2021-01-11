@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using BDArmory.Misc;
 using BDArmory.Modules;
 using BDArmory.Radar;
+using BDArmory.Core;
 using KSP.UI.Screens;
 using UnityEngine;
 
@@ -16,8 +17,8 @@ namespace BDArmory.UI
         private ApplicationLauncherButton toolbarButton = null;
 
         private bool showRcsWindow = false;
-        private string windowTitle = "BDArmory Radar Cross Section Analysis (Worst Three Aspects)";
-        private Rect windowRect = new Rect(300, 150, 650, 500);
+        private string windowTitle = "BDArmory Radar Cross Section Analysis (Worst Azimuth for -45, 0, 45 deg Elevations)";
+        private Rect windowRect = new Rect(300, 150, 850, 550);
 
         private bool takeSnapshot = false;
         private float rcsReductionFactor;
@@ -161,140 +162,31 @@ namespace BDArmory.UI
 
             GUIStyle style = BDArmorySetup.BDGuiSkin.label;
             style.fontStyle = FontStyle.Bold;
-            GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + string.Format("{0:0.00} m^2 (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
-            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
+            GUI.Label(new Rect(10, 300, 850, 20), "Base radar cross section at degrees elevation (m^2): " + 
+                "-60: " + string.Format("{0:0.0}", RadarUtils.rcsTotalCurve.Evaluate(-60)) + ", " +
+                "-30: " + string.Format("{0:0.0}", RadarUtils.rcsTotalCurve.Evaluate(-30)) +", " +
+                "-15: " + string.Format("{0:0.0}", RadarUtils.rcsTotalCurve.Evaluate(-15)) +", " +
+                "0: " + string.Format("{0:0.0}", RadarUtils.rcsTotalCurve.Evaluate(0)) +", " +
+                "15: " + string.Format("{0:0.0}", RadarUtils.rcsTotalCurve.Evaluate(15)) +", " +
+                "30: " + string.Format("{0:0.0}", RadarUtils.rcsTotalCurve.Evaluate(30)) +", " +
+                "60: " + string.Format("{0:0.0}", RadarUtils.rcsTotalCurve.Evaluate(60)), BDArmorySetup.BDGuiSkin.label);
+            GUI.Label(new Rect(10, 320, 850, 20), "Base " + BDArmorySettings.RCS_PERCENTILE_VALUE.ToString("0") + "th percentile value (-45 to 45 deg el) radar cross section for vessel: " + string.Format("{0:0.00} m^2 (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
+            GUI.Label(new Rect(10, 340, 850, 20), "Total " + BDArmorySettings.RCS_PERCENTILE_VALUE.ToString("0") + "th percentile value (-45 to 45 deg el) radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
 
             style.fontStyle = FontStyle.Normal;
-            GUI.Label(new Rect(10, 380, 600, 20), "** (Range evaluation not accounting for ECM/countermeasures)", style);
-            GUI.Label(new Rect(10, 410, 600, 20), text_detection, style);
-            GUI.Label(new Rect(10, 430, 600, 20), text_locktrack, style);
-            GUI.Label(new Rect(10, 450, 600, 20), text_sonar, style);
+            GUI.Label(new Rect(10, 400, 850, 20), "** (Range evaluation not accounting for ECM/countermeasures)", style);
+            GUI.Label(new Rect(10, 430, 850, 20), text_detection, style);
+            GUI.Label(new Rect(10, 450, 850, 20), text_locktrack, style);
+            GUI.Label(new Rect(10, 470, 850, 20), text_sonar, style);
 
-            bool bNewValue = GUI.Toggle(new Rect(490, 348, 150, 20), bLandedSplashed, "Splashed/Landed", BDArmorySetup.BDGuiSkin.toggle);
+            bool bNewValue = GUI.Toggle(new Rect(490, 368, 150, 20), bLandedSplashed, "Splashed/Landed", BDArmorySetup.BDGuiSkin.toggle);
 
             if (radars == null)
             {
                 FillRadarList();
                 GUIStyle listStyle = new GUIStyle(BDArmorySetup.BDGuiSkin.button);
                 listStyle.fixedHeight = 18; //make list contents slightly smaller
-                radarBox = new BDGUIComboBox(new Rect(10, 350, 600, 20), new Rect(10, 350, 250, 20), radarBoxText, radarsGUI, 124, listStyle);
-            }
-
-            int selected_index = radarBox.Show();
-
-            if ((selected_index != previous_index) || (bNewValue != bLandedSplashed))
-            {
-                text_sonar = "";
-                bLandedSplashed = bNewValue;
-
-                // selected radar changed - evaluate craft RCS against this radar
-                if (selected_index != -1)
-                {
-                    var selected_radar = radars[selected_index];
-
-                    // ground clutter factor from radar
-                    if (bLandedSplashed)
-                        rcsGCF = selected_radar.radarGroundClutterFactor;
-                    else
-                        rcsGCF = 1.0f;
-
-                    if (selected_radar.canScan)
-                    {
-                        for (float distance = selected_radar.radarMaxDistanceDetect; distance >= 0; distance--)
-                        {
-                            text_detection = $"Detection: undetectable by this radar.";
-                            if (selected_radar.radarDetectionCurve.Evaluate(distance) <= (RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
-                            {
-                                text_detection = $"Detection: detected at {distance} km and closer";
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        text_detection = "Detection: This radar does not have detection capabilities.";
-                    }
-
-                    if (selected_radar.canLock)
-                    {
-                        text_locktrack = $"Lock/Track: untrackable by this radar.";
-                        for (float distance = selected_radar.radarMaxDistanceLockTrack; distance >= 0; distance--)
-                        {
-                            if (selected_radar.radarLockTrackCurve.Evaluate(distance) <= (RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
-                            {
-                                text_locktrack = $"Lock/Track: tracked at {distance} km and closer";
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        text_locktrack = "Lock/Track: This radar does not have locking/tracking capabilities.";
-                    }
-
-                    if (selected_radar.getRWRType(selected_radar.rwrThreatType) == "SONAR")
-                        text_sonar = "SONAR - will only be able to detect/track splashed or submerged vessels!";
-                }
-            }
-            previous_index = selected_index;
-
-            GUI.DragWindow();
-            BDGUIUtils.RepositionWindow(ref windowRect);
-        }
-
-        void WindowRcsLegacy(int windowID)
-        {
-            if (GUI.Button(new Rect(windowRect.width - 18, 2, 16, 16), "X"))
-            {
-                HideToolbarGUI();
-            }
-
-            GUI.Label(new Rect(10, 40, 200, 20), "Frontal", BDArmorySetup.BDGuiSkin.box);
-            GUI.Label(new Rect(220, 40, 200, 20), "Lateral", BDArmorySetup.BDGuiSkin.box);
-            GUI.Label(new Rect(430, 40, 200, 20), "Ventral", BDArmorySetup.BDGuiSkin.box);
-
-            if (takeSnapshot)
-                takeRadarSnapshot();
-
-            // for each view draw the rendering with the higher cross section (normal or 45°):
-            if (RadarUtils.rcsFrontal > RadarUtils.rcsFrontal45)
-                GUI.DrawTexture(new Rect(10, 70, 200, 200), RadarUtils.GetTextureFrontal, ScaleMode.StretchToFill);
-            else
-                GUI.DrawTexture(new Rect(10, 70, 200, 200), RadarUtils.GetTextureFrontal45, ScaleMode.StretchToFill);
-
-            if (RadarUtils.rcsLateral > RadarUtils.rcsLateral45)
-                GUI.DrawTexture(new Rect(220, 70, 200, 200), RadarUtils.GetTextureLateral, ScaleMode.StretchToFill);
-            else
-                GUI.DrawTexture(new Rect(220, 70, 200, 200), RadarUtils.GetTextureLateral45, ScaleMode.StretchToFill);
-
-            if (RadarUtils.rcsVentral > RadarUtils.rcsVentral45)
-                GUI.DrawTexture(new Rect(430, 70, 200, 200), RadarUtils.GetTextureVentral, ScaleMode.StretchToFill);
-            else
-                GUI.DrawTexture(new Rect(430, 70, 200, 200), RadarUtils.GetTextureVentral45, ScaleMode.StretchToFill);
-
-            GUI.Label(new Rect(10, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsFrontal, RadarUtils.rcsFrontal45)) + " m^2", BDArmorySetup.BDGuiSkin.label);
-            GUI.Label(new Rect(220, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsLateral, RadarUtils.rcsLateral45)) + " m^2", BDArmorySetup.BDGuiSkin.label);
-            GUI.Label(new Rect(430, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsVentral, RadarUtils.rcsVentral45)) + " m^2", BDArmorySetup.BDGuiSkin.label);
-
-            GUIStyle style = BDArmorySetup.BDGuiSkin.label;
-            style.fontStyle = FontStyle.Bold;
-            GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + string.Format("{0:0.00} m^2 (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
-            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
-
-            style.fontStyle = FontStyle.Normal;
-            GUI.Label(new Rect(10, 380, 600, 20), "** (Range evaluation not accounting for ECM/countermeasures)", style);
-            GUI.Label(new Rect(10, 410, 600, 20), text_detection, style);
-            GUI.Label(new Rect(10, 430, 600, 20), text_locktrack, style);
-            GUI.Label(new Rect(10, 450, 600, 20), text_sonar, style);
-
-            bool bNewValue = GUI.Toggle(new Rect(490, 348, 150, 20), bLandedSplashed, "Splashed/Landed", BDArmorySetup.BDGuiSkin.toggle);
-
-            if (radars == null)
-            {
-                FillRadarList();
-                GUIStyle listStyle = new GUIStyle(BDArmorySetup.BDGuiSkin.button);
-                listStyle.fixedHeight = 18; //make list contents slightly smaller
-                radarBox = new BDGUIComboBox(new Rect(10, 350, 600, 20), new Rect(10, 350, 250, 20), radarBoxText, radarsGUI, 124, listStyle);
+                radarBox = new BDGUIComboBox(new Rect(10, 370, 600, 20), new Rect(10, 370, 250, 20), radarBoxText, radarsGUI, 124, listStyle);
             }
 
             int selected_index = radarBox.Show();

@@ -19,8 +19,11 @@ namespace BDArmory.Targeting
 
         public float radarBaseSignature = -1;
         public FloatCurve radarBaseSignatureCurve = null;
+        public bool hasSignatureCurve = false;
         public bool radarBaseSignatureNeedsUpdate = true;
+        public bool radarBaseSignatureCompetitionUpdate = true;
         public float radarModifiedSignature;
+        public float radarModifiedSignatureFactor;
         public float radarLockbreakFactor;
         public float radarJammingDistance;
         public bool alreadyScheduledRCSUpdate = false;
