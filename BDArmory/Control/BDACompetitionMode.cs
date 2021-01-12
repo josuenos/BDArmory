@@ -729,7 +729,7 @@ namespace BDArmory.Control
                 if (chute != null && chute.deploymentState != ModuleParachute.deploymentStates.DEPLOYED && !chutesToDeploy.Contains(chute))
                 {
                     chutesToDeploy.Add(chute);
-                    StartCoroutine(DelayedChuteDeployment(chute));
+                    StartCoroutine(DelayedChuteDeployment(chute, kerbalEVA));
                 }
                 return;
             }
@@ -762,10 +762,10 @@ namespace BDArmory.Control
             }
         }
 
-        IEnumerator DelayedChuteDeployment(ModuleEvaChute chute, float delay = 1f)
+        IEnumerator DelayedChuteDeployment(ModuleEvaChute chute, KerbalEVA kerbal, float delay = 1f)
         {
             yield return new WaitForSeconds(delay);
-            if (chute != null)
+            if (chute != null && kerbal != null && !kerbal.IsSeated()) // Check that the kerbal hasn't regained their seat.
             {
                 Debug.Log("[BDACompetitionMode]: Found a falling kerbal, deploying halo parachute.");
                 chutesToDeploy.Remove(chute);

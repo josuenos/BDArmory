@@ -384,7 +384,7 @@ namespace BDArmory.Targeting
 
         public float TargetPriMass(MissileFire mf, MissileFire myMf) // Relative mass compared to our own mass
         {
-            if (mf == null && myMf == null) return 0;
+            if (mf == null || myMf == null) return 0;
             if (mf.vessel != null)
             {
                 float targetMass = mf.vessel.GetTotalMass();
