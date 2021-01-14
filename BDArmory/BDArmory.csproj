@@ -133,6 +133,7 @@
     <Compile Include="Guidances\BallisticGuidance.cs" />
     <Compile Include="Guidances\IGuidance.cs" />
     <Compile Include="Misc\BDTeam.cs" />
+    <Compile Include="Modules\BDExtendingRail.cs" />
     <Compile Include="UI\BDStagingAreaGauge.cs" />
     <Compile Include="UI\BDAEditorCategory.cs" />
     <Compile Include="UI\BDTeamSelector.cs" />
@@ -325,6 +326,7 @@
     <None Include="Distribution\GameData\BDArmory\Parts\ABL\sounds\charge.ogg" />
     <None Include="Distribution\GameData\BDArmory\Parts\ABL\sounds\laser.ogg" />
     <None Include="Distribution\GameData\BDArmory\Parts\adjustableRail\adjustableRail.cfg" />
+    <None Include="Distribution\GameData\BDArmory\Parts\adjustableRail\extendableRail.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\adjustableRail\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\AGM86-17\AGM86-17.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\AGM86-17\AGM86-17.mu" />
