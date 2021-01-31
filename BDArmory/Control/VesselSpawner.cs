@@ -255,7 +255,7 @@ namespace BDArmory.Control
             if (spawnConfig.killEverythingFirst)
             {
                 // Kill all vessels (including debris).
-                var vesselsToKill = FlightGlobals.Vessels.Where(v => v.vesselType != VesselType.SpaceObject).ToList();
+                var vesselsToKill = FlightGlobals.Vessels.ToList();
                 foreach (var vessel in vesselsToKill)
                     RemoveVessel(vessel);
             }
@@ -500,7 +500,7 @@ namespace BDArmory.Control
             yield return new WaitForFixedUpdate();
             // Revert the camera and focus on one as it lowers to the terrain.
             RevertSpawnLocationCamera(true);
-            if (FlightGlobals.ActiveVessel == null || FlightGlobals.ActiveVessel.state == Vessel.State.DEAD)
+            if ((FlightGlobals.ActiveVessel == null || FlightGlobals.ActiveVessel.state == Vessel.State.DEAD) && spawnedVessels.Count > 0)
             {
                 LoadedVesselSwitcher.Instance.ForceSwitchVessel(spawnedVessels.First().Value.Item1); // Update the camera.
                 FlightCamera.fetch.SetDistance(50);
@@ -824,7 +824,7 @@ namespace BDArmory.Control
             if (spawnConfig.killEverythingFirst)
             {
                 // Kill all vessels (including debris).
-                var vesselsToKill = FlightGlobals.Vessels.Where(v => v.vesselType != VesselType.SpaceObject).ToList();
+                var vesselsToKill = FlightGlobals.Vessels.ToList();
                 foreach (var vessel in vesselsToKill)
                     RemoveVessel(vessel);
             }
@@ -1407,15 +1407,34 @@ namespace BDArmory.Control
         }
         private IEnumerator RemoveVesselCoroutine(Vessel vessel)
         {
-            vessel.Die(); // Kill the vessel
-            yield return new WaitForFixedUpdate();
-            if (vessel != null)
+            if (vessel == null)
             {
-                var partsToKill = vessel.parts.ToList(); // If it left any parts, kill them. (This occurs when the currently focussed vessel gets killed.)
-                foreach (var part in partsToKill)
-                    part.Die();
+                --removeVesselsPending;
+                yield break;
             }
-            yield return new WaitForFixedUpdate();
+            if (vessel != FlightGlobals.ActiveVessel && vessel.vesselType != VesselType.SpaceObject)
+            {
+                Debug.Log("DEBUG Recovering " + vessel.vesselName);
+                ShipConstruction.RecoverVesselFromFlight(vessel.protoVessel, HighLogic.CurrentGame.flightState, true);
+            }
+            else
+            {
+                Debug.Log("DEBUG Killing " + vessel.vesselName);
+                if (vessel.vesselType == VesselType.SpaceObject)
+                {
+                    var cometVessel = vessel.FindVesselModuleImplementing<CometVessel>();
+                    if (cometVessel) { Destroy(cometVessel); }
+                }
+                vessel.Die(); // Kill the vessel
+                yield return new WaitForFixedUpdate();
+                if (vessel != null)
+                {
+                    var partsToKill = vessel.parts.ToList(); // If it left any parts, kill them. (This occurs when the currently focussed vessel gets killed.)
+                    foreach (var part in partsToKill)
+                        part.Die();
+                }
+                yield return new WaitForFixedUpdate();
+            }
             --removeVesselsPending;
         }
 

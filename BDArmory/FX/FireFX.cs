@@ -66,7 +66,7 @@ namespace BDArmory.FX
         }
         void Update()
         {
-            if (!gameObject.activeInHierarchy || !HighLogic.LoadedSceneIsFlight)
+            if (!gameObject.activeInHierarchy || !HighLogic.LoadedSceneIsFlight || BDArmorySetup.GameIsPaused)
             {
                 return;
             }
@@ -153,7 +153,7 @@ namespace BDArmory.FX
             {
                 gameObject.SetActive(false);
             }
-            if (BDArmorySettings.BD_FIRE_DOT)
+            if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_FIRE_DOT)
             {
                 parentPart.AddDamage(BDArmorySettings.BD_FIRE_DAMAGE * TimeWarp.deltaTime);
                 ////////////////////////////////////////////////

@@ -202,7 +202,10 @@ namespace BDArmory.Modules
                 explDamage = Mathf.Clamp(explDamage, 0, 600);
                 hitPart.AddDamage(explDamage);
                 if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BD DEBUG]" + hitPart.name + "damaged for " + (hitPart.MaxDamage() * 0.9f));
-                Misc.BattleDamageHandler.CheckDamageFX(hitPart, 200, 3, true, SourceVessel, hit);
+                if (BDArmorySettings.BATTLEDAMAGE)
+                {
+                    Misc.BattleDamageHandler.CheckDamageFX(hitPart, 200, 3, true, SourceVessel, hit);
+                }
             }
             {
                 var aName = SourceVessel;
@@ -242,7 +245,7 @@ namespace BDArmory.Modules
         }
         void OnDestroy()
         {
-            if (BDArmorySettings.BD_AMMOBINS && BDArmorySettings.BD_VOLATILE_AMMO && HighLogic.LoadedSceneIsFlight && !VesselSpawner.Instance.vesselsSpawning)
+            if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_AMMOBINS && BDArmorySettings.BD_VOLATILE_AMMO && HighLogic.LoadedSceneIsFlight && !VesselSpawner.Instance.vesselsSpawning)
             {
                 DetonateIfPossible();
             }

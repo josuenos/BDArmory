@@ -545,7 +545,10 @@ namespace BDArmory.Bullets
             //{
             damage = hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
             //}
-            Misc.BattleDamageHandler.CheckDamageFX(hitPart, caliber, penetrationfactor, explosive, sourceVessel.GetName(), hit);
+            if (BDArmorySettings.BATTLEDAMAGE)
+            {
+                Misc.BattleDamageHandler.CheckDamageFX(hitPart, caliber, penetrationfactor, explosive, sourceVessel.GetName(), hit);
+            }
             // Debug.Log("DEBUG Ballistic damage to " + hitPart + ": " + damage + ", calibre: " + caliber + ", multiplier: " + multiplier + ", pen: " + penetrationfactor);
 
             // Update scoring structures

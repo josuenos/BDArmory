@@ -329,7 +329,7 @@ namespace BDArmory.FX
 
         public static void AttachLeak(RaycastHit hit, Part hitPart, float caliber, bool explosive, string sourcevessel)
         {
-            if (BDArmorySettings.BD_TANKS)
+            if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_TANKS)
             {
                 if (leakFXPool == null)
                     leakFXPool = FuelLeakFX.CreateLeakFXPool("BDArmory/FX/FuelLeakFX/model");
@@ -391,7 +391,7 @@ namespace BDArmory.FX
         }
         public static void AttachFire(RaycastHit hit, Part hitPart, float caliber, string sourcevessel, float burntime = -1)
         {
-            if (BDArmorySettings.BD_FIRES_ENABLED)
+            if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_FIRES_ENABLED)
             {
                 if (FireFXPool == null)
                     FireFXPool = FireFX.CreateFireFXPool("BDArmory/FX/FireFX/model");
