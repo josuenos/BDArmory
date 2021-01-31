@@ -1,4 +1,6 @@
-﻿using BDArmory.Core.Extension;
+﻿using System;
+using BDArmory.Core.Extension;
+using BDArmory.Core.Utils;
 using UnityEngine;
 
 namespace BDArmory.Core.Module
@@ -60,8 +62,32 @@ namespace BDArmory.Core.Module
                 {
                     _updateHitpoints = true;
                 }
-                else
-                    enabled = false;
+                else // Loading of the part from a craft in flight mode
+                {
+                    if (BDArmorySettings.RESET_HP && part.vessel != null) // Reset Max HP
+                    {
+                        var maxHPString = ConfigNodeUtils.FindPartModuleConfigNodeValue(part.partInfo.partConfig, "HitpointTracker", "maxHitPoints");
+                        if (!string.IsNullOrEmpty(maxHPString)) // Use the default value from the MM patch.
+                        {
+                            try
+                            {
+                                maxHitPoints = float.Parse(maxHPString);
+                                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitPointTracker]: setting maxHitPoints of " + part + " on " + part.vessel.vesselName + " to " + maxHitPoints);
+                                _updateHitpoints = true;
+                            }
+                            catch (Exception e)
+                            {
+                                Debug.LogError("[HitPointTracker]: Failed to parse maxHitPoints configNode: " + e.Message);
+                            }
+                        }
+                        else // Use the stock default value.
+                            maxHitPoints = 0f;
+                    }
+                    else // Don't.
+                    {
+                        enabled = false;
+                    }
+                }
             }
         }
 

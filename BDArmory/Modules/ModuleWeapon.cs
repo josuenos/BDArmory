@@ -1506,7 +1506,7 @@ UI_FloatRange(minValue = 0f, maxValue = 6, stepIncrement = 0.05f, scene = UI_Sce
                 chargeAmount = requestResourceAmount * TimeWarp.fixedDeltaTime;
             }
             float timeGap = (60 / roundsPerMinute) * TimeWarp.CurrentRate;
-            beamDuration = 0.1f * TimeWarp.CurrentRate;
+            beamDuration = timeGap*0.8f;
             if ((!pulseLaser || ((Time.time - timeFired > timeGap) && pulseLaser))
                 && !pointingAtSelf && !Misc.Misc.CheckMouseIsOnGui() && WMgrAuthorized() && !isOverheated) // && !isReloading)
             {
@@ -1601,7 +1601,7 @@ UI_FloatRange(minValue = 0f, maxValue = 6, stepIncrement = 0.05f, scene = UI_Sce
                 Vector3 targetDirectionLR = tf.forward;
                 if (pulseLaser)
                 {
-                    rayDirection = VectorUtils.GaussianDirectionDeviation(tf.forward, maxDeviation / 4);
+                    rayDirection = VectorUtils.GaussianDirectionDeviation(tf.forward, maxDeviation / 2);
                     targetDirectionLR = rayDirection.normalized;
                 }
                 else if ((((visualTargetVessel != null && visualTargetVessel.loaded) || slaved) && (turret && (turret.yawRange > 0 && turret.maxPitch > 0))) // causes laser to snap to target CoM if close enough. changed to only apply to turrets
@@ -2513,7 +2513,10 @@ UI_FloatRange(minValue = 0f, maxValue = 6, stepIncrement = 0.05f, scene = UI_Sce
                                         KerbalEVA eva = hit.collider.gameObject.GetComponentUpwards<KerbalEVA>();
                                         var part = eva ? eva.part : hit.collider.gameObject.GetComponentInParent<Part>();
                                         if (part)
+                                        {
                                             hitVessel = part.vessel;
+                                            Debug.Log("DEBUG hitVessel: " + hitVessel);
+                                        }
                                     }
                                 }
                                 catch (NullReferenceException e)
@@ -2662,6 +2665,7 @@ UI_FloatRange(minValue = 0f, maxValue = 6, stepIncrement = 0.05f, scene = UI_Sce
             Aim();
             CheckWeaponSafety();
             CheckAIAutofire();
+            // Debug.Log("DEBUG visualTargetVessel: " + visualTargetVessel + ", finalFire: " + finalFire + ", pointingAtSelf: " + pointingAtSelf + ", targetDistance: " + targetDistance);
 
             if (finalFire)
             {
@@ -3364,7 +3368,7 @@ UI_FloatRange(minValue = 0f, maxValue = 6, stepIncrement = 0.05f, scene = UI_Sce
                             continue;
                         }
                         output.AppendLine($"Rocket type: {ammoList[i]}");
-                        output.AppendLine($"Rocket mass: {Math.Round(rinfo.rocketMass, 2)} kg");
+                        output.AppendLine($"Rocket mass: {Math.Round(rinfo.rocketMass*1000, 2)} kg");
                         //output.AppendLine($"Thrust: {thrust}kn"); mass and thrust don't really tell us the important bit, so lets replace that with accel
                         output.AppendLine($"Acceleration: {rinfo.thrust / rinfo.rocketMass}m/s2");
                         if (rinfo.explosive)

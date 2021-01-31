@@ -32,7 +32,6 @@ namespace BDArmory.Core
                 if (part != null)
                 {
                     part.explode();
-                    // part.Die(); // DEBUG check whether part.explode() actually removes the part.
                 }
             } while (ExplodingPartsQueue.Count > 0);
         }

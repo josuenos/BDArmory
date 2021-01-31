@@ -537,14 +537,15 @@ namespace BDArmory.Bullets
 
             // Apply damage
             float damage;
-            if (explosive)
-            {
-                damage = hitPart.AddBallisticDamage(bulletMass - tntMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
-            }
-            else
-            {
-                damage = hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
-            }
+            //if (explosive)
+            //{
+            //    damage = hitPart.AddBallisticDamage(bulletMass - tntMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity, hit, sourceVessel.GetName());
+            //} //why? The mass of HE filler isn't going to have disapeared before the bullet hits something, and if it has, it means there isn't a bullet left to hit things
+            //else
+            //{
+            damage = hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
+            //}
+            Misc.BattleDamageHandler.CheckDamageFX(hitPart, caliber, penetrationfactor, explosive, sourceVessel.GetName(), hit);
             // Debug.Log("DEBUG Ballistic damage to " + hitPart + ": " + damage + ", calibre: " + caliber + ", multiplier: " + multiplier + ", pen: " + penetrationfactor);
 
             // Update scoring structures

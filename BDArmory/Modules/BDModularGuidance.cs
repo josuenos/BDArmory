@@ -396,6 +396,35 @@ namespace BDArmory.Modules
             lockedSensorFOV = 5;
             radarLOAL = true;
 
+            // fill lockedSensorFOVBias with default values if not set by part config:
+            if ((TargetingMode == TargetingModes.Heat || TargetingModeTerminal == TargetingModes.Heat) && heatThreshold > 0 && lockedSensorFOVBias.minTime == float.MaxValue)
+            {
+                float a = lockedSensorFOV / 2f;
+                float b = -1f * ((1f - 1f / 1.2f));
+                float[] x = new float[6] { 0f * a, 0.2f * a, 0.4f * a, 0.6f * a, 0.8f * a, 1f * a };
+                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                    Debug.Log("[BDArmory]: OnStart missile " + shortName + ": setting default lockedSensorFOVBias curve to:");
+                for (int i = 0; i < 6; i++)
+                {
+                    lockedSensorFOVBias.Add(x[i], b / (a * a) * x[i] * x[i] + 1f, -1f / 3f * x[i] / (a * a), -1f / 3f * x[i] / (a * a));
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                        Debug.Log("key = " + x[i] + " " + (b / (a * a) * x[i] * x[i] + 1f) + " " + (-1f / 3f * x[i] / (a * a)) + " " + (-1f / 3f * x[i] / (a * a)));
+                }
+            }
+
+            // fill lockedSensorVelocityBias with default values if not set by part config:
+            if ((TargetingMode == TargetingModes.Heat || TargetingModeTerminal == TargetingModes.Heat) && heatThreshold > 0 && lockedSensorVelocityBias.minTime == float.MaxValue)
+            {
+                lockedSensorVelocityBias.Add(0f, 1f);
+                lockedSensorVelocityBias.Add(180f, 1f);
+                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                {
+                    Debug.Log("[BDArmory]: OnStart missile " + shortName + ": setting default lockedSensorVelocityBias curve to:");
+                    Debug.Log("key = 0 1");
+                    Debug.Log("key = 180 1");
+                }
+            }
+
             // fill activeRadarLockTrackCurve with default values if not set by part config:
             if ((TargetingMode == TargetingModes.Radar || TargetingModeTerminal == TargetingModes.Radar) && activeRadarRange > 0 && activeRadarLockTrackCurve.minTime == float.MaxValue)
             {

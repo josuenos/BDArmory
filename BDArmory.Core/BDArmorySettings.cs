@@ -45,6 +45,7 @@ namespace BDArmory.Core
         [BDAPersistantSettingsField] public static bool AUTO_ENABLE_VESSEL_SWITCHING = false;     // Automatically enables vessel switching on competition start.
         [BDAPersistantSettingsField] public static bool AUTONOMOUS_COMBAT_SEATS = false;          // Enable/disable seats without kerbals.
         [BDAPersistantSettingsField] public static bool DESTROY_UNCONTROLLED_WMS = false;         // Automatically destroy the WM if there's no kerbal or drone core controlling it.
+        [BDAPersistantSettingsField] public static bool RESET_HP = false;                         // Automatically reset HP of parts of vessels when they're spawned in flight mode.
         [BDAPersistantSettingsField] public static bool DUMB_IR_SEEKERS = false;                  // IR missiles will go after hottest thing they can see
         [BDAPersistantSettingsField] public static bool AUTOCATEGORIZE_PARTS = true;
         [BDAPersistantSettingsField] public static bool SHOW_CATEGORIES = true;
@@ -113,6 +114,35 @@ namespace BDArmory.Core
         [BDAPersistantSettingsField] public static bool GRAVITY_HACKS = false;
         [BDAPersistantSettingsField] public static bool BATTLEDAMAGE = false;
 
+        //Battle Damage settings
+        [BDAPersistantSettingsField] public static bool BATTLEDAMAGE_TOGGLE = false;
+        [BDAPersistantSettingsField] public static float BD_DAMAGE_CHANCE = 10; //base chance per-hit to proc damage
+        [BDAPersistantSettingsField] public static bool BD_SUBSYSTEMS = false; //non-critical module damage?
+
+        [BDAPersistantSettingsField] public static bool BD_TANKS = false;      //Fuel tanks, batteries can leak/burn
+        [BDAPersistantSettingsField] public static float BD_TANK_LEAK_TIME = 20; //Leak duration
+        [BDAPersistantSettingsField] public static float BD_TANK_LEAK_RATE = 1; //leak rate modifier
+
+        [BDAPersistantSettingsField] public static bool BD_AMMOBINS = false;   //can ammo bins explode?
+        [BDAPersistantSettingsField] public static bool BD_VOLATILE_AMMO = false; // Ammo bins guaranteed to explode when destroyed
+
+		[BDAPersistantSettingsField] public static bool BD_PROPULSION = false; //engine thrust reduction, fires
+        [BDAPersistantSettingsField] public static float BD_PROP_DAM_RATE = 1; //rate multiplier, 0.1-2
+        [BDAPersistantSettingsField] public static bool BD_INTAKES = false; //Can intakes be damaged?
+        [BDAPersistantSettingsField] public static bool BD_GIMBALS = false; //can gimbals be disabled?
+
+        [BDAPersistantSettingsField] public static bool BD_AEROPARTS = false; //lift loss & added drag
+        [BDAPersistantSettingsField] public static float BD_LIFT_LOSS_RATE = 1; //rate multiplier
+        [BDAPersistantSettingsField] public static bool BD_CTRL_SRF = false; //disable ctrl srf actuatiors?
+
+        [BDAPersistantSettingsField] public static bool BD_COCKPITS = false;  //control degredation
+        [BDAPersistantSettingsField] public static bool BD_PILOT_KILLS = false; //cockpit damage can kill pilots?
+
+        [BDAPersistantSettingsField] public static bool BD_FIRES_ENABLED = false;  //can fires occur
+        [BDAPersistantSettingsField] public static bool BD_FIRE_DOT = false; //do fires do DoT
+        [BDAPersistantSettingsField] public static float BD_FIRE_DAMAGE = 5; //do fires do DoT
+
+
         // Remote logging
         [BDAPersistantSettingsField] public static bool REMOTE_LOGGING_VISIBLE = false;            // Show/hide the remote orchestration toggle
         [BDAPersistantSettingsField] public static bool REMOTE_LOGGING_ENABLED = false;            // Enable/disable remote orchestration
@@ -130,16 +160,20 @@ namespace BDArmory.Core
         [BDAPersistantSettingsField] public static int VESSEL_SPAWN_CONCURRENT_VESSELS = 0;        // Maximum number of vessels to spawn in concurrently (continuous spawning mode).
         [BDAPersistantSettingsField] public static int VESSEL_SPAWN_LIVES_PER_VESSEL = 0;          // Maximum number of times to spawn a vessel (continuous spawning mode).
         [BDAPersistantSettingsField] public static float OUT_OF_AMMO_KILL_TIME = -1f;              // Out of ammo kill timer for continuous spawn mode.
-        [BDAPersistantSettingsField] public static int VESSEL_SPAWN_FILL_SEATS = 1;                // Fill seats: 0 - minimal, 1 - all ModuleCommand and KerbalSeat parts, 2 - also cabins.
+		[BDAPersistantSettingsField] public static int VESSEL_SPAWN_FILL_SEATS = 1;                // Fill seats: 0 - minimal, 1 - all ModuleCommand and KerbalSeat parts, 2 - also cabins.
         [BDAPersistantSettingsField] public static bool VESSEL_SPAWN_CONTINUE_SINGLE_SPAWNING = false; // Spawn craft again after single spawn competition finishes.
         [BDAPersistantSettingsField] public static bool VESSEL_SPAWN_DUMP_LOG_EVERY_SPAWN = false; // Dump competition scores every time a vessel spawns.
         [BDAPersistantSettingsField] public static bool SHOW_SPAWN_LOCATIONS = false;              // Show the interesting spawn locations.
+        [BDAPersistantSettingsField] public static int VESSEL_SPAWN_NUMBER_OF_TEAMS = 0;           // Number of Teams: 0 - FFA, 1 - Folders, 2-10 specified directly
+        [BDAPersistantSettingsField] public static string VESSEL_SPAWN_FILES_LOCATION = "";        // Spawn files location (under AutoSpawn).
 
         // Tournament settings
         [BDAPersistantSettingsField] public static bool SHOW_TOURNAMENT_OPTIONS = false;           // Show tournament options.
-        [BDAPersistantSettingsField] public static string TOURNAMENT_FILES_LOCATION = "";          // Tournament files location (under AutoSpawn).
         [BDAPersistantSettingsField] public static float TOURNAMENT_DELAY_BETWEEN_HEATS = 10;      // Delay between heats
         [BDAPersistantSettingsField] public static int TOURNAMENT_ROUNDS = 1;                      // Rounds
         [BDAPersistantSettingsField] public static int TOURNAMENT_VESSELS_PER_HEAT = 8;            // Vessels Per Heat
+        [BDAPersistantSettingsField] public static int TOURNAMENT_TEAMS_PER_HEAT = 2;              // Teams Per Heat
+        [BDAPersistantSettingsField] public static int TOURNAMENT_VESSELS_PER_TEAM = 2;            // Vessels Per Team
+        [BDAPersistantSettingsField] public static bool TOURNAMENT_FULL_TEAMS = true;              // Full Teams
     }
 }

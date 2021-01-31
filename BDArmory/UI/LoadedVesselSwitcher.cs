@@ -734,21 +734,32 @@ namespace BDArmory.UI
 
         /* If groups or specific are specified, then they take preference.
          * groups is a list of ints of the number of vessels to assign to each team.
-         * specific is a dictionary of craft names and teams.
+         * specific is a list of lists of craft names.
          * If the sum of groups is less than the number of vessels, then the extras get assigned to their own team.
          * If specific does not contain all the vessel names, then the unmentioned vessels get assigned to team 'A'.
          */
-        public void MassTeamSwitch(bool separateTeams = false, List<int> groups = null, Dictionary<string, char> specific = null)
+        public void MassTeamSwitch(bool separateTeams = false, List<int> groups = null, List<List<string>> specific = null)
         {
             char T = 'A';
             if (specific != null)
             {
-                foreach (var weaponManager in weaponManagers.SelectMany(tm => tm.Value).Where(wm => wm != null).ToList())
+                var weaponManagersByName = weaponManagers.SelectMany(tm => tm.Value).Where(wm => wm != null).ToDictionary(wm => wm.vessel.vesselName);
+                foreach (var craftList in specific)
                 {
-                    if (specific.ContainsKey(weaponManager.vessel.vesselName))
-                        weaponManager.SetTeam(BDTeam.Get(specific[weaponManager.vessel.vesselName].ToString())); // Assign the vessel to the specfied team.
-                    else
-                        weaponManager.SetTeam(BDTeam.Get('A'.ToString())); // Otherwise, assign them to team 'A'.
+                    foreach (var craftName in craftList)
+                    {
+                        if (weaponManagersByName.ContainsKey(craftName))
+                            weaponManagersByName[craftName].SetTeam(BDTeam.Get(T.ToString()));
+                        else
+                            Debug.Log("[LoadedVesselSwitcher]: Specified vessel (" + craftName + ") not found amongst active vessels.");
+                        weaponManagersByName.Remove(craftName); // Remove the vessel from our dictionary once it's assigned.
+                    }
+                    ++T;
+                }
+                foreach (var craftName in weaponManagersByName.Keys)
+                {
+                    Debug.Log("[LoadedVesselSwitcher]: Vessel " + craftName + " was not specified to be part of a team, but is active. Assigning to team " + T.ToString() + ".");
+                    weaponManagersByName[craftName].SetTeam(BDTeam.Get(T.ToString())); // Assign anyone who wasn't specified to a separate team.
                 }
                 return;
             }

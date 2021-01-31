@@ -580,6 +580,35 @@ namespace BDArmory.Modules
 
             SetInitialDetonationDistance();
 
+            // fill lockedSensorFOVBias with default values if not set by part config:
+            if ((TargetingMode == TargetingModes.Heat || TargetingModeTerminal == TargetingModes.Heat) && heatThreshold > 0 && lockedSensorFOVBias.minTime == float.MaxValue)
+            {
+                float a = lockedSensorFOV / 2f;
+                float b = -1f * ((1f - 1f / 1.2f));
+                float[] x = new float[6] { 0f * a, 0.2f * a, 0.4f * a, 0.6f * a, 0.8f * a, 1f * a };
+                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                    Debug.Log("[BDArmory]: OnStart missile " + shortName + ": setting default lockedSensorFOVBias curve to:");
+                for (int i = 0; i < 6; i++)
+                {
+                    lockedSensorFOVBias.Add(x[i], b / (a * a) * x[i] * x[i] + 1f, -1f / 3f *x[i] / (a*a), -1f / 3f * x[i] / (a * a));
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                        Debug.Log("key = " + x[i] + " " + (b / (a * a) * x[i] * x[i] + 1f) + " " + (-1f / 3f * x[i] / (a * a)) + " " + (-1f / 3f * x[i] / (a * a)));
+                }
+            }
+
+            // fill lockedSensorVelocityBias with default values if not set by part config:
+            if ((TargetingMode == TargetingModes.Heat || TargetingModeTerminal == TargetingModes.Heat) && heatThreshold > 0 && lockedSensorVelocityBias.minTime == float.MaxValue)
+            {
+                lockedSensorVelocityBias.Add(0f, 1f);
+                lockedSensorVelocityBias.Add(180f, 1f);
+                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                {
+                    Debug.Log("[BDArmory]: OnStart missile " + shortName + ": setting default lockedSensorVelocityBias curve to:");
+                    Debug.Log("key = 0 1");
+                    Debug.Log("key = 180 1");
+                }
+            }
+
             // fill activeRadarLockTrackCurve with default values if not set by part config:
             if ((TargetingMode == TargetingModes.Radar || TargetingModeTerminal == TargetingModes.Radar) && activeRadarRange > 0 && activeRadarLockTrackCurve.minTime == float.MaxValue)
             {
@@ -890,7 +919,9 @@ namespace BDArmory.Modules
             if (!HasMissed && checkMiss)
             {
                 bool noProgress = MissileState == MissileStates.PostThrust && (Vector3.Dot(vessel.Velocity() - TargetVelocity, TargetPosition - vessel.transform.position) < 0);
-                if (Vector3.Dot(TargetPosition - transform.position, transform.forward) < 0 || noProgress)
+                bool pastGracePeriod = TimeIndex > ((vessel.LandedOrSplashed ? 0f : dropTime) + 180f / maxTurnRateDPS);
+                bool targetBehindMissile = Vector3.Dot(TargetPosition - transform.position, transform.forward) < 0f;
+                if ((pastGracePeriod && targetBehindMissile) || noProgress) // Check that we're not moving away from the target after a grace period
                 {
                     Debug.Log("[BDArmory]: Missile has missed!");
 
@@ -916,7 +947,6 @@ namespace BDArmory.Modules
                 }
             }
         }
-
 
         void UpdateGuidance()
         {
@@ -1105,7 +1135,7 @@ namespace BDArmory.Modules
                 {
                     case TargetingModes.Heat:
                         // gets ground heat targets and after locking one, disallows the lock to break to another target
-                        heatTarget = BDATargetManager.GetHeatTarget(SourceVessel, vessel, new Ray(transform.position + (50 * GetForwardTransform()), GetForwardTransform()), heatTarget.signalStrength, terminalGuidanceDistance, heatThreshold, true, SourceVessel ? SourceVessel.FindPartModuleImplementing<MissileFire>() : null, true);
+                        heatTarget = BDATargetManager.GetHeatTarget(SourceVessel, vessel, new Ray(transform.position + (50 * GetForwardTransform()), GetForwardTransform()), heatTarget, terminalGuidanceDistance, heatThreshold, true, lockedSensorFOVBias, lockedSensorVelocityBias, SourceVessel ? SourceVessel.FindPartModuleImplementing<MissileFire>() : null, true);
                         if (heatTarget.exists)
                         {
                             if (BDArmorySettings.DRAW_DEBUG_LABELS)

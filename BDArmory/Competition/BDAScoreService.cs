@@ -304,12 +304,12 @@ namespace BDArmory.Competition
             rammedPartsOut.Clear();
 
             status = StatusType.SpawningVessels;
-            spawner.SpawnAllVesselsOnce(BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.x, BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.y, BDArmorySettings.VESSEL_SPAWN_ALTITUDE, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE, BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED, true, true, hash);
+            spawner.SpawnAllVesselsOnce(BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.x, BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.y, BDArmorySettings.VESSEL_SPAWN_ALTITUDE, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE, BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED, true, true, 0, null, null, hash);
             while (spawner.vesselsSpawning)
                 yield return new WaitForFixedUpdate();
             if (!spawner.vesselSpawnSuccess)
             {
-                Debug.Log("[BDAScoreService] Vessel spawning failed."); // FIXME Now what?
+                Debug.Log("[BDAScoreService] Vessel spawning failed.");
                 yield break;
             }
             yield return new WaitForFixedUpdate();
@@ -352,7 +352,7 @@ namespace BDArmory.Competition
             foreach (string playerName in playerNames)
             {
                 var separatorIndex = playerName.IndexOf('_');
-                if (separatorIndex<0)
+                if (separatorIndex < 0)
                 {
                     Debug.Log(string.Format("[BDAScoreService] Unmatched player {0}", playerName));
                     Debug.Log("DEBUG players were " + string.Join(", ", client.players.Values));
@@ -551,7 +551,7 @@ namespace BDArmory.Competition
             }
             else
             {
-                return BDArmorySettings.COMPETITION_DURATION*60.0f;
+                return BDArmorySettings.COMPETITION_DURATION * 60.0f;
             }
         }
 
