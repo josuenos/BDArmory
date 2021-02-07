@@ -54,7 +54,7 @@ namespace BDArmory.FX
         }
         void Update()
         {
-            if (!gameObject.activeInHierarchy || BDArmorySetup.GameIsPaused)
+            if (!gameObject.activeInHierarchy || !HighLogic.LoadedSceneIsFlight)
             {
                 return;
             }

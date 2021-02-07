@@ -2993,7 +2993,8 @@ namespace BDArmory.Modules
                 {
                     targetsTried.Add(potentialAirTarget);
                     SetTarget(potentialAirTarget);
-                    if (SmartPickWeapon_EngagementEnvelope(potentialAirTarget))
+                    // Pick target if we have a viable weapon or target priority/FFA targeting is in use
+                    if ((SmartPickWeapon_EngagementEnvelope(potentialAirTarget) || targetPriorityEnabled || BDArmorySettings.DEFAULT_FFA_TARGETING) && HasWeaponsAndAmmo())
                     {
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
                         {
@@ -3086,7 +3087,9 @@ namespace BDArmory.Modules
                         return;
                     }
                     */
-                    if (SmartPickWeapon_EngagementEnvelope(potentialTarget))
+
+                    // Pick target if we have a viable weapon or target priority/FFA targeting is in use
+                    if (SmartPickWeapon_EngagementEnvelope(potentialTarget) || this.targetPriorityEnabled || BDArmorySettings.DEFAULT_FFA_TARGETING)
                     {
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
                         {
@@ -3395,19 +3398,26 @@ namespace BDArmory.Modules
                             float candidateTraverse = ((ModuleWeapon)item.Current).yawRange;
                             bool electrolaser = ((ModuleWeapon)item.Current).electroLaser;
 
-                            if (electrolaser = true && target.isDebilitated) continue; // don't select EMP weapons if craft already disabld
+                            if (electrolaser = true && target.isDebilitated) continue; // don't select EMP weapons if craft already disabled
 
                             if ((targetWeapon != null) && (candidateGimbal = true && candidateTraverse > 0))
                             {
                                 candidatePower *= 1.5f; // weight selection towards turreted lasers
                             }
                             if ((targetWeapon != null) && (targetLaserDamage > candidatePower))
-                                continue; //dont replace better guns (but do replace missiles)
-
-                            targetWeapon = item.Current;
-                            targetLaserDamage = candidatePower;
-                            if (distance <= gunRange)
-                                break;
+                                continue; // Don't replace better lasers or replace with a weapon outside of its engage range
+                            else if ((targetWeapon == null) || (distance > ((EngageableWeapon)item.Current).engageRangeMin))
+                            {
+                                targetWeapon = item.Current;
+                                targetLaserDamage = candidatePower;
+                                if ((distance <= gunRange) && (distance > ((EngageableWeapon)item.Current).engageRangeMin))
+                                    break;  //If within engage range, use the laser
+                                else
+                                    continue; // If outside of engage range, keep looking for viable weapons,
+                            }
+                            else
+                                continue;
+                            
                         }
 
                         if (candidateClass == WeaponClasses.Gun)
@@ -3436,8 +3446,8 @@ namespace BDArmory.Modules
                             {
                                 candidateRPM *= .01f; //if within min range, massively negatively weight weapon - allows weapon to still be selected if all others lost/out of ammo
                             }
-                            if ((targetWeapon != null) && ((targetWeaponRPM > candidateRPM) || (targetWeapon.GetWeaponClass() == WeaponClasses.Missile)))
-                                continue; //dont replace better guns or missiles
+                            if ((targetWeapon != null) && ((targetWeaponRPM > candidateRPM) || ((targetWeapon.GetWeaponClass() == WeaponClasses.Missile) && (targetWeaponTDPS > 0))))
+                                continue; //dont replace better guns or missiles within their engage range
 
                             targetWeapon = item.Current;
                             targetWeaponRPM = candidateRPM;
@@ -3478,7 +3488,8 @@ namespace BDArmory.Modules
                             BDModularGuidance mm = item.Current as BDModularGuidance;
                             candidateTDPS = 5000;
                         }
-
+                        if (distance < ((EngageableWeapon)item.Current).engageRangeMin)
+                            candidateTDPS *= -1f; // if within min range, negatively weight weapon - allows weapon to still be selected if all others lost/out of ammo
                         if (targetWeapon == null)
                         {
                             targetWeapon = item.Current;
@@ -3487,7 +3498,7 @@ namespace BDArmory.Modules
                         else if ((!vessel.LandedOrSplashed) || ((distance > gunRange) && (vessel.LandedOrSplashed))) // If we're not airborne, we want to prioritize guns
                         {
                             if (targetWeaponTDPS > candidateTDPS)
-                                continue; //dont better missiles
+                                continue; //don't replace better missiles
 
                             targetWeapon = item.Current;
                             targetWeaponTDPS = candidateTDPS;
@@ -3851,18 +3862,23 @@ namespace BDArmory.Modules
 
         void SetTarget(TargetInfo target)
         {
-            if (target)
+            if (target) // We have a target
             {
                 if (currentTarget)
                 {
                     currentTarget.Disengage(this);
                 }
                 target.Engage(this);
-                if (currentTarget != target && pilotAI && pilotAI.IsExtending) pilotAI.StopExtending();
+                if (currentTarget && currentTarget.Vessel != target.Vessel)
+                    if (pilotAI && pilotAI.IsExtending)
+                    {
+                        pilotAI.StopExtending(); // Only stop extending if the target is different
+                    }
                 currentTarget = target;
                 guardTarget = target.Vessel;
+
             }
-            else
+            else // No target, disengage
             {
                 if (currentTarget)
                 {

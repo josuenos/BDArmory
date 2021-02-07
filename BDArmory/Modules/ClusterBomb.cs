@@ -129,6 +129,7 @@ namespace BDArmory.Modules
                     subScript.blastRadius = missileLauncher.GetBlastRadius();
                     subScript.subExplModelPath = subExplModelPath;
                     subScript.subExplSoundPath = subExplSoundPath;
+                    subScript.sourceVesselName = missileLauncher.SourceVessel.vesselName;
                     sub.Current.AddComponent<KSPForceApplier>();
                 }
 
@@ -169,6 +170,7 @@ namespace BDArmory.Modules
         public float blastHeat;
         public string subExplModelPath;
         public string subExplSoundPath;
+        public string sourceVesselName;
         Vector3 currPosition;
         Vector3 prevPosition;
 
@@ -188,7 +190,7 @@ namespace BDArmory.Modules
         {
             ContactPoint contact = col.contacts[0];
             Vector3 pos = contact.point;
-            ExplosionFx.CreateExplosion(pos, blastForce, subExplModelPath, subExplSoundPath, ExplosionSourceType.Missile);
+            ExplosionFx.CreateExplosion(pos, blastForce, subExplModelPath, subExplSoundPath, ExplosionSourceType.Missile, 0, null, sourceVesselName);
         }
 
         void FixedUpdate()
@@ -246,7 +248,7 @@ namespace BDArmory.Modules
 
         void Detonate(Vector3 pos)
         {
-            ExplosionFx.CreateExplosion(pos, blastForce, subExplModelPath, subExplSoundPath, ExplosionSourceType.Missile);
+            ExplosionFx.CreateExplosion(pos, blastForce, subExplModelPath, subExplSoundPath, ExplosionSourceType.Missile, 0, null, sourceVesselName);
             Destroy(gameObject);
         }
 

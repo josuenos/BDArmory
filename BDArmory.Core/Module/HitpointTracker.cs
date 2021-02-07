@@ -275,7 +275,7 @@ namespace BDArmory.Core.Module
         {
             if (part.name == "Weapon Manager" || part.name == "BDModulePilotAI") return;
 
-            partdamage = Mathf.Max(partdamage, 0.01f) * -1;
+            partdamage = Mathf.Max(partdamage, 0f) * -1;
             Hitpoints += partdamage;
 
             if (Hitpoints <= 0)
@@ -286,7 +286,7 @@ namespace BDArmory.Core.Module
 
         public void AddDamageToKerbal(KerbalEVA kerbal, float damage)
         {
-            damage = Mathf.Max(damage, 0.01f) * -1;
+            damage = Mathf.Max(damage, 0f) * -1;
             Hitpoints += damage;
 
             if (Hitpoints <= 0)

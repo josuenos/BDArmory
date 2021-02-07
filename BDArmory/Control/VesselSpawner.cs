@@ -43,10 +43,6 @@ namespace BDArmory.Control
             Destroy(spawnLocationCamera);
         }
 
-        private void OnGUI()
-        {
-        }
-
         #region Camera Adjustment
         GameObject spawnLocationCamera;
         Transform originalCameraParentTransform;
@@ -101,6 +97,18 @@ namespace BDArmory.Control
             if (FlightGlobals.ActiveVessel != null && FlightGlobals.ActiveVessel.state != Vessel.State.DEAD)
                 LoadedVesselSwitcher.Instance.ForceSwitchVessel(FlightGlobals.ActiveVessel); // Update the camera.
             spawnLocationCamera.SetActive(false);
+        }
+        #endregion
+
+        #region Utils
+        public Dictionary<string, string> originalTeams = new Dictionary<string, string>();
+        public void SaveTeams()
+        {
+            originalTeams.Clear();
+            foreach (var weaponManager in LoadedVesselSwitcher.Instance.weaponManagers.SelectMany(tm => tm.Value).ToList())
+            {
+                originalTeams[weaponManager.vessel.vesselName] = weaponManager.Team.Name;
+            }
         }
         #endregion
 
@@ -220,6 +228,7 @@ namespace BDArmory.Control
             else // Spawn the specific vessels.
             {
                 spawnConfig.craftFiles = spawnConfig.teamsSpecific.SelectMany(v => v.ToList()).ToList();
+                spawnConfig.numberOfTeams = 1;
             }
             if (spawnConfig.craftFiles.Count == 0)
             {
@@ -258,6 +267,8 @@ namespace BDArmory.Control
                 var vesselsToKill = FlightGlobals.Vessels.ToList();
                 foreach (var vessel in vesselsToKill)
                     RemoveVessel(vessel);
+
+                originalTeams.Clear();
             }
             while (removeVesselsPending > 0)
                 yield return new WaitForFixedUpdate();
@@ -344,6 +355,7 @@ namespace BDArmory.Control
             string failedVessels = "";
             var shipFacility = EditorFacility.None;
             List<List<string>> teamVesselNames = null;
+            bool useOriginalTeamNames = false;
             if (spawnConfig.teamsSpecific == null)
             {
                 foreach (var craftUrl in spawnConfig.craftFiles) // First spawn the vessels in the air.
@@ -368,7 +380,13 @@ namespace BDArmory.Control
                     vessel.Landed = false; // Tell KSP that it's not landed so KSP doesn't mess with its position.
                     vessel.ResumeStaging(); // Trigger staging to resume to get staging icons to work properly.
                     if (spawnedVessels.ContainsKey(vessel.GetName()))
-                        vessel.vesselName += "_" + spawnedVesselCount;
+                    {
+                        var count = 1;
+                        var potentialName = vessel.vesselName + "_" + count;
+                        while (spawnedVessels.ContainsKey(potentialName))
+                            potentialName = vessel.vesselName + "_" + (++count);
+                        vessel.vesselName = potentialName;
+                    }
                     spawnedVessels.Add(vessel.GetName(), new Tuple<Vessel, Vector3d, Vector3, float, EditorFacility>(vessel, craftSpawnPosition, direction, vessel.GetHeightFromTerrain() - 35f, shipFacility)); // Store the vessel, its spawning point (which is different from its position) and height from the terrain!
                     ++spawnedVesselCount;
                 }
@@ -378,6 +396,7 @@ namespace BDArmory.Control
                 teamVesselNames = new List<List<string>>();
                 var currentTeamNames = new List<string>();
                 int spawnedTeamCount = 0;
+                if (spawnConfig.assignTeams) useOriginalTeamNames = true;
                 Vector3 teamSpawnPosition;
                 foreach (var team in spawnConfig.teamsSpecific)
                 {
@@ -408,8 +427,19 @@ namespace BDArmory.Control
                         vessel.Landed = false; // Tell KSP that it's not landed so KSP doesn't mess with its position.
                         vessel.ResumeStaging(); // Trigger staging to resume to get staging icons to work properly.
                         if (spawnedVessels.ContainsKey(vessel.GetName()))
-                            vessel.vesselName += "_" + spawnedVesselCount;
+                        {
+                            var count = 1;
+                            var potentialName = vessel.vesselName + "_" + count;
+                            while (spawnedVessels.ContainsKey(potentialName))
+                                potentialName = vessel.vesselName + "_" + (++count);
+                            vessel.vesselName = potentialName;
+                        }
                         currentTeamNames.Add(vessel.vesselName);
+                        if (spawnConfig.assignTeams) // Assign team names based on folders.
+                        {
+                            var paths = craftUrl.Split(Path.DirectorySeparatorChar);
+                            originalTeams[vessel.vesselName] = paths[paths.Length - 2];
+                        }
                         spawnedVessels.Add(vessel.GetName(), new Tuple<Vessel, Vector3d, Vector3, float, EditorFacility>(vessel, craftSpawnPosition, direction, vessel.GetHeightFromTerrain() - 35f, shipFacility)); // Store the vessel, its spawning point (which is different from its position) and height from the terrain!
                         ++spawnedVesselCount;
                         ++teamSpawnCount;
@@ -561,7 +591,11 @@ namespace BDArmory.Control
                             allWeaponManagersAssigned = true;
 
                         if (allWeaponManagersAssigned)
+                        {
+                            if (spawnConfig.numberOfTeams != 1) // Already assigned.
+                                SaveTeams();
                             break;
+                        }
                     } while (Planetarium.GetUniversalTime() - postSpawnCheckStartTime < 10); // Give it up to 10s for the weapon managers to get added to the LoadedVesselSwitcher's list.
                     if (!allWeaponManagersAssigned && spawnFailureReason == SpawnFailureReason.None)
                     {
@@ -679,7 +713,7 @@ namespace BDArmory.Control
                         for (int team = 0; team < spawnConfig.numberOfTeams; ++team)
                             spawnConfig.teamCounts.Add(numberPerTeam + (team < residue ? 1 : 0));
                     }
-                    LoadedVesselSwitcher.Instance.MassTeamSwitch(true, spawnConfig.teamCounts, teamVesselNames);
+                    LoadedVesselSwitcher.Instance.MassTeamSwitch(true, useOriginalTeamNames, spawnConfig.teamCounts, teamVesselNames);
                     yield return new WaitForFixedUpdate();
                 }
             }
@@ -692,9 +726,9 @@ namespace BDArmory.Control
         private bool vesselsSpawningOnceContinuously = false;
         public Coroutine spawnAllVesselsOnceContinuouslyCoroutine = null;
 
-        public void SpawnAllVesselsOnceContinuously(double latitude, double longitude, double altitude = 0, float distance = 10f, bool absDistanceOrFactor = false, float easeInSpeed = 1f, bool killEverythingFirst = true, int numberOfTeams = 0, List<int> teamCounts = null, List<List<string>> teamsSpecific = null, string spawnFolder = null, List<string> craftFiles = null)
+        public void SpawnAllVesselsOnceContinuously(double latitude, double longitude, double altitude = 0, float distance = 10f, bool absDistanceOrFactor = false, float easeInSpeed = 1f, bool killEverythingFirst = true, bool assignTeams = true, int numberOfTeams = 0, List<int> teamCounts = null, List<List<string>> teamsSpecific = null, string spawnFolder = null, List<string> craftFiles = null)
         {
-            SpawnAllVesselsOnceContinuously(new SpawnConfig(latitude, longitude, altitude, distance, absDistanceOrFactor, easeInSpeed, killEverythingFirst, true, numberOfTeams, teamCounts, teamsSpecific, spawnFolder, craftFiles));
+            SpawnAllVesselsOnceContinuously(new SpawnConfig(latitude, longitude, altitude, distance, absDistanceOrFactor, easeInSpeed, killEverythingFirst, assignTeams, numberOfTeams, teamCounts, teamsSpecific, spawnFolder, craftFiles));
         }
         public void SpawnAllVesselsOnceContinuously(SpawnConfig spawnConfig)
         {
@@ -889,7 +923,6 @@ namespace BDArmory.Control
             var spawnCounts = spawnConfig.craftFiles.ToDictionary(c => c, c => 0);
             var spawnQueue = new Queue<string>();
             var craftToSpawn = new Queue<string>();
-            var duplicateCraftCounter = 0;
             bool initialSpawn = true;
             double currentUpdateTick;
             while (vesselsSpawningContinuously)
@@ -959,7 +992,13 @@ namespace BDArmory.Control
                         if (!craftURLToVesselName.ContainsKey(craftURL))
                         {
                             if (craftURLToVesselName.ContainsValue(vessel.GetName())) // Avoid duplicate names.
-                                vessel.vesselName += "_" + (++duplicateCraftCounter);
+                            {
+                                var count = 1;
+                                var potentialName = vessel.vesselName + "_" + count;
+                                while (craftURLToVesselName.ContainsKey(potentialName))
+                                    potentialName = vessel.vesselName + "_" + (++count);
+                                vessel.vesselName = potentialName;
+                            }
                             craftURLToVesselName.Add(craftURL, vessel.GetName()); // Store the craftURL -> vessel name.
                         }
                         vessel.vesselName = craftURLToVesselName[craftURL]; // Assign the same (potentially modified) name to the craft each time.
@@ -1358,7 +1397,8 @@ namespace BDArmory.Control
                 killAllFirst = false;
             }
             yield return new WaitForFixedUpdate();
-            LoadedVesselSwitcher.Instance.MassTeamSwitch(false, spawnCounts); // Assign teams.
+            SaveTeams(); // Save the teams in case they've been pre-configured.
+            LoadedVesselSwitcher.Instance.MassTeamSwitch(false, false, spawnCounts); // Assign teams based on the groups of spawns. Right click the 'T' to revert to the original team names if they were defined.
             if (startCompetition) // Start the competition.
             {
                 var competitionStartDelayStart = Planetarium.GetUniversalTime();

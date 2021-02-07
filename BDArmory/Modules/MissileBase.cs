@@ -899,7 +899,7 @@ namespace BDArmory.Modules
                 _guidance = new BallisticGuidance();
             }
 
-            return _guidance.GetDirection(this, targetPosition);
+            return _guidance.GetDirection(this, targetPosition, Vector3.zero);
         }
 
 

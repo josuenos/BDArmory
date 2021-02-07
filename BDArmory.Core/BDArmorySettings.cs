@@ -20,6 +20,7 @@ namespace BDArmory.Core
         [BDAPersistantSettingsField] public static float REMOTE_ORCHESTRATION_WINDOW_WIDTH = 225f;
         [BDAPersistantSettingsField] public static float VESSEL_SWITCHER_WINDOW_WIDTH = 500f;
         [BDAPersistantSettingsField] public static bool VESSEL_SWITCHER_WINDOW_SORTING = false;
+        [BDAPersistantSettingsField] public static bool VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE = false;
         [BDAPersistantSettingsField] public static float VESSEL_SPAWNER_WINDOW_WIDTH = 450f;
 
         // General toggle settings
@@ -118,26 +119,21 @@ namespace BDArmory.Core
         [BDAPersistantSettingsField] public static bool BATTLEDAMAGE_TOGGLE = false;
         [BDAPersistantSettingsField] public static float BD_DAMAGE_CHANCE = 10; //base chance per-hit to proc damage
         [BDAPersistantSettingsField] public static bool BD_SUBSYSTEMS = false; //non-critical module damage?
-
         [BDAPersistantSettingsField] public static bool BD_TANKS = false;      //Fuel tanks, batteries can leak/burn
         [BDAPersistantSettingsField] public static float BD_TANK_LEAK_TIME = 20; //Leak duration
         [BDAPersistantSettingsField] public static float BD_TANK_LEAK_RATE = 1; //leak rate modifier
-
         [BDAPersistantSettingsField] public static bool BD_AMMOBINS = false;   //can ammo bins explode?
         [BDAPersistantSettingsField] public static bool BD_VOLATILE_AMMO = false; // Ammo bins guaranteed to explode when destroyed
-
-		[BDAPersistantSettingsField] public static bool BD_PROPULSION = false; //engine thrust reduction, fires
+        [BDAPersistantSettingsField] public static bool BD_PROPULSION = false; //engine thrust reduction, fires
+        [BDAPersistantSettingsField] public static bool BD_BALANCED_THRUST = true;
         [BDAPersistantSettingsField] public static float BD_PROP_DAM_RATE = 1; //rate multiplier, 0.1-2
         [BDAPersistantSettingsField] public static bool BD_INTAKES = false; //Can intakes be damaged?
         [BDAPersistantSettingsField] public static bool BD_GIMBALS = false; //can gimbals be disabled?
-
         [BDAPersistantSettingsField] public static bool BD_AEROPARTS = false; //lift loss & added drag
         [BDAPersistantSettingsField] public static float BD_LIFT_LOSS_RATE = 1; //rate multiplier
         [BDAPersistantSettingsField] public static bool BD_CTRL_SRF = false; //disable ctrl srf actuatiors?
-
         [BDAPersistantSettingsField] public static bool BD_COCKPITS = false;  //control degredation
         [BDAPersistantSettingsField] public static bool BD_PILOT_KILLS = false; //cockpit damage can kill pilots?
-
         [BDAPersistantSettingsField] public static bool BD_FIRES_ENABLED = false;  //can fires occur
         [BDAPersistantSettingsField] public static bool BD_FIRE_DOT = false; //do fires do DoT
         [BDAPersistantSettingsField] public static float BD_FIRE_DAMAGE = 5; //do fires do DoT
@@ -156,11 +152,12 @@ namespace BDArmory.Core
         [BDAPersistantSettingsField] public static float VESSEL_SPAWN_DISTANCE_FACTOR = 20f;       // Scale factor for the size of the spawning circle.
         [BDAPersistantSettingsField] public static float VESSEL_SPAWN_DISTANCE = 10f;              // Radius of the size of the spawning circle.
         [BDAPersistantSettingsField] public static bool VESSEL_SPAWN_DISTANCE_TOGGLE = false;      // Toggle between scaling factor and absolute distance.
+        [BDAPersistantSettingsField] public static bool VESSEL_SPAWN_REASSIGN_TEAMS = true;        // Reassign teams on spawn, overriding teams defined in the SPH.
         [BDAPersistantSettingsField] public static float VESSEL_SPAWN_EASE_IN_SPEED = 1f;          // Rate to limit "falling" during spawning.
         [BDAPersistantSettingsField] public static int VESSEL_SPAWN_CONCURRENT_VESSELS = 0;        // Maximum number of vessels to spawn in concurrently (continuous spawning mode).
         [BDAPersistantSettingsField] public static int VESSEL_SPAWN_LIVES_PER_VESSEL = 0;          // Maximum number of times to spawn a vessel (continuous spawning mode).
         [BDAPersistantSettingsField] public static float OUT_OF_AMMO_KILL_TIME = -1f;              // Out of ammo kill timer for continuous spawn mode.
-		[BDAPersistantSettingsField] public static int VESSEL_SPAWN_FILL_SEATS = 1;                // Fill seats: 0 - minimal, 1 - all ModuleCommand and KerbalSeat parts, 2 - also cabins.
+        [BDAPersistantSettingsField] public static int VESSEL_SPAWN_FILL_SEATS = 1;                // Fill seats: 0 - minimal, 1 - all ModuleCommand and KerbalSeat parts, 2 - also cabins.
         [BDAPersistantSettingsField] public static bool VESSEL_SPAWN_CONTINUE_SINGLE_SPAWNING = false; // Spawn craft again after single spawn competition finishes.
         [BDAPersistantSettingsField] public static bool VESSEL_SPAWN_DUMP_LOG_EVERY_SPAWN = false; // Dump competition scores every time a vessel spawns.
         [BDAPersistantSettingsField] public static bool SHOW_SPAWN_LOCATIONS = false;              // Show the interesting spawn locations.

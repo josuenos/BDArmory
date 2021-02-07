@@ -1621,7 +1621,7 @@ namespace BDArmory.Modules
 
             Vector3 cruiseTarget = Vector3.zero;
 
-            cruiseTarget = this._guidance.GetDirection(this, TargetPosition);
+            cruiseTarget = this._guidance.GetDirection(this, TargetPosition, TargetVelocity);
 
             Vector3 upDirection = VectorUtils.GetUpDirection(transform.position);
 
@@ -1707,8 +1707,8 @@ namespace BDArmory.Modules
                     }
                 }
             }
-
-            Vector3 agmTarget = MissileGuidance.GetAirToGroundTarget(TargetPosition, vessel, agmDescentRatio);
+            
+            Vector3 agmTarget = MissileGuidance.GetAirToGroundTarget(TargetPosition, TargetVelocity, vessel, agmDescentRatio);
             DoAero(agmTarget);
         }
 

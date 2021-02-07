@@ -239,6 +239,16 @@ namespace BDArmory.Modules
          UI_FloatRange(minValue = .1f, maxValue = 1f, stepIncrement = .05f, scene = UI_Scene.All)]
         public float maxSteer = 1;
 
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_SASteerLimiter", advancedTweakable = true, //Speed Adjusted Steer Limiter
+                groupName = "pilotAI_ControlLimits", groupDisplayName = "#LOC_BDArmory_PilotAI_ControlLimits", groupStartCollapsed = true),
+            UI_FloatRange(minValue = .1f, maxValue = 2f, stepIncrement = .05f, scene = UI_Scene.All)]
+        public float maxSteerAtMaxSpeed = 1;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_LimiterSpeed", advancedTweakable = true, //Adjusted Limiter Speed
+                groupName = "pilotAI_ControlLimits", groupDisplayName = "#LOC_BDArmory_PilotAI_ControlLimits", groupStartCollapsed = true),
+        UI_FloatRange(minValue = 10f, maxValue = 500f, stepIncrement = 1.0f, scene = UI_Scene.All)]
+        public float cornerSpeed = 200f;
+
         //[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_AttitudeLimiter", advancedTweakable = true, //Attitude Limiter, not currently functional
         //    groupName = "pilotAI_ControlLimits", groupDisplayName = "#LOC_BDArmory_PilotAI_ControlLimits", groupStartCollapsed = true),
         // UI_FloatRange(minValue = 10f, maxValue = 90f, stepIncrement = 5f, scene = UI_Scene.All)]
@@ -1391,6 +1401,14 @@ namespace BDArmory.Modules
             pitchError = VectorUtils.SignedAngle(Vector3.up, Vector3.ProjectOnPlane(targetDirection, Vector3.right), Vector3.back);
             yawError = VectorUtils.SignedAngle(Vector3.up, Vector3.ProjectOnPlane(targetDirectionYaw, Vector3.forward), Vector3.right);
 
+            if (vessel.srfSpeed > cornerSpeed)
+            {
+                finalMaxSteer *= 1 - (((float)vessel.srfSpeed - cornerSpeed) / (maxSpeed - cornerSpeed) * (1f - maxSteerAtMaxSpeed)); // linear approximation to set max control input when above corner speed
+                if (finalMaxSteer < 0.1f)
+                {
+                    finalMaxSteer = 0.1f; // added just in case to ensure some input is retained no matter what happens
+                }
+            }
             //test
             debugString.Append($"finalMaxSteer: {finalMaxSteer}");
             debugString.Append(Environment.NewLine);

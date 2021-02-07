@@ -633,7 +633,7 @@ namespace BDArmory.Modules
                     }
                 }
             }
-            Vector3 agmTarget = MissileGuidance.GetAirToGroundTarget(TargetPosition, vessel, 1.85f);
+            Vector3 agmTarget = MissileGuidance.GetAirToGroundTarget(TargetPosition, TargetVelocity, vessel, 1.85f);
             return agmTarget;
         }
 
@@ -644,7 +644,7 @@ namespace BDArmory.Modules
                 this._guidance = new CruiseGuidance(this);
             }
 
-            return this._guidance.GetDirection(this, TargetPosition);
+            return this._guidance.GetDirection(this, TargetPosition, TargetVelocity);
         }
 
         private void CheckMiss(Vector3 targetPosition)

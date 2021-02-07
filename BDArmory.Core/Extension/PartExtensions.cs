@@ -17,7 +17,6 @@ namespace BDArmory.Core.Extension
             //////////////////////////////////////////////////////////
             // Basic Add Hitpoints for compatibility (only used by lasers & fires)
             //////////////////////////////////////////////////////////
-            damage = (float)Math.Round(damage, 2);
 
             if (p.GetComponent<KerbalEVA>() != null)
             {
@@ -140,7 +139,7 @@ namespace BDArmory.Core.Extension
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
                 Debug.Log("[BDArmory]: mass: " + mass + " caliber: " + caliber + " multiplier: " + multiplier + " velocity: " + impactVelocity + " penetrationfactor: " + penetrationfactor);
-                Debug.Log("[BDArmory]: Ballistic Hitpoints Applied : " + Math.Round(damage_, 2));
+                Debug.Log("[BDArmory]: Ballistic Hitpoints Applied : " + damage_);
             }
         }
 
@@ -155,7 +154,7 @@ namespace BDArmory.Core.Extension
 
             Dependencies.Get<DamageService>().AddDamageToPart_svc(p, damage);
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: Explosive Hitpoints Applied to " + p.name + ": " + Math.Round(damage, 2));
+                Debug.Log("[BDArmory]: Explosive Hitpoints Applied to " + p.name + ": " + damage);
         }
 
         /// <summary>
@@ -169,7 +168,7 @@ namespace BDArmory.Core.Extension
 
             Dependencies.Get<DamageService>().AddDamageToKerbal_svc(kerbal, damage);
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: Hitpoints Applied to " + kerbal.name + ": " + Math.Round(damage, 2));
+                Debug.Log("[BDArmory]: Hitpoints Applied to " + kerbal.name + ": " + damage);
         }
 
         public static void AddForceToPart(Rigidbody rb, Vector3 force, Vector3 position, ForceMode mode)
@@ -179,7 +178,7 @@ namespace BDArmory.Core.Extension
             //////////////////////////////////////////////////////////
 
             rb.AddForceAtPosition(force, position, mode);
-            Debug.Log("[BDArmory]: Force Applied : " + Math.Round(force.magnitude, 2));
+            Debug.Log("[BDArmory]: Force Applied : " + force.magnitude);
         }
 
         public static void Destroy(this Part p)
@@ -239,7 +238,7 @@ namespace BDArmory.Core.Extension
             return armor_ / maxArmor_;
         }
 
-        public static float GetDamagePercentatge(this Part p)
+        public static float GetDamagePercentage(this Part p)
         {
             if (p == null) return 0;
 
@@ -411,9 +410,9 @@ namespace BDArmory.Core.Extension
 
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
                         {
-                            Debug.Log("[BDArmory]: Damage Before Reduction : " + Math.Round(damage, 2) / 100);
-                            Debug.Log("[BDArmory]: Damage Reduction : " + Math.Round(_damageReduction, 2) / 100);
-                            Debug.Log("[BDArmory]: Damage After Armor : " + Math.Round(damage *= (_damageReduction / 100f)));
+                            Debug.Log("[BDArmory]: Damage Before Reduction : " + damage / 100);
+                            Debug.Log("[BDArmory]: Damage Reduction : " + _damageReduction / 100);
+                            Debug.Log("[BDArmory]: Damage After Armor : " + (damage *= (_damageReduction / 100f)));
                         }
 
                         damage *= (_damageReduction / 100f);
@@ -434,11 +433,11 @@ namespace BDArmory.Core.Extension
                     {
                         case "ElectricCharge":
                             if (resources.Current.amount > 1d) hasEC = true; //discount trace EC in alternators
-                            break;                        
+                            break;
                     }
                 }
             return hasEC;
-        }      
+        }
         public static Vector3 GetBoundsSize(Part part)
         {
             return PartGeometryUtil.MergeBounds(part.GetRendererBounds(), part.transform).size;

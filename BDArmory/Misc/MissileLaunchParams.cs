@@ -44,6 +44,8 @@ namespace BDArmory.Misc
             float minLaunchRange = missile.minStaticLaunchRange;
             float maxLaunchRange = missile.maxStaticLaunchRange;
 
+            float bodyGravity = (float)PhysicsGlobals.GravitationalAcceleration * (float)missile.vessel.orbit.referenceBody.GeeASL; // Set gravity for calculations;
+
             float missileActiveTime = 2f;
 
             float rangeAddMin = 0;
@@ -56,13 +58,30 @@ namespace BDArmory.Misc
             Vector3 relVProjected = Vector3.Project(relV, vectorToTarget);
             relSpeed = -Mathf.Sign(Vector3.Dot(relVProjected, vectorToTarget)) * relVProjected.magnitude;
 
-            // Basic time estimate for missile to drop and travel a safe distance from vessel assuming constant acceleration and firing vessel not accelerating
             if (missile.GetComponent<BDModularGuidance>() == null)
             {
+                // Basic time estimate for missile to drop and travel a safe distance from vessel assuming constant acceleration and firing vessel not accelerating
                 MissileLauncher ml = missile.GetComponent<MissileLauncher>();
                 float maxMissileAccel = ml.thrust / missile.part.mass;
                 float blastRadius = Mathf.Min(missile.GetBlastRadius(), 150f); // Allow missiles with absurd blast ranges to still be launched if desired
                 missileActiveTime = Mathf.Min((missile.vessel.LandedOrSplashed ? 0f : missile.dropTime) + Mathf.Sqrt(2 * blastRadius / maxMissileAccel), 2f); // Clamp at 2s for now
+
+                // Rough range estimate of max missile G in a turn after launch, the following code is quite janky but works decently well in practice
+                float maxEstimatedGForce = (bodyGravity * ml.maxTorque); // Rough estimate of max G based on missile torque
+                if (ml.aero) // If missile has aerodynamics, modify G force by AoA limit
+                {
+                    maxEstimatedGForce *= Mathf.Sin(ml.maxAoA * Mathf.Deg2Rad);
+                }
+
+                // Rough estimate of turning radius and arc length to travel
+                float futureTime = Mathf.Clamp((missile.vessel.LandedOrSplashed ? 0f : missile.dropTime), 0f, 2f);
+                Vector3 futureRelPosition = (targetPosition + targetVelocity * futureTime) - (missile.part.transform.position + launcherVelocity * futureTime);
+                float missileTurnRadius = (ml.optimumAirspeed * ml.optimumAirspeed) / maxEstimatedGForce; 
+                float targetAngle = Vector3.Angle(missile.GetForwardTransform(), futureRelPosition);
+                float arcLength = Mathf.Deg2Rad * targetAngle * missileTurnRadius;
+
+                // Add additional range term for the missile to manuever to target at missileActiveTime
+                rangeAddMin += arcLength;
             }
 
             float missileMaxRangeTime = 8f; // Placeholder value since this doesn't really matter much in BDA combat

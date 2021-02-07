@@ -352,7 +352,9 @@ namespace BDArmory.Targeting
         {
             float bodyGravity = (float)PhysicsGlobals.GravitationalAcceleration * (float)vessel.orbit.referenceBody.GeeASL; // Set gravity for calculations;
             float maxAccel = MaxThrust(vessel) / vessel.GetTotalMass(); // This assumes that all thrust is in the same direction.
-            return 0.1f * Mathf.Clamp(maxAccel / bodyGravity, 0f, 10f); // Output is 0-1 (0.1 is equal to body gravity)
+            maxAccel = 0.1f * Mathf.Clamp(maxAccel / bodyGravity, 0f, 10f);
+            maxAccel = maxAccel == 0f ? -1f : maxAccel; // If max acceleration is zero (no engines), set to -1 for stronger target priority
+            return maxAccel; // Output is -1 or 0-1 (0.1 is equal to body gravity)
         }
 
         public float TargetPriClosureTime(MissileFire myMf) // Time to closest point of approach, normalized for one minute
@@ -386,8 +388,10 @@ namespace BDArmory.Targeting
             if (myMf == null || myMf.wingCommander == null || myMf.wingCommander.friendlies == null) return 0;
             float friendsEngaging = Mathf.Max(NumFriendliesEngaging(myMf.Team) - 1, 0);
             float teammates = myMf.wingCommander.friendlies.Count;
+            friendsEngaging = 1 - Mathf.Clamp(friendsEngaging / teammates, 0f, 1f);
+            friendsEngaging = friendsEngaging == 0f ? -1f : friendsEngaging;
             if (teammates > 0)
-                return 1 - Mathf.Clamp(friendsEngaging / teammates, 0f, 1f); // Ranges from 0 to 1
+                return friendsEngaging; // Range is -1, 0 to 1. -1 if all teammates are engaging target, between 0-1 otherwise depending on number of teammates engaging
             else
                 return 0; // No teammates
         }

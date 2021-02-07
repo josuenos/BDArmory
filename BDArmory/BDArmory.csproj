@@ -336,8 +336,6 @@
     <None Include="Distribution\GameData\BDArmory\Parts\aim-120\amraam.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\aim-120\amraam_emp.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\aim-120\model.mu" />
-    <None Include="Distribution\GameData\BDArmory\Parts\AIM4Falcon\AIM4FalconGAR2.cfg" />
-    <None Include="Distribution\GameData\BDArmory\Parts\AIM4Falcon\AIM4FalconMK1.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\aiPilot\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\aiPilot\part.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\aiPilot\surface_ai.cfg" />
@@ -423,10 +421,8 @@
     <None Include="Distribution\GameData\BDArmory\Parts\jdamMk83\jdam.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\jdamMk83\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\m102.cfg" />
-    <None Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\m102HE.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\m1Abrams\m1Abrams.cfg" />
-    <None Include="Distribution\GameData\BDArmory\Parts\m1Abrams\m1AbramsHE.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\m1Abrams\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\m1Abrams\sounds\reload.ogg" />
     <None Include="Distribution\GameData\BDArmory\Parts\m1Abrams\sounds\shot.ogg" />
@@ -583,8 +579,6 @@
     <Content Include="Distribution\GameData\BDArmory\Parts\adjustableRail\texture.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\AGM86-17\AGM86-17.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\aim-120\texture.png" />
-    <Content Include="Distribution\GameData\BDArmory\Parts\AIM4Falcon\texture.png" />
-    <Content Include="Distribution\GameData\BDArmory\Parts\AIM4Falcon\texture2.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\aiPilot\SAI1.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\aiPilot\texture.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\AmmoBox\texture.png" />
@@ -635,10 +629,8 @@
     <Content Include="Distribution\GameData\BDArmory\Parts\jdamMk83\tex_jdam.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\muzzle.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\tex_m102.png" />
-    <Content Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\tex_m102B2.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m1Abrams\muzzle.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m1Abrams\tex_abrams.png" />
-    <Content Include="Distribution\GameData\BDArmory\Parts\m1Abrams\tex_abramsB2.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\muzzle.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\smoke.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\texture.png" />

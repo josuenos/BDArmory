@@ -53,6 +53,14 @@ namespace BDArmory.FX
                     _highestEnergy = pe.Current.maxEnergy;
                     EffectBehaviour.AddParticleEmitter(pe.Current);
                 }
+            if (parentPart.protoModuleCrew.Count > 0) //crew can extingusih fire
+            {
+                burnTime = 10;
+            }
+            if (parentPart.parent.protoModuleCrew.Count > 0)
+            {
+                burnTime = 20; //though ajdacent parts will take longer to get to and extingusih
+            }
         }
         void onDisable()
         {
@@ -66,7 +74,7 @@ namespace BDArmory.FX
         }
         void Update()
         {
-            if (!gameObject.activeInHierarchy || !HighLogic.LoadedSceneIsFlight || BDArmorySetup.GameIsPaused)
+            if (!gameObject.activeInHierarchy || !HighLogic.LoadedSceneIsFlight)
             {
                 return;
             }
@@ -77,7 +85,7 @@ namespace BDArmory.FX
             {
                 if (engine.enabled)
                 {
-                    if (parentPart.RequestResource("LiquidFuel", (double)(burnRate * Time.fixedDeltaTime)) <= 0)
+                    if (parentPart.RequestResource("LiquidFuel", (double)(burnRate * TimeWarp.deltaTime)) <= 0)
                     {
                         hasFuel = false;
                     }
@@ -155,7 +163,7 @@ namespace BDArmory.FX
             }
             if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_FIRE_DOT)
             {
-                parentPart.AddDamage(BDArmorySettings.BD_FIRE_DAMAGE * TimeWarp.deltaTime);
+                parentPart.AddDamage(BDArmorySettings.BD_FIRE_DAMAGE * Time.deltaTime);
                 ////////////////////////////////////////////////
                 if (ScoreAccumulator >= 1)
                 {
@@ -196,7 +204,7 @@ namespace BDArmory.FX
                 }
                 else
                 {
-                    ScoreAccumulator += 1 * TimeWarp.deltaTime;
+                    ScoreAccumulator += 1 * Time.deltaTime;
                 }
             }
             ////////////////////////////////////////////

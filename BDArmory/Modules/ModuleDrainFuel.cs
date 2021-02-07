@@ -1,6 +1,5 @@
 ﻿using BDArmory.FX;
-using BDArmory.Misc;
-using System.Collections;
+using BDArmory.UI;
 using System.Linq;
 using UnityEngine;
 
@@ -24,7 +23,7 @@ namespace BDArmory.Modules
         {
             if (HighLogic.LoadedSceneIsFlight)
             {
-                drainDuration -= Time.fixedDeltaTime;
+                drainDuration -= Time.deltaTime;
                 if (drainDuration > 0)
                 {
                     PartResource fuel = part.Resources.Where(pr => pr.resourceName == "LiquidFuel").FirstOrDefault();
@@ -37,7 +36,7 @@ namespace BDArmory.Modules
                             {
                                 if (fuel.amount > 0)
                                 {
-                                    part.RequestResource("LiquidFuel", (double)(drainRate * Time.fixedDeltaTime));
+                                    part.RequestResource("LiquidFuel", (double)(drainRate * Time.deltaTime));
                                     fuelLeft++;
                                 }
                             }
@@ -49,7 +48,7 @@ namespace BDArmory.Modules
                         {
                             if (fuel.amount >= 0)
                             {
-                                part.RequestResource("LiquidFuel", (double)(drainRate * Time.fixedDeltaTime));
+                                part.RequestResource("LiquidFuel", (double)(drainRate * Time.deltaTime));
                                 fuelLeft++;
                             }
                         }
@@ -58,7 +57,7 @@ namespace BDArmory.Modules
                         {
                             if (ox.amount >= 0)
                             {
-                                part.RequestResource("Oxidizer", (double)(drainRate * Time.fixedDeltaTime));
+                                part.RequestResource("Oxidizer", (double)(drainRate * Time.deltaTime));
                                 fuelLeft++;
                             }
                         }
@@ -67,7 +66,7 @@ namespace BDArmory.Modules
                         {
                             if (ox.amount >= 0)
                             {
-                                part.RequestResource("MonoPropellant", (double)(drainRate * Time.fixedDeltaTime));
+                                part.RequestResource("MonoPropellant", (double)(drainRate * Time.deltaTime));
                                 fuelLeft++;
                             }
                         }

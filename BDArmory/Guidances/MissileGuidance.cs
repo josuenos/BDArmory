@@ -10,8 +10,14 @@ namespace BDArmory.Guidances
 {
     public class MissileGuidance
     {
-        public static Vector3 GetAirToGroundTarget(Vector3 targetPosition, Vessel missileVessel, float descentRatio)
+        public static Vector3 GetAirToGroundTarget(Vector3 targetPosition, Vector3 targetVelocity, Vessel missileVessel, float descentRatio, float minSpeed = 200)
         {
+            // Incorporate lead for target velocity
+            Vector3 currVel = Mathf.Max((float)missileVessel.srfSpeed, minSpeed) * missileVessel.Velocity().normalized;
+            float targetDistance = Vector3.Distance(targetPosition, missileVessel.transform.position);
+            float leadTime = Mathf.Clamp((float)(1 / ((targetVelocity - currVel).magnitude / targetDistance)), 0f, 8f);
+            targetPosition += targetVelocity * leadTime;
+
             Vector3 upDirection = VectorUtils.GetUpDirection(missileVessel.CoM);
             //-FlightGlobals.getGeeForceAtPosition(targetPosition).normalized;
             Vector3 surfacePos = missileVessel.transform.position +
@@ -34,7 +40,6 @@ namespace BDArmory.Guidances
                 (float)missileVessel.altitude);
 
             //Debug.Log("AGM altitudeClamp =" + altitudeClamp);
-
             Vector3 finalTarget = targetPosition + (altitudeClamp * upDirection.normalized);
 
             //Debug.Log("Using agm trajectory. " + Time.time);

@@ -125,7 +125,7 @@ namespace BDArmory.Control
                         BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE,
                         BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED,
                         true, // Kill everything first.
-                        true, // Assign teams.
+                        BDArmorySettings.VESSEL_SPAWN_REASSIGN_TEAMS, // Assign teams.
                         0, // Number of teams.
                         null, // List of team numbers.
                         null, // List of List of teams' vessels.
@@ -236,8 +236,8 @@ namespace BDArmory.Control
                         BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE,
                         BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED,
                         true, // Kill everything first.
-                        true, // Assign teams.
-                        0, // Not used here.
+                        BDArmorySettings.VESSEL_SPAWN_REASSIGN_TEAMS, // Assign teams.
+                        numberOfTeams, // Number of teams indicator.
                         null, //selectedCraft.Select(c => c.Count).ToList(), // Not used here.
                         selectedCraft, // List of lists of vessels. For splitting specific vessels into specific teams.
                         null, // No folder, we're going to specify the craft files.
@@ -600,16 +600,6 @@ namespace BDArmory.Control
 
         IEnumerator ExecuteHeat(int roundIndex, int heatIndex)
         {
-            // if (VesselSpawnerWindow.Instance.round4running) // FIXME Round 4
-            // {
-            //     var team1Config = new VesselSpawner.SpawnConfig(tournamentState.rounds[roundIndex][heatIndex]);
-            //     team1Config.craftFiles = team1Config.craftFiles.Take(team1Config.craftFiles.Count / 2).ToList();
-            //     var team2Config = new VesselSpawner.SpawnConfig(tournamentState.rounds[roundIndex][heatIndex]);
-            //     team2Config.craftFiles = team2Config.craftFiles.Skip(team2Config.craftFiles.Count / 2).ToList();
-            //     team2Config.latitude += 8;
-            //     VesselSpawner.Instance.TeamSpawn(new List<VesselSpawner.SpawnConfig> { team1Config, team2Config }, false);
-            // }
-            // else
             VesselSpawner.Instance.SpawnAllVesselsOnce(tournamentState.rounds[roundIndex][heatIndex]);
             while (VesselSpawner.Instance.vesselsSpawning)
                 yield return new WaitForFixedUpdate();
