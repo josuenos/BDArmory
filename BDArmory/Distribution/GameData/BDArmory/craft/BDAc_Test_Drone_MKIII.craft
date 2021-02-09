@@ -1277,21 +1277,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 500
@@ -1382,21 +1367,6 @@ PART
 	MODULE
 	{
 		name = CFEnable
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
-		name = BDACategoryModule
 		isEnabled = True
 		stagingEnabled = True
 		EVENTS
@@ -3097,21 +3067,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 500
@@ -3215,21 +3170,6 @@ PART
 		isEnabled = True
 		railHeight = -0.099999994
 		railLength = 0.400000006
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
-		name = BDACategoryModule
-		isEnabled = True
 		stagingEnabled = True
 		EVENTS
 		{
@@ -3359,21 +3299,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 500
@@ -3477,21 +3402,6 @@ PART
 		isEnabled = True
 		railHeight = 0
 		railLength = 0.400000006
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
-		name = BDACategoryModule
-		isEnabled = True
 		stagingEnabled = True
 		EVENTS
 		{
@@ -3972,21 +3882,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 500
@@ -4344,21 +4239,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 500
@@ -4462,21 +4342,6 @@ PART
 		isEnabled = True
 		railHeight = -0.099999994
 		railLength = 0.400000006
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
-		name = BDACategoryModule
-		isEnabled = True
 		stagingEnabled = True
 		EVENTS
 		{
@@ -4606,21 +4471,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 500
@@ -4724,21 +4574,6 @@ PART
 		isEnabled = True
 		railHeight = 0
 		railLength = 0.400000006
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
-		name = BDACategoryModule
-		isEnabled = True
 		stagingEnabled = True
 		EVENTS
 		{
@@ -5206,21 +5041,6 @@ PART
 		isEnabled = True
 		railHeight = -0.099999994
 		railLength = 0.400000006
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
-		name = BDACategoryModule
-		isEnabled = True
 		stagingEnabled = True
 		EVENTS
 		{
@@ -7154,21 +6974,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 500
@@ -8835,21 +8640,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 6000
@@ -9015,21 +8805,6 @@ PART
 	}
 	MODULE
 	{
-		name = BDACategoryModule
-		isEnabled = True
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
 		name = HitpointTracker
 		isEnabled = True
 		Hitpoints = 5
@@ -9164,21 +8939,6 @@ PART
 		name = ModuleEMP
 		isEnabled = True
 		proximity = 50
-		stagingEnabled = True
-		EVENTS
-		{
-		}
-		ACTIONS
-		{
-		}
-		UPGRADESAPPLIED
-		{
-		}
-	}
-	MODULE
-	{
-		name = BDACategoryModule
-		isEnabled = True
 		stagingEnabled = True
 		EVENTS
 		{

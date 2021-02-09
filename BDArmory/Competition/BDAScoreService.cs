@@ -304,12 +304,12 @@ namespace BDArmory.Competition
             rammedPartsOut.Clear();
 
             status = StatusType.SpawningVessels;
-            spawner.SpawnAllVesselsOnce(BDArmorySettings.VESSEL_SPAWN_GEOCOORDS, BDArmorySettings.VESSEL_SPAWN_ALTITUDE, BDArmorySettings.VESSEL_SPAWN_DISTANCE, BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED, true, hash);
+            spawner.SpawnAllVesselsOnce(BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.x, BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.y, BDArmorySettings.VESSEL_SPAWN_ALTITUDE, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE, BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED, true, true, 0, null, null, hash);
             while (spawner.vesselsSpawning)
                 yield return new WaitForFixedUpdate();
             if (!spawner.vesselSpawnSuccess)
             {
-                Debug.Log("[BDAScoreService] Vessel spawning failed."); // FIXME Now what?
+                Debug.Log("[BDAScoreService] Vessel spawning failed.");
                 yield break;
             }
             yield return new WaitForFixedUpdate();
@@ -351,41 +351,56 @@ namespace BDArmory.Competition
             Debug.Log(string.Format("[BDAScoreService] Building records for {0} players", playerNames.Count));
             foreach (string playerName in playerNames)
             {
-                PlayerModel player = client.players.Values.FirstOrDefault(e => e.name == playerName);
-                if (player == null)
+                var separatorIndex = playerName.IndexOf('_');
+                if (separatorIndex < 0)
                 {
                     Debug.Log(string.Format("[BDAScoreService] Unmatched player {0}", playerName));
                     Debug.Log("DEBUG players were " + string.Join(", ", client.players.Values));
                     continue;
                 }
-                VesselModel vessel = client.vessels.Values.FirstOrDefault(e => e.player_id == player.id);
+
+                var playerNamePart = playerName.Substring(0, separatorIndex);
+                PlayerModel player = client.players.Values.FirstOrDefault(e => e.name == playerNamePart);
+                if (player == null)
+                {
+                    Debug.Log(string.Format("[BDAScoreService] Unmatched player {0}", playerNamePart));
+                    Debug.Log("DEBUG players were " + string.Join(", ", client.players.Values));
+                    continue;
+                }
+
+                var vesselNamePart = playerName.Substring(separatorIndex + 1);
+                VesselModel vessel = client.vessels.Values.FirstOrDefault(e => e.player_id == player.id && e.name == vesselNamePart);
                 if (vessel == null)
                 {
                     Debug.Log(string.Format("[BDAScoreService] Unmatched vessel for playerId {0}", player.id));
                     Debug.Log("DEBUG vessels were " + string.Join(", ", client.vessels.Values.Select(p => p.id)));
                     continue;
                 }
+
                 RecordModel record = new RecordModel();
                 record.vessel_id = vessel.id;
                 record.competition_id = int.Parse(hash);
                 record.heat_id = heat.id;
-                record.hits_out = ComputeTotalHitsOut(player.name);
-                record.hits_in = ComputeTotalHitsIn(player.name);
-                record.dmg_out = ComputeTotalDamageOut(player.name);
-                record.dmg_in = ComputeTotalDamageIn(player.name);
-                record.ram_parts_out = ComputeTotalRammedPartsOut(player.name);
-                record.ram_parts_in = ComputeTotalRammedPartsIn(player.name);
-                record.mis_parts_out = ComputeTotalMissilePartsOut(player.name);
-                record.mis_parts_in = ComputeTotalMissilePartsIn(player.name);
-                record.mis_dmg_out = ComputeTotalMissileDamageOut(player.name);
-                record.mis_dmg_in = ComputeTotalMissileDamageIn(player.name);
-                record.kills = ComputeTotalKills(player.name);
-                record.deaths = ComputeTotalDeaths(player.name);
-                record.assists = ComputeTotalAssists(player.name);
-                if (longestHitDistance.ContainsKey(player.name))
+                record.hits_out = ComputeTotalHitsOut(playerName);
+                record.hits_in = ComputeTotalHitsIn(playerName);
+                record.dmg_out = ComputeTotalDamageOut(playerName);
+                record.dmg_in = ComputeTotalDamageIn(playerName);
+                record.ram_parts_out = ComputeTotalRammedPartsOut(playerName);
+                record.ram_parts_in = ComputeTotalRammedPartsIn(playerName);
+                record.mis_parts_out = ComputeTotalMissilePartsOut(playerName);
+                record.mis_parts_in = ComputeTotalMissilePartsIn(playerName);
+                record.mis_dmg_out = ComputeTotalMissileDamageOut(playerName);
+                record.mis_dmg_in = ComputeTotalMissileDamageIn(playerName);
+                record.wins = ComputeWins(playerName);
+                record.kills = ComputeTotalKills(playerName);
+                record.deaths = ComputeTotalDeaths(playerName);
+                record.assists = ComputeTotalAssists(playerName);
+                record.death_order = ComputeDeathOrder(playerName);
+                record.death_time = ComputeDeathTime(playerName);
+                if (longestHitDistance.ContainsKey(playerName) && longestHitWeapon.ContainsKey(playerName))
                 {
-                    record.distance = (float)longestHitDistance[player.name];
-                    record.weapon = longestHitWeapon[player.name];
+                    record.distance = (float)longestHitDistance[playerName];
+                    record.weapon = longestHitWeapon[playerName];
                 }
                 results.Add(record);
             }
@@ -503,6 +518,41 @@ namespace BDArmory.Competition
                 result = assists[playerName];
             }
             return result;
+        }
+
+        private int ComputeWins(string playerName)
+        {
+            var stillAlive = !deaths.ContainsKey(playerName);
+            var livingCount = activePlayers.Count - deaths.Count;
+            return (stillAlive && livingCount == 1) ? 1 : 0;
+        }
+
+        private float ComputeDeathOrder(string playerName)
+        {
+            var deathOrder = BDACompetitionMode.Instance.DeathOrder;
+            if (deathOrder.ContainsKey(playerName))
+            {
+                var orderData = deathOrder[playerName];
+                return (float)orderData.Item1 / (float)activePlayers.Count;
+            }
+            else
+            {
+                return 1.0f;
+            }
+        }
+
+        private float ComputeDeathTime(string playerName)
+        {
+            var deathOrder = BDACompetitionMode.Instance.DeathOrder;
+            if (deathOrder.ContainsKey(playerName))
+            {
+                var orderData = deathOrder[playerName];
+                return (float)orderData.Item2;
+            }
+            else
+            {
+                return BDArmorySettings.COMPETITION_DURATION * 60.0f;
+            }
         }
 
         public void TrackDamage(string attacker, string target, double damage)

@@ -1,4 +1,6 @@
-﻿using BDArmory.Core.Extension;
+﻿using System;
+using BDArmory.Core.Extension;
+using BDArmory.Core.Utils;
 using UnityEngine;
 
 namespace BDArmory.Core.Module
@@ -12,7 +14,7 @@ namespace BDArmory.Core.Module
         public float Hitpoints;
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_ArmorThickness"),//Armor Thickness
-        UI_FloatRange(minValue = 1f, maxValue = 500f, stepIncrement = 5f, scene = UI_Scene.All)]
+        UI_FloatRange(minValue = 0f, maxValue = 1500f, stepIncrement = 5f, scene = UI_Scene.All)]
         public float Armor = 10f;
 
         [KSPField(isPersistant = true)]
@@ -60,8 +62,32 @@ namespace BDArmory.Core.Module
                 {
                     _updateHitpoints = true;
                 }
-                else
-                    enabled = false;
+                else // Loading of the part from a craft in flight mode
+                {
+                    if (BDArmorySettings.RESET_HP && part.vessel != null) // Reset Max HP
+                    {
+                        var maxHPString = ConfigNodeUtils.FindPartModuleConfigNodeValue(part.partInfo.partConfig, "HitpointTracker", "maxHitPoints");
+                        if (!string.IsNullOrEmpty(maxHPString)) // Use the default value from the MM patch.
+                        {
+                            try
+                            {
+                                maxHitPoints = float.Parse(maxHPString);
+                                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitPointTracker]: setting maxHitPoints of " + part + " on " + part.vessel.vesselName + " to " + maxHitPoints);
+                                _updateHitpoints = true;
+                            }
+                            catch (Exception e)
+                            {
+                                Debug.LogError("[HitPointTracker]: Failed to parse maxHitPoints configNode: " + e.Message);
+                            }
+                        }
+                        else // Use the stock default value.
+                            maxHitPoints = 0f;
+                    }
+                    else // Don't.
+                    {
+                        enabled = false;
+                    }
+                }
             }
         }
 
@@ -86,12 +112,12 @@ namespace BDArmory.Core.Module
 
                 //Add Armor
                 UI_FloatRange armorFieldFlight = (UI_FloatRange)Fields["Armor"].uiControlFlight;
-                armorFieldFlight.maxValue = 500f;
-                armorFieldFlight.minValue = 10;
+                armorFieldFlight.maxValue = 1500f;
+                armorFieldFlight.minValue = 0f;
 
                 UI_FloatRange armorFieldEditor = (UI_FloatRange)Fields["Armor"].uiControlEditor;
-                armorFieldEditor.maxValue = 500f;
-                armorFieldEditor.minValue = 10f;
+                armorFieldEditor.maxValue = 1500f;
+                armorFieldEditor.minValue = 0f;
                 part.RefreshAssociatedWindows();
 
                 if (!ArmorSet) overrideArmorSetFromConfig();
@@ -171,7 +197,7 @@ namespace BDArmory.Core.Module
                 var structuralMass = density * structuralVolume;
                 // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: Hitpoint Calc" + part.name + " | structuralMass : " + structuralMass);
                 //3. final calculations
-                hitpoints = structuralMass * hitpointMultiplier * 0.33f;
+                hitpoints = structuralMass * hitpointMultiplier * 0.333f;
 
                 if (hitpoints > 10 * part.mass * 1000f || hitpoints < 0.1f * part.mass * 1000f)
                 {
@@ -180,9 +206,16 @@ namespace BDArmory.Core.Module
                 }
 
                 // SuicidalInsanity B9 patch
-                if (part.name.Contains("B9.Aero.Wing.Procedural")) 
+                if (part.name.Contains("B9.Aero.Wing.Procedural"))
                 {
-                    hitpoints = (part.mass * 1000f) * 3.5f; // since wings are basically a 2d object, lets have mass be our scalar - afterall, 2x the mass will ~= 2x the surfce area
+                    if (part.Modules.Contains("FARWingAerodynamicModel") || part.Modules.Contains("FARControllableSurface"))
+                    {
+                        hitpoints = (part.mass * 1000f) * 3.5f * hitpointMultiplier * 0.333f; //To account for FAR's Strength-mass Scalar.
+                    }
+                    else
+                    {
+                        hitpoints = (part.mass * 1000f) * 7f * hitpointMultiplier * 0.333f; // since wings are basically a 2d object, lets have mass be our scalar - afterall, 2x the mass will ~= 2x the surfce area
+                    }
                 }
 
                 hitpoints = Mathf.Round(hitpoints / HpRounding) * HpRounding;
@@ -242,7 +275,7 @@ namespace BDArmory.Core.Module
         {
             if (part.name == "Weapon Manager" || part.name == "BDModulePilotAI") return;
 
-            partdamage = Mathf.Max(partdamage, 0.01f) * -1;
+            partdamage = Mathf.Max(partdamage, 0f) * -1;
             Hitpoints += partdamage;
 
             if (Hitpoints <= 0)
@@ -253,7 +286,7 @@ namespace BDArmory.Core.Module
 
         public void AddDamageToKerbal(KerbalEVA kerbal, float damage)
         {
-            damage = Mathf.Max(damage, 0.01f) * -1;
+            damage = Mathf.Max(damage, 0f) * -1;
             Hitpoints += damage;
 
             if (Hitpoints <= 0)

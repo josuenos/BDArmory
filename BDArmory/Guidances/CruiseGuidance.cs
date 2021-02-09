@@ -59,7 +59,7 @@ namespace BDArmory.Guidances
 
         public GuidanceState GuidanceState { get; set; }
 
-        public Vector3 GetDirection(MissileBase missile, Vector3 targetPosition)
+        public Vector3 GetDirection(MissileBase missile, Vector3 targetPosition, Vector3 targetVelocity)
         {
             //set up
             if (_missile.TimeIndex < 1)
@@ -135,7 +135,7 @@ namespace BDArmory.Guidances
                         if (_missile.vessel.InVacuum())
                             return _missile.vessel.CoM + _missile.vessel.Velocity() * 10;
 
-                    return MissileGuidance.GetAirToGroundTarget(targetPosition, _missile.vessel, 1.85f);
+                    return MissileGuidance.GetAirToGroundTarget(targetPosition, targetVelocity, _missile.vessel, 1.85f);
             }
 
             return _missile.vessel.CoM + _missile.vessel.Velocity() * 10;

@@ -97,6 +97,8 @@ namespace BDArmory.Bullets
 
         public Rigidbody rb;
 
+        Ray bulletRay;
+
         #endregion Declarations
 
         private Vector3[] linePositions = new Vector3[2];
@@ -183,6 +185,11 @@ namespace BDArmory.Bullets
             {
                 sourceVesselName = null;
             }
+        }
+
+        void OnDisable()
+        {
+            sourceVessel = null;
         }
 
         void OnDestroy()
@@ -287,8 +294,8 @@ namespace BDArmory.Bullets
                 penTicker = 0;
 
                 float dist = currentVelocity.magnitude * Time.fixedDeltaTime;
-                Ray ray = new Ray(currPosition, currentVelocity);
-                var hits = Physics.RaycastAll(ray, dist, 9076737);
+                bulletRay = new Ray(currPosition, currentVelocity);
+                var hits = Physics.RaycastAll(bulletRay, dist, 9076737);
                 if (hits.Length > 0)
                 {
                     var orderedHits = hits.OrderBy(x => x.distance);
@@ -333,8 +340,7 @@ namespace BDArmory.Bullets
                             if (hitPart?.rb != null)
                                 // using relative velocity vector instead of just bullet velocity
                                 // since KSP vessels might move faster than bullets
-                                impactVector = (currentVelocity * dragVelocityFactor
-                                    - (hitPart.rb.velocity + Krakensbane.GetFrameVelocityV3f()));
+                                impactVector = currentVelocity * dragVelocityFactor - (hitPart.rb.velocity + Krakensbane.GetFrameVelocityV3f());
 
                             float hitAngle = Vector3.Angle(impactVector, -hit.normal);
 
@@ -343,7 +349,7 @@ namespace BDArmory.Bullets
                                 CheckBuildingHit(hit);
                                 if (!RicochetScenery(hitAngle))
                                 {
-                                    ExplosiveDetonation(hitPart, hit, ray);
+                                    ExplosiveDetonation(hitPart, hit, bulletRay);
                                     KillBullet();
                                 }
                                 else
@@ -387,7 +393,7 @@ namespace BDArmory.Bullets
                                     //move bullet
                                     transform.position += (currentVelocity * Time.fixedDeltaTime) / 3;
 
-                                    ExplosiveDetonation(hitPart, hit, ray);
+                                    ExplosiveDetonation(hitPart, hit, bulletRay);
                                     hasDetonated = true;
                                     KillBullet();
                                 }
@@ -412,7 +418,7 @@ namespace BDArmory.Bullets
 
                                 hasPenetrated = false;
                                 ApplyDamage(hitPart, hit, 1, penetrationFactor);
-                                ExplosiveDetonation(hitPart, hit, ray);
+                                ExplosiveDetonation(hitPart, hit, bulletRay);
                                 hasDetonated = true;
                                 KillBullet();
                             }
@@ -427,7 +433,7 @@ namespace BDArmory.Bullets
                             if ((penTicker >= 2 && explosive) || (hasRichocheted && explosive))
                             {
                                 //detonate
-                                ExplosiveDetonation(hitPart, hit, ray, airDetonation);
+                                ExplosiveDetonation(hitPart, hit, bulletRay, airDetonation);
                                 return;
                             }
 
@@ -531,20 +537,25 @@ namespace BDArmory.Bullets
 
             // Apply damage
             float damage;
-            if (explosive)
+            //if (explosive)
+            //{
+            //    damage = hitPart.AddBallisticDamage(bulletMass - tntMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity, hit, sourceVessel.GetName());
+            //} //why? The mass of HE filler isn't going to have disapeared before the bullet hits something, and if it has, it means there isn't a bullet left to hit things
+            //else
+            //{
+            damage = hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
+            //}
+            if (BDArmorySettings.BATTLEDAMAGE)
             {
-                damage = hitPart.AddBallisticDamage(bulletMass - tntMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
+                Misc.BattleDamageHandler.CheckDamageFX(hitPart, caliber, penetrationfactor, explosive, sourceVessel.GetName(), hit);
             }
-            else
-            {
-                damage = hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
-            }
+            // Debug.Log("DEBUG Ballistic damage to " + hitPart + ": " + damage + ", calibre: " + caliber + ", multiplier: " + multiplier + ", pen: " + penetrationfactor);
 
             // Update scoring structures
             var aName = this.sourceVessel.GetName();
             var tName = hitPart.vessel.GetName();
 
-            if (aName != tName && BDACompetitionMode.Instance.Scores.ContainsKey(aName) && BDACompetitionMode.Instance.Scores.ContainsKey(tName))
+            if (aName != null && tName != null && aName != tName && BDACompetitionMode.Instance.Scores.ContainsKey(aName) && BDACompetitionMode.Instance.Scores.ContainsKey(tName))
             {
                 //Debug.Log("[BDArmory]: Weapon from " + aName + " damaged " + tName);
 

@@ -12,7 +12,7 @@ namespace BDArmory.Guidances
         private double _originalDistance = float.MinValue;
 
 
-        public Vector3 GetDirection(MissileBase missile, Vector3 targetPosition)
+        public Vector3 GetDirection(MissileBase missile, Vector3 targetPosition, Vector3 targetVelocity)
         {
             //set up
             if (_originalDistance == float.MinValue)
@@ -82,7 +82,7 @@ namespace BDArmory.Guidances
             {
                 missile.debugString.Append($"Descending");
                 missile.debugString.Append(Environment.NewLine);
-                agmTarget = MissileGuidance.GetAirToGroundTarget(targetPosition, missile.vessel, 1.85f);
+                agmTarget = MissileGuidance.GetAirToGroundTarget(targetPosition, targetVelocity, missile.vessel, 1.85f);
 
                 missile.Throttle = Mathf.Clamp((float)(missile.vessel.atmDensity * 10f), 0.01f, 1f);
             }

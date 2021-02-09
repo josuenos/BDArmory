@@ -15,9 +15,8 @@ namespace BDArmory.Core.Extension
             if (BDArmorySettings.PAINTBALL_MODE) return; // Don't add damage when paintball mode is enabled
 
             //////////////////////////////////////////////////////////
-            // Basic Add Hitpoints for compatibility (only used by lasers)
+            // Basic Add Hitpoints for compatibility (only used by lasers & fires)
             //////////////////////////////////////////////////////////
-            damage = (float)Math.Round(damage, 2);
 
             if (p.GetComponent<KerbalEVA>() != null)
             {
@@ -39,7 +38,6 @@ namespace BDArmory.Core.Extension
             if (BDArmorySettings.PAINTBALL_MODE) return 0f; // Don't add damage when paintball mode is enabled
 
             float damage_ = 0f;
-
             //////////////////////////////////////////////////////////
             // Explosive Hitpoints
             //////////////////////////////////////////////////////////
@@ -50,7 +48,7 @@ namespace BDArmory.Core.Extension
                     damage_ = (BDArmorySettings.DMG_MULTIPLIER / 100) * BDArmorySettings.EXP_DMG_MOD_MISSILE * explosiveDamage;
                     break;
                 default:
-                    damage_ = (BDArmorySettings.DMG_MULTIPLIER / 100) * BDArmorySettings.EXP_DMG_MOD_BALLISTIC * explosiveDamage;
+                    damage_ = (BDArmorySettings.DMG_MULTIPLIER / 100) * BDArmorySettings.EXP_DMG_MOD_BALLISTIC_NEW * explosiveDamage;
                     break;
             }
 
@@ -114,7 +112,6 @@ namespace BDArmory.Core.Extension
 
                 damage_ = damageReduction;
             }
-
             //////////////////////////////////////////////////////////
             //   Apply Hitpoints
             //////////////////////////////////////////////////////////
@@ -142,13 +139,8 @@ namespace BDArmory.Core.Extension
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
                 Debug.Log("[BDArmory]: mass: " + mass + " caliber: " + caliber + " multiplier: " + multiplier + " velocity: " + impactVelocity + " penetrationfactor: " + penetrationfactor);
-                Debug.Log("[BDArmory]: Ballistic Hitpoints Applied : " + Math.Round(damage_, 2));
+                Debug.Log("[BDArmory]: Ballistic Hitpoints Applied : " + damage_);
             }
-
-            if (BDArmorySettings.BATTLEDAMAGE && !BDArmorySettings.PAINTBALL_MODE)
-		{
-			CheckDamageFX(p, caliber);
-		}
         }
 
         /// <summary>
@@ -162,12 +154,7 @@ namespace BDArmory.Core.Extension
 
             Dependencies.Get<DamageService>().AddDamageToPart_svc(p, damage);
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: Explosive Hitpoints Applied to " + p.name + ": " + Math.Round(damage, 2));
-
-            if (BDArmorySettings.BATTLEDAMAGE && !BDArmorySettings.PAINTBALL_MODE)
-		{
-			CheckDamageFX(p, 50);
-		}
+                Debug.Log("[BDArmory]: Explosive Hitpoints Applied to " + p.name + ": " + damage);
         }
 
         /// <summary>
@@ -181,7 +168,7 @@ namespace BDArmory.Core.Extension
 
             Dependencies.Get<DamageService>().AddDamageToKerbal_svc(kerbal, damage);
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: Hitpoints Applied to " + kerbal.name + ": " + Math.Round(damage, 2));
+                Debug.Log("[BDArmory]: Hitpoints Applied to " + kerbal.name + ": " + damage);
         }
 
         public static void AddForceToPart(Rigidbody rb, Vector3 force, Vector3 position, ForceMode mode)
@@ -191,7 +178,7 @@ namespace BDArmory.Core.Extension
             //////////////////////////////////////////////////////////
 
             rb.AddForceAtPosition(force, position, mode);
-            Debug.Log("[BDArmory]: Force Applied : " + Math.Round(force.magnitude, 2));
+            Debug.Log("[BDArmory]: Force Applied : " + force.magnitude);
         }
 
         public static void Destroy(this Part p)
@@ -251,7 +238,7 @@ namespace BDArmory.Core.Extension
             return armor_ / maxArmor_;
         }
 
-        public static float GetDamagePercentatge(this Part p)
+        public static float GetDamagePercentage(this Part p)
         {
             if (p == null) return 0;
 
@@ -370,6 +357,12 @@ namespace BDArmory.Core.Extension
                         case "LiquidFuel":
                             if (resources.Current.amount > 1d) hasFuel = true;
                             break;
+                        case "Oxidizer":
+                            if (resources.Current.amount > 1d) hasFuel = true;
+                            break;
+                        case "Monopropellant":
+                            if (resources.Current.amount > 1d) hasFuel = true;
+                            break;
                     }
                 }
             return hasFuel;
@@ -417,9 +410,9 @@ namespace BDArmory.Core.Extension
 
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
                         {
-                            Debug.Log("[BDArmory]: Damage Before Reduction : " + Math.Round(damage, 2) / 100);
-                            Debug.Log("[BDArmory]: Damage Reduction : " + Math.Round(_damageReduction, 2) / 100);
-                            Debug.Log("[BDArmory]: Damage After Armor : " + Math.Round(damage *= (_damageReduction / 100f)));
+                            Debug.Log("[BDArmory]: Damage Before Reduction : " + damage / 100);
+                            Debug.Log("[BDArmory]: Damage Reduction : " + _damageReduction / 100);
+                            Debug.Log("[BDArmory]: Damage After Armor : " + (damage *= (_damageReduction / 100f)));
                         }
 
                         damage *= (_damageReduction / 100f);
@@ -429,92 +422,22 @@ namespace BDArmory.Core.Extension
 
             return damage;
         }
-
-        public static void CheckDamageFX(Part part, float caliber)
-		{
-			//what can get damaged? engines, wings, SAS, cockpits (past a certain dmg%, kill kerbals?), weapons(would be far easier to just have these have low hp), radars
-
-            if ((part.GetComponent<ModuleEngines>() != null || part.GetComponent<ModuleEnginesFX>() != null) && part.GetDamagePercentatge() < 0.95f) //first hit's free
-			{
-				ModuleEngines engine;
-				engine = part.GetComponent<ModuleEngines>();
-				if (part.GetDamagePercentatge() >= 0.50f)
-				{
-					if (engine.thrustPercentage > 0)
-					{
-						//engine.maxThrust -= ((engine.maxThrust * 0.125f) / 100); // doesn't seem to adjust thrust; investigate
-						engine.thrustPercentage -= ((engine.maxThrust * 0.125f) / 100); //workaround hack
-						Mathf.Clamp(engine.thrustPercentage, 0, 1);
-					}
-				}
-				if (part.GetDamagePercentatge() < 0.50f)
-				{
-					if (engine.EngineIgnited)
-					{
-						engine.PlayFlameoutFX(true);
-						engine.Shutdown(); //kill a badly damaged engine and don't allow restart
-						engine.allowRestart = false;
-					}
-				}
-			}
-			if (part.GetComponent<ModuleLiftingSurface>() != null && part.GetDamagePercentatge() > 0.125f) //ensure wings can still generate some lift
-			{
-				ModuleLiftingSurface wing;
-				wing = part.GetComponent<ModuleLiftingSurface>();
-				if (wing.deflectionLiftCoeff > (caliber * caliber / 20000))//2x4m wing board = 2 Lift, 0.25 Lift/m2. 20mm round = 20*20=400/20000= 0.02 Lift reduced per hit
-				{
-					wing.deflectionLiftCoeff -= (caliber * caliber / 20000); //.50 would be .008 Lift, and 30mm would be .045 Lift per hit
-				}
-			}
-			if (part.GetComponent<ModuleControlSurface>() != null && part.GetDamagePercentatge() > 0.125f)
-			{
-				ModuleControlSurface aileron;
-				aileron = part.GetComponent<ModuleControlSurface>();
-				aileron.deflectionLiftCoeff -= (caliber * caliber / 20000);
-				if (part.GetDamagePercentatge() < 0.75f)
-				{
-					if (aileron.ctrlSurfaceRange >= 0.5)
-					{
-						aileron.ctrlSurfaceRange -= 0.5f;
-					}
-				}
-			}
-			if (part.GetComponent<ModuleReactionWheel>() != null && part.GetDamagePercentatge() < 0.75f)
-            {
-				ModuleReactionWheel SAS;
-				SAS = part.GetComponent<ModuleReactionWheel>();
-				if (SAS.PitchTorque > 1)
-				{
-					SAS.PitchTorque -= (1 - part.GetDamagePercentatge());
-				}
-				if (SAS.YawTorque > 1)
-				{
-					SAS.YawTorque -= (1 - part.GetDamagePercentatge());
-				}
-				if (SAS.RollTorque > 1)
-				{
-					SAS.RollTorque -= (1 - part.GetDamagePercentatge());
-				}
-			}
-			if (part.protoModuleCrew.Count > 0 && part.GetDamagePercentatge() < 0.50f) //really, the way to go would be via PooledBullet and have it check when calculating penetration depth
-			{                                                                          //if A) the bullet goes through, and B) part's kerballed
-				ProtoCrewMember crewMember = part.protoModuleCrew.FirstOrDefault(x => x != null);
-				if (crewMember != null)
-				{
-					crewMember.UnregisterExperienceTraits(part);
-					crewMember.Die();
-					part.RemoveCrewmember(crewMember); // sadly, I wasn't able to get the K.I.A. portrait working
-					//Vessel.CrewWasModified(part.vessel);
-					Debug.Log(crewMember.name + " was killed by damage to cabin!");
-					if (HighLogic.CurrentGame.Parameters.Difficulty.MissingCrewsRespawn)
-					{
-						crewMember.StartRespawnPeriod();
-					}
-					//ScreenMessages.PostScreenMessage(crewMember.name + " killed by damage to " + part.vessel.name + part.partName + ".", 5.0f, ScreenMessageStyle.UPPER_LEFT);
-				}
-			}
-		}
-
+        public static bool isBattery(this Part part)
+        {
+            bool hasEC = false;
+            using (IEnumerator<PartResource> resources = part.Resources.GetEnumerator())
+                while (resources.MoveNext())
+                {
+                    if (resources.Current == null) continue;
+                    switch (resources.Current.resourceName)
+                    {
+                        case "ElectricCharge":
+                            if (resources.Current.amount > 1d) hasEC = true; //discount trace EC in alternators
+                            break;
+                    }
+                }
+            return hasEC;
+        }
         public static Vector3 GetBoundsSize(Part part)
         {
             return PartGeometryUtil.MergeBounds(part.GetRendererBounds(), part.transform).size;

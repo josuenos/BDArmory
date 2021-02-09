@@ -24,10 +24,10 @@ namespace BDArmory.Modules
         //[KSPField(guiActive = false, guiActiveEditor = false, guiName = "")]
         public string guiTitle = "WingCommander:";
 
-        [KSPField(isPersistant = false, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_WingCommander_Guiname1"), UI_FloatRange(minValue = 20f, maxValue = 200f, stepIncrement = 1, scene = UI_Scene.Editor)]//Formation Spread
+        [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_WingCommander_Guiname1"), UI_FloatRange(minValue = 20f, maxValue = 200f, stepIncrement = 1, scene = UI_Scene.Editor)]//Formation Spread
         public float spread = 100;
 
-        [KSPField(isPersistant = false, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_WingCommander_Guiname2"), UI_FloatRange(minValue = 0f, maxValue = 100f, stepIncrement = 1, scene = UI_Scene.Editor)]//Formation Lag
+        [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_WingCommander_Guiname2"), UI_FloatRange(minValue = 0f, maxValue = 100f, stepIncrement = 1, scene = UI_Scene.Editor)]//Formation Lag
         public float lag = 7;
 
         [KSPField(isPersistant = true)] public bool commandSelf;
@@ -125,36 +125,35 @@ namespace BDArmory.Modules
         {
             if (!weaponManager) return;
             friendlies = new List<IBDAIControl>();
-            List<Vessel>.Enumerator vs = BDATargetManager.LoadedVessels.GetEnumerator();
-            while (vs.MoveNext())
-            {
-                if (vs.Current == null) continue;
-                if (!vs.Current.loaded || vs.Current == vessel) continue;
-
-                IBDAIControl pilot = null;
-                MissileFire wm = null;
-                List<IBDAIControl>.Enumerator ps = vs.Current.FindPartModulesImplementing<IBDAIControl>().GetEnumerator();
-                while (ps.MoveNext())
+            using (var vs = BDATargetManager.LoadedVessels.GetEnumerator())
+                while (vs.MoveNext())
                 {
-                    if (ps.Current == null) continue;
-                    pilot = ps.Current;
-                    break;
-                }
-                ps.Dispose();
+                    if (vs.Current == null) continue;
+                    if (!vs.Current.loaded || vs.Current == vessel) continue;
 
-                if (pilot == null) continue;
-                List<MissileFire>.Enumerator ws = vs.Current.FindPartModulesImplementing<MissileFire>().GetEnumerator();
-                while (ws.MoveNext())
-                {
-                    // TODO:  JDK:  note that this assigns the last module found.  Is that what we want?
-                    wm = ws.Current;
-                }
-                ws.Dispose();
+                    IBDAIControl pilot = null;
+                    MissileFire wm = null;
+                    List<IBDAIControl>.Enumerator ps = vs.Current.FindPartModulesImplementing<IBDAIControl>().GetEnumerator();
+                    while (ps.MoveNext())
+                    {
+                        if (ps.Current == null) continue;
+                        pilot = ps.Current;
+                        break;
+                    }
+                    ps.Dispose();
 
-                if (!wm || wm.Team != weaponManager.Team) continue;
-                friendlies.Add(pilot);
-            }
-            vs.Dispose();
+                    if (pilot == null) continue;
+                    List<MissileFire>.Enumerator ws = vs.Current.FindPartModulesImplementing<MissileFire>().GetEnumerator();
+                    while (ws.MoveNext())
+                    {
+                        // TODO:  JDK:  note that this assigns the last module found.  Is that what we want?
+                        wm = ws.Current;
+                    }
+                    ws.Dispose();
+
+                    if (!wm || wm.Team != weaponManager.Team) continue;
+                    friendlies.Add(pilot);
+                }
 
             //TEMPORARY
             wingmen = new List<IBDAIControl>();
@@ -217,23 +216,22 @@ namespace BDArmory.Modules
             IEnumerator<string> wingIDs = savedWingmen.Split(new char[] { ',' }).AsEnumerable().GetEnumerator();
             while (wingIDs.MoveNext())
             {
-                List<Vessel>.Enumerator vs = BDATargetManager.LoadedVessels.GetEnumerator();
-                while (vs.MoveNext())
-                {
-                    if (vs.Current == null) continue;
-                    if (!vs.Current.loaded) continue;
-
-                    if (vs.Current.id.ToString() != wingIDs.Current) continue;
-                    List<IBDAIControl>.Enumerator pilots = vs.Current.FindPartModulesImplementing<IBDAIControl>().GetEnumerator();
-                    while (pilots.MoveNext())
+                using (var vs = BDATargetManager.LoadedVessels.GetEnumerator())
+                    while (vs.MoveNext())
                     {
-                        if (pilots.Current == null) continue;
-                        wingmen.Add(pilots.Current);
-                        break;
+                        if (vs.Current == null) continue;
+                        if (!vs.Current.loaded) continue;
+
+                        if (vs.Current.id.ToString() != wingIDs.Current) continue;
+                        List<IBDAIControl>.Enumerator pilots = vs.Current.FindPartModulesImplementing<IBDAIControl>().GetEnumerator();
+                        while (pilots.MoveNext())
+                        {
+                            if (pilots.Current == null) continue;
+                            wingmen.Add(pilots.Current);
+                            break;
+                        }
+                        pilots.Dispose();
                     }
-                    pilots.Dispose();
-                }
-                vs.Dispose();
             }
             wingIDs.Dispose();
         }
@@ -461,14 +459,13 @@ namespace BDArmory.Modules
         {
             RefreshFriendlies();
             int i = 0;
-            List<IBDAIControl>.Enumerator wingman = friendlies.GetEnumerator();
-            while (wingman.MoveNext())
-            {
-                if (wingman.Current == null) continue;
-                wingman.Current.CommandFollow(this, i);
-                i++;
-            }
-            wingman.Dispose();
+            using (var wingman = friendlies.GetEnumerator())
+                while (wingman.MoveNext())
+                {
+                    if (wingman.Current == null) continue;
+                    wingman.Current.CommandFollow(this, i);
+                    i++;
+                }
         }
 
         void CommandAG(IBDAIControl wingman, int index, object ag)

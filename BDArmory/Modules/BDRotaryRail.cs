@@ -314,26 +314,25 @@ namespace BDArmory.Modules
                 rails.Add(newRail.transform);
             }
 
-            IEnumerator<Transform> mt = part.FindModelTransform("rotaryBombBay").GetComponentsInChildren<Transform>().AsEnumerable().GetEnumerator();
-            while (mt.MoveNext())
-            {
-                if (mt.Current == null) continue;
-                switch (mt.Current.name)
+            using (var mt = part.FindModelTransform("rotaryBombBay").GetComponentsInChildren<Transform>().AsEnumerable().GetEnumerator())
+                while (mt.MoveNext())
                 {
-                    case "lengthTransform":
-                        lengthTransforms.Add(mt.Current);
-                        break;
+                    if (mt.Current == null) continue;
+                    switch (mt.Current.name)
+                    {
+                        case "lengthTransform":
+                            lengthTransforms.Add(mt.Current);
+                            break;
 
-                    case "heightTransform":
-                        heightTransforms.Add(mt.Current);
-                        break;
+                        case "heightTransform":
+                            heightTransforms.Add(mt.Current);
+                            break;
 
-                    case "rotationTransform":
-                        rotationTransforms.Add(mt.Current);
-                        break;
+                        case "rotationTransform":
+                            rotationTransforms.Add(mt.Current);
+                            break;
+                    }
                 }
-            }
-            mt.Dispose();
         }
 
         public override void OnStart(StartState state)
@@ -499,27 +498,20 @@ namespace BDArmory.Modules
                 StopCoroutine(rotationRoutine);
             }
 
-            // if(railIndex == index && readyToFire) return;
-
+            nextMissile = null;
             if (missileCount > 0)
             {
-                if (railToMissileIndex.ContainsKey(index))
+                var railCount = Mathf.RoundToInt(numberOfRails);
+                for (int i = index; i < index + numberOfRails; ++i)
                 {
-                    nextMissile = missileChildren[railToMissileIndex[index]];
+                    if (railToMissileIndex.ContainsKey(index % railCount) && (nextMissile = missileChildren[railToMissileIndex[index % railCount]]) != null)
+                    {
+                        rotationRoutine = StartCoroutine(RotateToIndexRoutine(index, instant));
+                        return;
+                    }
                 }
+                Debug.LogError("[BDRotaryRail]: No missiles found, but missile count is non-zero.");
             }
-            else
-            {
-                nextMissile = null;
-            }
-
-            if (!nextMissile && missileCount > 0)
-            {
-                RotateToIndex(Mathf.RoundToInt(Mathf.Repeat(index + 1, numberOfRails)), instant);
-                return;
-            }
-
-            rotationRoutine = StartCoroutine(RotateToIndexRoutine(index, instant));
         }
 
         Coroutine rotationRoutine;

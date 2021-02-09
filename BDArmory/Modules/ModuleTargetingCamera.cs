@@ -312,7 +312,7 @@ namespace BDArmory.Modules
                 //GUI setup
                 if (!camRectInitialized)
                 {
-                    BDArmorySetup.WindowRectTargetingCam = new Rect(Screen.width - windowWidth, Screen.height - windowHeight, windowWidth, windowHeight);
+                    BDArmorySetup.WindowRectTargetingCam = new Rect(BDArmorySetup.WindowRectTargetingCam.x, BDArmorySetup.WindowRectTargetingCam.y, windowWidth, windowHeight);
                     camRectInitialized = true;
                 }
 
@@ -383,8 +383,11 @@ namespace BDArmory.Modules
             {
                 yield return null;
             }
-
             while (vessel.mainBody == null)
+            {
+                yield return null;
+            }
+            while (BDArmorySetup.Instance == null)
             {
                 yield return null;
             }

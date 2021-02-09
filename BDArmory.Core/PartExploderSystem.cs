@@ -23,7 +23,6 @@ namespace BDArmory.Core
 
         public void Update()
         {
-            var timeNow = Time.time;
             if (ExplodingPartsQueue.Count == 0) return;
 
             do
@@ -34,7 +33,7 @@ namespace BDArmory.Core
                 {
                     part.explode();
                 }
-            } while (Time.time - timeNow < Time.deltaTime && ExplodingPartsQueue.Count > 0);
+            } while (ExplodingPartsQueue.Count > 0);
         }
     }
 }
