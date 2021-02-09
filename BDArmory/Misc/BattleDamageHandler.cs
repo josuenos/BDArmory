@@ -334,7 +334,7 @@ namespace BDArmory.Misc
                             crewMember.UnregisterExperienceTraits(part);
                             //crewMember.outDueToG = true; //implement temp KO to simulate wounding?
                             crewMember.Die();
-                            if (part.isKerbalEVA())
+                            if (part.FindModuleImplementing<KerbalEVA>() != null)
                             {
                                 part.Die();
                             }

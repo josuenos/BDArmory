@@ -158,7 +158,7 @@ namespace BDArmory.Modules
             this.crew = crew;
             this.crew.SetDefaultInventory(); // Reset the inventory to a chute and a jetpack.
             this.part = part;
-            if (part.isKerbalEVA())
+            if (part.FindModuleImplementing<KerbalEVA>() != null)
             {
                 this.kerbalEVA = part.GetComponent<KerbalEVA>();
                 if (kerbalEVA.IsSeated())

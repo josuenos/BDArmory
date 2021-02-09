@@ -1409,7 +1409,7 @@ namespace BDArmory.Control
             }
             if (vessel != null)
             {
-                if (vessel.parts.Count == 1 && vessel.parts[0].isKerbalEVA()) // The vessel is a kerbal on EVA. Ignore it for now.
+                if (vessel.parts.Count == 1 && vessel.parts[0].FindModuleImplementing<KerbalEVA>() != null) // The vessel is a kerbal on EVA. Ignore it for now.
                 {
                     // KerbalSafetyManager.Instance.CheckForFallingKerbals(vessel);
                     if (nonCompetitorsToRemove.Contains(vessel)) nonCompetitorsToRemove.Remove(vessel);
