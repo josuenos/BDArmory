@@ -84,6 +84,12 @@ namespace BDArmory.Modules
         public float lockedSensorFOV = 2.5f;
 
         [KSPField]
+        public FloatCurve lockedSensorFOVBias = new FloatCurve();             // weighting of targets and flares from center (0) to edge of FOV (lockedSensorFOV)
+
+        [KSPField]
+        public FloatCurve lockedSensorVelocityBias = new FloatCurve();             // weighting of targets and flares from velocity angle of prior target and new target aligned (0) to opposite (180)
+
+        [KSPField]
         public float heatThreshold = 150;
 
         [KSPField]
@@ -410,27 +416,29 @@ namespace BDArmory.Modules
             {
                 // Decide where to point seeker
                 Ray lookRay;
-                float targetHeatScore = 0;
                 if (predictedHeatTarget.exists) // We have an active target we've been seeking, or a prior target that went stale
                 {
                     lookRay = new Ray(transform.position, predictedHeatTarget.position - transform.position);
-                    targetHeatScore = predictedHeatTarget.signalStrength;
                 }
                 else if (heatTarget.exists) // We have a new active target and no prior target
                 {
                     lookRay = new Ray(transform.position, heatTarget.position + (heatTarget.velocity * Time.fixedDeltaTime) - transform.position);
-                    targetHeatScore = heatTarget.signalStrength;
                 }
                 else // No target, look straight ahead
                 {
                     lookRay = new Ray(transform.position, vessel.srf_vel_direction);
                 }
 
+                // Prevent seeker from looking past maxOffBoresight
+                float offBoresightAngle = Vector3.Angle(GetForwardTransform(), lookRay.direction);
+                if (offBoresightAngle > maxOffBoresight)
+                    lookRay = new Ray(lookRay.origin, Vector3.RotateTowards(lookRay.direction, GetForwardTransform(), (offBoresightAngle - maxOffBoresight)*Mathf.Deg2Rad, 0));
+
                 if (BDArmorySettings.DRAW_DEBUG_LINES)
                     DrawDebugLine(lookRay.origin, lookRay.origin + lookRay.direction * 10000, Color.magenta);
 
                 // Update heat target
-                heatTarget = BDATargetManager.GetHeatTarget(SourceVessel, vessel, lookRay, targetHeatScore, lockedSensorFOV / 2, heatThreshold, allAspect, (SourceVessel != null ? SourceVessel.gameObject?.GetComponent<MissileFire>() : null)); // Unity messes with fake nulls and breaks ?. operators sometimes.
+                heatTarget = BDATargetManager.GetHeatTarget(SourceVessel, vessel, lookRay, predictedHeatTarget, lockedSensorFOV / 2, heatThreshold, allAspect, lockedSensorFOVBias, lockedSensorVelocityBias, (SourceVessel != null ? SourceVessel.gameObject?.GetComponent<MissileFire>() : null)); // Unity messes with fake nulls and breaks ?. operators sometimes.
 
                 if (heatTarget.exists)
                 {
@@ -458,6 +466,7 @@ namespace BDArmory.Modules
                     float currentFactor = (1400 * 1400) / Mathf.Clamp((predictedHeatTarget.position - transform.position).sqrMagnitude, 90000, 36000000);
                     Vector3 currVel = (float)vessel.srfSpeed * vessel.Velocity().normalized;
                     predictedHeatTarget.position = predictedHeatTarget.position + predictedHeatTarget.velocity * Time.fixedDeltaTime;
+                    predictedHeatTarget.velocity = predictedHeatTarget.velocity + predictedHeatTarget.acceleration * Time.fixedDeltaTime;
                     float futureFactor = (1400 * 1400) / Mathf.Clamp((predictedHeatTarget.position - (transform.position + (currVel * Time.fixedDeltaTime))).sqrMagnitude, 90000, 36000000);
                     predictedHeatTarget.signalStrength *= futureFactor / currentFactor;
                 }
@@ -811,9 +820,10 @@ namespace BDArmory.Modules
         {
             if (TargetingMode == TargetingModes.AntiRad && TargetAcquired && v == vessel)
             {
-                if ((source - VectorUtils.GetWorldSurfacePostion(targetGPSCoords, vessel.mainBody)).sqrMagnitude < Mathf.Pow(maxStaticLaunchRange / 4, 2) //drastically increase update range for anti-radiation missile to track moving targets!
-                    && Vector3.Angle(source - transform.position, GetForwardTransform()) < maxOffBoresight)
+                // Ping was close to the previous target position and is within the boresight of the missile.
+                if ((source - VectorUtils.GetWorldSurfacePostion(targetGPSCoords, vessel.mainBody)).sqrMagnitude < Mathf.Pow(maxStaticLaunchRange / 4, 2) && Vector3.Angle(source - transform.position, GetForwardTransform()) < maxOffBoresight)
                 {
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[MissileBase]: Radar ping! Adjusting target position by " + (source - VectorUtils.GetWorldSurfacePostion(targetGPSCoords, vessel.mainBody)).magnitude + " to " + TargetPosition);
                     TargetAcquired = true;
                     TargetPosition = source;
                     targetGPSCoords = VectorUtils.WorldPositionToGeoCoords(TargetPosition, vessel.mainBody);
@@ -889,7 +899,7 @@ namespace BDArmory.Modules
                 _guidance = new BallisticGuidance();
             }
 
-            return _guidance.GetDirection(this, targetPosition);
+            return _guidance.GetDirection(this, targetPosition, Vector3.zero);
         }
 
 

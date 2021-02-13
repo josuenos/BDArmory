@@ -136,7 +136,7 @@ namespace BDArmory.Control
                     {
                         engineThrust *= engines.Current.flowMultiplier;
                     }
-                    maxThrust += engineThrust * (engines.Current.thrustPercentage / 100f);
+                    maxThrust += Mathf.Max(0f, engineThrust * (engines.Current.thrustPercentage / 100f)); // Don't include negative thrust percentage drives (Danny2462 drives) as they don't contribute to the thrust.
 
                     finalThrust += engines.Current.finalThrust;
                 }

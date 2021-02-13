@@ -498,27 +498,20 @@ namespace BDArmory.Modules
                 StopCoroutine(rotationRoutine);
             }
 
-            // if(railIndex == index && readyToFire) return;
-
+            nextMissile = null;
             if (missileCount > 0)
             {
-                if (railToMissileIndex.ContainsKey(index))
+                var railCount = Mathf.RoundToInt(numberOfRails);
+                for (int i = index; i < index + numberOfRails; ++i)
                 {
-                    nextMissile = missileChildren[railToMissileIndex[index]];
+                    if (railToMissileIndex.ContainsKey(index % railCount) && (nextMissile = missileChildren[railToMissileIndex[index % railCount]]) != null)
+                    {
+                        rotationRoutine = StartCoroutine(RotateToIndexRoutine(index, instant));
+                        return;
+                    }
                 }
+                Debug.LogError("[BDRotaryRail]: No missiles found, but missile count is non-zero.");
             }
-            else
-            {
-                nextMissile = null;
-            }
-
-            if (!nextMissile && missileCount > 0)
-            {
-                RotateToIndex(Mathf.RoundToInt(Mathf.Repeat(index + 1, numberOfRails)), instant);
-                return;
-            }
-
-            rotationRoutine = StartCoroutine(RotateToIndexRoutine(index, instant));
         }
 
         Coroutine rotationRoutine;

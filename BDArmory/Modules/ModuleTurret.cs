@@ -285,8 +285,7 @@ namespace BDArmory.Modules
             {
                 return false;
             }
-            bool withinView = Vector3.Angle(targetPosition - pitchTransform.position, pitchTransform.forward) <
-                              thresholdDegrees;
+            bool withinView = Vector3.Angle(targetPosition - pitchTransform.position, pitchTransform.forward) < thresholdDegrees;
             bool withinDistance = (targetPosition - pitchTransform.position).sqrMagnitude < maxDistance * maxDistance;
             return (withinView && withinDistance);
         }

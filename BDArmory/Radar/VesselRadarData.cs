@@ -217,7 +217,7 @@ namespace BDArmory.Radar
             {
                 float width = RadarScreenSize * BDArmorySettings.RADAR_WINDOW_SCALE + BorderSize + ControlsWidth + Gap * 3;
                 float height = RadarScreenSize * BDArmorySettings.RADAR_WINDOW_SCALE + BorderSize + HeaderSize;
-                BDArmorySetup.WindowRectRadar = new Rect(Screen.width - width, Screen.height - height, width, height);
+                BDArmorySetup.WindowRectRadar = new Rect(BDArmorySetup.WindowRectRadar.x, BDArmorySetup.WindowRectRadar.y, width, height);
                 radarRectInitialized = true;
             }
         }
@@ -623,7 +623,7 @@ namespace BDArmory.Radar
 
             if (lockingRadar != null)
             {
-                return lockingRadar.TryLockTarget(radarTarget.targetData.predictedPosition);
+                return lockingRadar.TryLockTarget(radarTarget.targetData.predictedPosition, radarTarget.vessel);
             }
 
             UpdateLockedTargets();
@@ -807,6 +807,7 @@ namespace BDArmory.Radar
             if (GUI.Button(new Rect(BDArmorySetup.WindowRectRadar.width - 18, 2, 16, 16), "X", GUI.skin.button))
             {
                 DisableAllRadars();
+                BDArmorySetup.SaveConfig();
                 return;
             }
             if (!referenceTransform) return;
@@ -1357,7 +1358,7 @@ namespace BDArmory.Radar
 
         private void RefreshAvailableLinks()
         {
-            if (!HighLogic.LoadedSceneIsFlight || !weaponManager || (FlightGlobals.Vessels == null) || (!FlightGlobals.ready))
+            if (!HighLogic.LoadedSceneIsFlight || vessel == null || weaponManager == null || !FlightGlobals.ready || FlightGlobals.Vessels == null)
             {
                 return;
             }
@@ -1366,7 +1367,7 @@ namespace BDArmory.Radar
             using (var v = FlightGlobals.Vessels.GetEnumerator())
                 while (v.MoveNext())
                 {
-                    if (v.Current == null || !v.Current.loaded || vessel == null || v.Current == vessel) continue;
+                    if (v.Current == null || !v.Current.loaded || v.Current == vessel) continue;
 
                     BDTeam team = null;
                     List<MissileFire>.Enumerator mf = v.Current.FindPartModulesImplementing<MissileFire>().GetEnumerator();
@@ -1593,6 +1594,18 @@ namespace BDArmory.Radar
                 rad.UnlockTargetAt(rad.currentLockIndex);
                 UpdateLockedTargets();
             }
+        }
+
+        public bool SwitchActiveLockedTarget(Vessel vessel) // FIXME This needs to take into account the maxLocks field.
+        {
+            var vesselIndex = displayedTargets.FindIndex(t => t.vessel == vessel);
+            if (vesselIndex != -1)
+            {
+                activeLockedTargetIndex = vesselIndex;
+                UpdateLockedTargets();
+                return true;
+            }
+            return false;
         }
 
         public void UnlockAllTargetsOfRadar(ModuleRadar radar)

@@ -9,6 +9,7 @@ using BDArmory.Core.Extension;
 using BDArmory.Core.Utils;
 using BDArmory.Misc;
 using BDArmory.Modules;
+using BDArmory.UI;
 using UnityEngine;
 
 namespace BDArmory.FX
@@ -26,12 +27,16 @@ namespace BDArmory.FX
         public float Caliber { get; set; }
         public ExplosionSourceType ExplosionSource { get; set; }
         public string SourceVesselName { get; set; }
+        public string SourceWeaponName { get; set; }
         public float Power { get; set; }
         public Vector3 Position { get; set; }
         public Vector3 Direction { get; set; }
         public Part ExplosivePart { get; set; }
+        public bool isFX { get; set; }
 
         public float TimeIndex => Time.time - StartTime;
+
+        private bool disabled = true;
 
         public Queue<BlastHitEvent> ExplosionEvents = new Queue<BlastHitEvent>();
 
@@ -46,19 +51,22 @@ namespace BDArmory.FX
         private void OnEnable()
         {
             StartTime = Time.time;
-            MaxTime = (Range / ExplosionVelocity) * 3f;
-            CalculateBlastEvents();
+            disabled = false;
+            MaxTime = Mathf.Sqrt((Range / ExplosionVelocity) * 3f) * 2f; // Scale MaxTime to get a reasonable visualisation of the explosion.
+            if (!isFX)
+            {
+                CalculateBlastEvents();
+            }
             pEmitters = gameObject.GetComponentsInChildren<KSPParticleEmitter>();
-            using (var pe = pEmitters.AsEnumerable().GetEnumerator())
-                while (pe.MoveNext())
+            foreach (var pe in pEmitters)
+                if (pe != null)
                 {
-                    if (pe.Current == null) continue;
-                    EffectBehaviour.AddParticleEmitter(pe.Current);
-                    pe.Current.emit = true;
-                    if (pe.Current.maxEnergy > particlesMaxEnergy)
-                    {
-                        particlesMaxEnergy = pe.Current.maxEnergy;
-                    }
+                    if (pe.maxEnergy > particlesMaxEnergy)
+                        particlesMaxEnergy = pe.maxEnergy;
+                    pe.emit = true;
+                    var emission = pe.ps.emission;
+                    emission.enabled = true;
+                    EffectBehaviour.AddParticleEmitter(pe);
                 }
 
             LightFx = gameObject.GetComponent<Light>();
@@ -74,7 +82,10 @@ namespace BDArmory.FX
         {
             foreach (var pe in pEmitters)
                 if (pe != null)
+                {
                     pe.emit = false;
+                    EffectBehaviour.RemoveParticleEmitter(pe);
+                }
             ExplosivePart = null; // Clear the Part reference.
         }
 
@@ -124,7 +135,8 @@ namespace BDArmory.FX
                             switch (ExplosionSource)
                             {
                                 case ExplosionSourceType.Missile:
-                                    sourceVesselName = ExplosivePart.FindModuleImplementing<BDExplosivePart>()?.sourcevessel.GetName();
+                                    var explosivePart = ExplosivePart ? ExplosivePart.FindModuleImplementing<BDExplosivePart>() : null;
+                                    sourceVesselName = explosivePart ? explosivePart.sourcevessel.GetName() : SourceVesselName;
                                     break;
                                 case ExplosionSourceType.Bullet:
                                     sourceVesselName = SourceVesselName;
@@ -177,7 +189,7 @@ namespace BDArmory.FX
                 string message = "";
                 foreach (var vesselName in vesselsHitByMissiles.Keys)
                     message += (message == "" ? "" : " and ") + vesselName + " had " + vesselsHitByMissiles[vesselName];
-                message += " parts damaged due to missile strike.";
+                message += " parts damaged due to missile strike" + (SourceWeaponName != null ? " (" + SourceWeaponName + ")" : "") + (SourceVesselName != null ? " from " + SourceVesselName : "") + ".";
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
                 // Note: damage hasn't actually been applied to the parts yet, just assigned as events, so we can't know if they survived.
             }
@@ -219,6 +231,7 @@ namespace BDArmory.FX
                         Part = part,
                         TimeToImpact = distance / ExplosionVelocity,
                         HitPoint = hit.point,
+                        Hit = hit,
                         SourceVesselName = sourceVesselName
                     });
                     partsAdded.Add(part);
@@ -288,17 +301,49 @@ namespace BDArmory.FX
 
         public void Update()
         {
+            if (!gameObject.activeInHierarchy) return;
+
             if (LightFx != null) LightFx.intensity -= 12 * Time.deltaTime;
-            if (TimeIndex > 0.2f && pEmitters != null)
+
+            if (!disabled && TimeIndex > 0.3f && pEmitters != null) // 0.3s seems to be enough to always show the explosion, but 0.2s isn't for some reason.
             {
                 foreach (var pe in pEmitters)
                 {
                     if (pe == null) continue;
                     pe.emit = false;
                 }
+                disabled = true;
+            }
+        }
+
+        public void FixedUpdate()
+        {
+            if (!gameObject.activeInHierarchy) return;
+
+            //floating origin and velocity offloading corrections
+            if (!FloatingOrigin.Offset.IsZero() || !Krakensbane.GetFrameVelocity().IsZero())
+            {
+                transform.position -= FloatingOrigin.OffsetNonKrakensbane;
+            }
+            if (!isFX)
+            {
+                while (ExplosionEvents.Count > 0 && ExplosionEvents.Peek().TimeToImpact <= TimeIndex)
+                {
+                    BlastHitEvent eventToExecute = ExplosionEvents.Dequeue();
+
+                    var partBlastHitEvent = eventToExecute as PartBlastHitEvent;
+                    if (partBlastHitEvent != null)
+                    {
+                        ExecutePartBlastEvent(partBlastHitEvent);
+                    }
+                    else
+                    {
+                        ExecuteBuildingBlastEvent((BuildingBlastHitEvent)eventToExecute);
+                    }
+                }
             }
 
-            if (ExplosionEvents.Count == 0 && TimeIndex > 2f * MaxTime)
+            if (disabled && ExplosionEvents.Count == 0 && TimeIndex > MaxTime)
             {
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
                 {
@@ -307,30 +352,6 @@ namespace BDArmory.FX
 
                 gameObject.SetActive(false);
                 return;
-            }
-        }
-
-        public void FixedUpdate()
-        {
-            //floating origin and velocity offloading corrections
-            if (!FloatingOrigin.Offset.IsZero() || !Krakensbane.GetFrameVelocity().IsZero())
-            {
-                transform.position -= FloatingOrigin.OffsetNonKrakensbane;
-            }
-
-            while (ExplosionEvents.Count > 0 && ExplosionEvents.Peek().TimeToImpact <= TimeIndex)
-            {
-                BlastHitEvent eventToExecute = ExplosionEvents.Dequeue();
-
-                var partBlastHitEvent = eventToExecute as PartBlastHitEvent;
-                if (partBlastHitEvent != null)
-                {
-                    ExecutePartBlastEvent(partBlastHitEvent);
-                }
-                else
-                {
-                    ExecuteBuildingBlastEvent((BuildingBlastHitEvent)eventToExecute);
-                }
             }
         }
 
@@ -412,7 +433,10 @@ namespace BDArmory.FX
                         eventToExecute.HitPoint + part.rb.velocity * TimeIndex);
 
                     var damage = part.AddExplosiveDamage(blastInfo.Damage, Caliber, ExplosionSource);
-                    // Debug.Log("DEBUG Explosive damage to " + part + ": " + damage + ", calibre: " + Caliber + ", source: " + ExplosionSource);
+                    if (BDArmorySettings.BATTLEDAMAGE)
+                    {
+                        Misc.BattleDamageHandler.CheckDamageFX(part, 50, 0.5f, true, SourceVesselName, eventToExecute.Hit);
+                    }
 
                     // Update scoring structures
                     switch (ExplosionSource)
@@ -481,7 +505,17 @@ namespace BDArmory.FX
             if (!explosionFXPools.ContainsKey(key) || explosionFXPools[key] == null)
             {
                 var explosionFXTemplate = GameDatabase.Instance.GetModel(explModelPath);
+                if (explosionFXTemplate == null)
+                {
+                    Debug.LogError("[ExplosionFX]: " + explModelPath + " was not found, using the default explosion instead. Please fix your model.");
+                    explosionFXTemplate = GameDatabase.Instance.GetModel(ModuleWeapon.defaultExplModelPath);
+                }
                 var soundClip = GameDatabase.Instance.GetAudioClip(soundPath);
+                if (soundClip == null)
+                {
+                    Debug.LogError("[ExplosionFX]: " + soundPath + " was not found, using the default sound instead. Please fix your model.");
+                    soundClip = GameDatabase.Instance.GetAudioClip(ModuleWeapon.defaultExplSoundPath);
+                }
                 var eFx = explosionFXTemplate.AddComponent<ExplosionFx>();
                 eFx.ExSound = soundClip;
                 eFx.audioSource = explosionFXTemplate.AddComponent<AudioSource>();
@@ -492,13 +526,12 @@ namespace BDArmory.FX
                 eFx.LightFx.color = Misc.Misc.ParseColor255("255,238,184,255");
                 eFx.LightFx.intensity = 8;
                 eFx.LightFx.shadows = LightShadows.None;
-
                 explosionFXTemplate.SetActive(false);
                 explosionFXPools[key] = ObjectPool.CreateObjectPool(explosionFXTemplate, 10, true, true, 0f, false);
             }
         }
 
-        public static void CreateExplosion(Vector3 position, float tntMassEquivalent, string explModelPath, string soundPath, ExplosionSourceType explosionSourceType, float caliber = 0, Part explosivePart = null, string sourceVesselName = null, Vector3 direction = default(Vector3))
+        public static void CreateExplosion(Vector3 position, float tntMassEquivalent, string explModelPath, string soundPath, ExplosionSourceType explosionSourceType, float caliber = 0, Part explosivePart = null, string sourceVesselName = null, string sourceWeaponName = null, Vector3 direction = default(Vector3), bool isfx = false)
         {
             CreateObjectPool(explModelPath, soundPath);
 
@@ -519,10 +552,12 @@ namespace BDArmory.FX
             eFx.Position = position;
             eFx.Power = tntMassEquivalent;
             eFx.ExplosionSource = explosionSourceType;
-            eFx.SourceVesselName = sourceVesselName != null ? sourceVesselName : explosionSourceType == ExplosionSourceType.Missile ? explosivePart?.vessel.GetName() : null; // Use the sourceVesselName if specified, otherwise get the sourceVesselName from the missile if it is one.
+            eFx.SourceVesselName = sourceVesselName != null ? sourceVesselName : explosionSourceType == ExplosionSourceType.Missile ? (explosivePart != null && explosivePart.vessel != null ? explosivePart.vessel.GetName() : null) : null; // Use the sourceVesselName if specified, otherwise get the sourceVesselName from the missile if it is one.
+            eFx.SourceWeaponName = sourceWeaponName;
             eFx.Caliber = caliber;
             eFx.ExplosivePart = explosivePart;
             eFx.Direction = direction;
+            eFx.isFX = isfx;
             eFx.pEmitters = newExplosion.GetComponentsInChildren<KSPParticleEmitter>();
             eFx.audioSource = newExplosion.GetComponent<AudioSource>();
             if (tntMassEquivalent <= 5)
@@ -532,11 +567,6 @@ namespace BDArmory.FX
                 eFx.audioSource.priority = 9999;
             }
             newExplosion.SetActive(true);
-            foreach (var pe in eFx.pEmitters)
-            {
-                if (pe == null) continue;
-                pe.emit = true;
-            }
         }
 
         public static void AddForceAtPosition(Rigidbody rb, Vector3 force, Vector3 position)
@@ -564,6 +594,7 @@ namespace BDArmory.FX
     {
         public Part Part { get; set; }
         public Vector3 HitPoint { get; set; }
+        public RaycastHit Hit { get; set; }
         public float NegativeForce { get; set; }
         public string SourceVesselName { get; set; }
     }

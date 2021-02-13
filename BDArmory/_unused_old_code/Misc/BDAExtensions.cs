@@ -9,8 +9,6 @@ namespace BDArmory.Misc
 {
 	public static class BDAExtensions
 	{
-
-
 		public static IEnumerable<AvailablePart> BDAParts(this List<AvailablePart> parts)
 		{
 			return (from avPart in parts.Where(p => p.partPrefab)

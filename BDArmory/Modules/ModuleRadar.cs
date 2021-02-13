@@ -683,7 +683,7 @@ namespace BDArmory.Modules
             }
         }
 
-        public bool TryLockTarget(Vector3 position)
+        public bool TryLockTarget(Vector3 position, Vessel targetVessel = null)
         {
             if (!canLock)
             {
@@ -691,7 +691,12 @@ namespace BDArmory.Modules
             }
 
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: Trying to radar lock target with (" + radarName + ")");
+            {
+                if (targetVessel == null)
+                    Debug.Log("[BDArmory]: Trying to radar lock target with (" + radarName + ")");
+                else
+                    Debug.Log("[BDArmory]: Trying to radar lock target " + targetVessel.vesselName + " with (" + radarName + ")");
+            }
 
             if (currentLocks == maxLocks)
             {
@@ -714,6 +719,10 @@ namespace BDArmory.Modules
             {
                 if (attemptedLocks[i].exists && (attemptedLocks[i].predictedPosition - position).sqrMagnitude < 40 * 40)
                 {
+                    // If locked onto a vessel that was not our target, return false
+                    if ((attemptedLocks[i].vessel != null) && (targetVessel != null) && (attemptedLocks[i].vessel != targetVessel))
+                        return false;
+
                     if (!locked && !omnidirectional)
                     {
                         float targetAngle = VectorUtils.SignedAngle(referenceTransform.forward,

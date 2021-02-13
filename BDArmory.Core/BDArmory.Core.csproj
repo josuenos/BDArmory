@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>BDArmory.Core</RootNamespace>
     <AssemblyName>BDArmory.Core</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -21,7 +21,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <LangVersion>6</LangVersion>
+    <LangVersion>default</LangVersion>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -31,32 +31,34 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <LangVersion>6</LangVersion>
+    <LangVersion>default</LangVersion>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="BDAPersistantSettingsField.cs" />
+    <Compile Include="BDArmorySettings.cs" />
     <Compile Include="Bootstrapper.cs" />
     <Compile Include="BuildingDamage.cs" />
     <Compile Include="Dependencies.cs" />
     <Compile Include="Enum\DamageOperation.cs" />
+    <Compile Include="Events\DamageEventArgs.cs" />
+    <Compile Include="Extension\CrewExtensions.cs" />
     <Compile Include="Extension\DamageFX.cs" />
     <Compile Include="Extension\PartExtensions.cs" />
-    <Compile Include="Events\DamageEventArgs.cs" />
     <Compile Include="Extension\VesselExtensions.cs" />
+    <Compile Include="Interface\INotificableService.cs" />
     <Compile Include="Module\HitpointTracker.cs" />
     <Compile Include="PartExploderSystem.cs" />
     <Compile Include="PerformanceLogger.cs" />
-    <Compile Include="Services\DamageService.cs" />
-    <Compile Include="Interface\INotificableService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Services\NotificableService.cs" />
+    <Compile Include="Services\DamageService.cs" />
     <Compile Include="Services\ModuleDamageService.cs" />
-    <Compile Include="BDArmorySettings.cs" />
+    <Compile Include="Services\NotificableService.cs" />
+    <Compile Include="Utils\BDAMath.cs" />
     <Compile Include="Utils\BlastPhysicsUtils.cs" />
     <Compile Include="Utils\BulletPhysics.cs" />
+    <Compile Include="Utils\ConfigNodeUtils.cs" />
     <Compile Include="Utils\DebugUtils.cs" />
-    <Compile Include="Utils\BDAMath.cs" />
     <Compile Include="Utils\LayerMask.cs" />
   </ItemGroup>
   <ItemGroup>

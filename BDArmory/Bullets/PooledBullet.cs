@@ -462,7 +462,7 @@ namespace BDArmory.Bullets
             if (ProximityAirDetonation(distanceFromStart))
             {
                 //detonate
-                ExplosionFx.CreateExplosion(currPosition, tntMass, explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, currentVelocity);
+                ExplosionFx.CreateExplosion(currPosition, tntMass, explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, null, currentVelocity);
                 KillBullet();
 
                 return;
@@ -537,13 +537,17 @@ namespace BDArmory.Bullets
 
             // Apply damage
             float damage;
-            if (explosive)
+            //if (explosive)
+            //{
+            //    damage = hitPart.AddBallisticDamage(bulletMass - tntMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity, hit, sourceVessel.GetName());
+            //} //why? The mass of HE filler isn't going to have disapeared before the bullet hits something, and if it has, it means there isn't a bullet left to hit things
+            //else
+            //{
+            damage = hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
+            //}
+            if (BDArmorySettings.BATTLEDAMAGE)
             {
-                damage = hitPart.AddBallisticDamage(bulletMass - tntMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
-            }
-            else
-            {
-                damage = hitPart.AddBallisticDamage(bulletMass, caliber, multiplier, penetrationfactor, bulletDmgMult, impactVelocity);
+                Misc.BattleDamageHandler.CheckDamageFX(hitPart, caliber, penetrationfactor, explosive, sourceVessel.GetName(), hit);
             }
             // Debug.Log("DEBUG Ballistic damage to " + hitPart + ": " + damage + ", calibre: " + caliber + ", multiplier: " + multiplier + ", pen: " + penetrationfactor);
 
@@ -719,7 +723,7 @@ namespace BDArmory.Bullets
                     {
                         ExplosionFx.CreateExplosion(hit.point - (ray.direction * 0.1f),
                                                     GetExplosivePower(),
-                                                    explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, direction: currentVelocity);
+                                                    explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, null, direction: currentVelocity);
                     }
 
                     KillBullet();
