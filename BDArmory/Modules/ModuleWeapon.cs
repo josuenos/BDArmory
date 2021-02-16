@@ -101,9 +101,10 @@ namespace BDArmory.Modules
             get
             {
                 var fireTransform = (eWeaponType == WeaponTypes.Rocket && rocketPod) ? rockets[0].parent : fireTransforms[0];
-                return finalAimTarget.IsZero() ? 1f : 1f - 0.5f * FiringTolerance * FiringTolerance * targetRadius * targetRadius / (finalAimTarget - fireTransform.position).sqrMagnitude;
+                var theta = FiringTolerance * targetRadius / (finalAimTarget - fireTransform.position).magnitude + Mathf.Deg2Rad * maxDeviation / 2f; // Approximation to arctan(α*r/d) + θ/2. (arctan(x) = x-x^3/3 + O(x^5))
+                return finalAimTarget.IsZero() ? 1f : 1f - 0.5f * theta * theta; // Approximation to cos(theta). (cos(x) = 1-x^2/2!+O(x^4))
             }
-        } // 1 - (x)^2/2 approximation to cos(x), where x = αθ, (which is an approximation to cos(arctan(x)) ~= 1 - (x - (x)^3/3)^2/2 ~= 1 - (x)^2/2 + 9*(x)^4/24)
+        }
         private Vector3 targetPosition;
         private Vector3 targetVelocity;  // local frame velocity
         private Vector3 targetAcceleration; // local frame
@@ -294,7 +295,7 @@ namespace BDArmory.Modules
         public bool FireAngleOverride = false;
 
         [KSPField(advancedTweakable = true, isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "#LOC_BDArmory_FiringAngle"),
-            UI_FloatRange(minValue = 0f, maxValue = 2, stepIncrement = 0.05f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
+            UI_FloatRange(minValue = 0f, maxValue = 3, stepIncrement = 0.05f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
         public float FiringTolerance = 1.0f; //per-weapon override of maxcosfireangle
 
         [KSPField]
