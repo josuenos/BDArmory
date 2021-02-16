@@ -2524,7 +2524,6 @@ namespace BDArmory.Modules
                                         if (part)
                                         {
                                             hitVessel = part.vessel;
-                                            Debug.Log("DEBUG hitVessel: " + hitVessel);
                                         }
                                     }
                                 }
