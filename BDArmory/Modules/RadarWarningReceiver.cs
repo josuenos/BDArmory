@@ -139,10 +139,10 @@ namespace BDArmory.Modules
                 UpdateVolume();
                 BDArmorySetup.OnVolumeChange += UpdateVolume;
 
-                //float size = RwrDisplayRect.height + 20;
                 if (!WindowRectRWRInitialized)
                 {
-                    BDArmorySetup.WindowRectRwr = new Rect(40, Screen.height - RwrDisplayRect.height, RwrDisplayRect.height + BorderSize, RwrDisplayRect.height + BorderSize + HeaderSize);
+                    BDArmorySetup.WindowRectRwr = new Rect(BDArmorySetup.WindowRectRwr.x, BDArmorySetup.WindowRectRwr.y, RwrDisplayRect.height + BorderSize, RwrDisplayRect.height + BorderSize + HeaderSize);
+                    // BDArmorySetup.WindowRectRwr = new Rect(40, Screen.height - RwrDisplayRect.height, RwrDisplayRect.height + BorderSize, RwrDisplayRect.height + BorderSize + HeaderSize);
                     WindowRectRWRInitialized = true;
                 }
 
@@ -357,8 +357,7 @@ namespace BDArmory.Modules
                 resizingWindow = false;
             }
 
-            BDArmorySetup.WindowRectRwr = GUI.Window(94353, BDArmorySetup.WindowRectRwr, WindowRwr,
-              "Radar Warning Receiver", GUI.skin.window);
+            BDArmorySetup.WindowRectRwr = GUI.Window(94353, BDArmorySetup.WindowRectRwr, WindowRwr, "Radar Warning Receiver", GUI.skin.window);
             BDGUIUtils.UseMouseEventInRect(RwrDisplayRect);
         }
 

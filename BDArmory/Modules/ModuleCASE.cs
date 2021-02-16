@@ -7,16 +7,20 @@ using BDArmory.Core.Module;
 using BDArmory.Core.Utils;
 using BDArmory.FX;
 using System;
+using System.Text;
 using System.Collections.Generic;
 using UniLinq;
 using UnityEngine;
 
 namespace BDArmory.Modules
 {
-    class ModuleCASE : PartModule
+    class ModuleCASE : PartModule, IPartMassModifier, IPartCostModifier
     {
-        [KSPField]
-        public int CASELevel = 0; //tier of ammo storage. 0 = nothing, ammosplosion; 1 = base, ammosplosion contained(barely), 2 = blast safely shunted outside, minimal damage to surrounding parts
+        public float GetModuleMass(float baseMass, ModifierStagingSituation situation) => CASEmass;
+        public ModifierChangeWhen GetModuleMassChangeWhen() => ModifierChangeWhen.FIXED;
+        public float GetModuleCost(float baseCost, ModifierStagingSituation situation) => CASEcost;
+        public ModifierChangeWhen GetModuleCostChangeWhen() => ModifierChangeWhen.FIXED;
+
         private double ammoMass;
         private double ammoQuantity;
         private double ammoExplosionYield = 0;
@@ -39,6 +43,86 @@ namespace BDArmory.Modules
                 part.force_activate();
             }
         }
+        [KSPField(guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_AddedMass")]//CASE mass
+
+        public float CASEmass = 0f;
+
+        private float CASEcost = 0f;
+        // private float origCost = 0;
+        private float origMass = 0f;
+
+        [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_CASE"),//Cellular Ammo Storage Equipment Tier
+        UI_FloatRange(minValue = 0f, maxValue = 2f, stepIncrement = 1f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
+        public float CASELevel = 0; //tier of ammo storage. 0 = nothing, ammosplosion; 1 = base, ammosplosion contained(barely), 2 = blast safely shunted outside, minimal damage to surrounding parts
+
+        public void Start()
+        {
+            if (HighLogic.LoadedSceneIsEditor)
+            {
+                var internalmag = part.FindModuleImplementing<ModuleWeapon>();
+                if (internalmag != null)
+                {
+                    Fields["CASELevel"].guiActiveEditor = false;
+                    Fields["CASEmass"].guiActiveEditor = false;
+                }
+                else
+                {
+                    UI_FloatRange ATrangeEditor = (UI_FloatRange)Fields["CASELevel"].uiControlEditor;
+                    ATrangeEditor.onFieldChanged = CASESetup;
+                    origMass = part.mass;
+                    //origScale = part.rescaleFactor;
+                    CASESetup(null, null);
+                }
+            }
+        }
+        void CASESetup(BaseField field, object obj)
+        {
+            CASEmass = ((origMass / 2) * CASELevel);
+            //part.mass = CASEmass;
+            CASEcost = (CASELevel * 1000);
+            //part.transform.localScale = (Vector3.one * (origScale + (CASELevel/10)));
+            Debug.Log("[SST Debug] part.mass = " + part.mass + "; CASElevel = " + CASELevel + "; CASEMass = " + CASEmass + "; Scale = " + part.transform.localScale);
+        }
+        public override void OnLoad(ConfigNode node)
+        {
+            base.OnLoad(node);
+
+            if (!HighLogic.LoadedSceneIsEditor && !HighLogic.LoadedSceneIsFlight) return;
+
+            if (part.partInfo != null)
+            {
+                if (HighLogic.LoadedSceneIsEditor)
+                {
+                    CASESetup(null, null);
+                }
+                else
+                {
+                    if (part.vessel != null)
+                    {
+                        var CASEString = ConfigNodeUtils.FindPartModuleConfigNodeValue(part.partInfo.partConfig, "ModuleCASE", "CASELevel");
+                        if (!string.IsNullOrEmpty(CASEString))
+                        {
+                            try
+                            {
+                                CASELevel = float.Parse(CASEString);
+                                CASESetup(null, null);
+                            }
+                            catch (Exception e)
+                            {
+                                Debug.LogError("[ModuleCASE]: Exception parsing CASELevel: " + e.Message);
+                            }
+                        }
+                        else
+                            CASELevel = 0f;
+                    }
+                    else // Don't.
+                    {
+                        enabled = false;
+                    }
+                }
+            }
+        }
+
         private List<PartResource> GetResources()
         {
             List<PartResource> resources = new List<PartResource>();
@@ -83,12 +167,12 @@ namespace BDArmory.Modules
                 GetBlastRadius();
                 if (CASELevel == 0) //a considerable quantity of explosives and propellants just detonated inside your ship
                 {
-                    ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, explModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, vesselName, direction);
+                    ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, explModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, vesselName, null, direction);
                     if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BD DEBUG] CASE 0 explosion, tntMassEquivilent: " + ammoExplosionYield);
                 }
                 else if (CASELevel == 1) // the blast is reduced. Damage is severe, but (potentially) survivable
                 {
-                    ExplosionFx.CreateExplosion(part.transform.position, ((float)ammoExplosionYield / 2), limitEdexploModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, vesselName, direction, true);
+                    ExplosionFx.CreateExplosion(part.transform.position, ((float)ammoExplosionYield / 2), limitEdexploModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, vesselName, null, direction, true);
                     if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BD DEBUG] CASE I explosion, tntMassEquivilent: " + ammoExplosionYield + ", part: " + part + ", vessel: " + vesselName);
                     using (var blastHits = Physics.OverlapSphere(part.transform.position, blastRadius / 2, 9076737).AsEnumerable().GetEnumerator())
                     {
@@ -130,7 +214,7 @@ namespace BDArmory.Modules
                 }
                 else //if (CASELevel == 2) //blast contained, shunted out side of hull, minimal damage
                 {
-                    ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, shuntExploModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, vesselName, direction, true);
+                    ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, shuntExploModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, vesselName, null, direction, true);
                     if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BD DEBUG] CASE II explosion, tntMassEquivilent: " + ammoExplosionYield);
                     Ray BlastRay = new Ray(part.transform.position, part.transform.up);
                     var hits = Physics.RaycastAll(BlastRay, blastRadius, 9076737);
@@ -249,6 +333,24 @@ namespace BDArmory.Modules
             {
                 DetonateIfPossible();
             }
+        }
+        public override string GetInfo()
+        {
+            StringBuilder output = new StringBuilder();
+            output.Append(Environment.NewLine);
+            var internalmag = part.FindModuleImplementing<ModuleWeapon>();
+            if (internalmag != null)
+            {
+                output.AppendLine($" Has Intrinsic C.A.S.E. Type {CASELevel}");
+            }
+            else
+            {
+                output.AppendLine($"Can add Cellular Ammo Storage Equipment to reduce ammo explosion damage");
+            }
+            
+            output.AppendLine("");
+
+            return output.ToString();
         }
     }
 }

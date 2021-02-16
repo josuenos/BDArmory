@@ -462,7 +462,7 @@ namespace BDArmory.Bullets
             if (ProximityAirDetonation(distanceFromStart))
             {
                 //detonate
-                ExplosionFx.CreateExplosion(currPosition, tntMass, explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, currentVelocity);
+                ExplosionFx.CreateExplosion(currPosition, tntMass, explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, null, currentVelocity);
                 KillBullet();
 
                 return;
@@ -723,7 +723,7 @@ namespace BDArmory.Bullets
                     {
                         ExplosionFx.CreateExplosion(hit.point - (ray.direction * 0.1f),
                                                     GetExplosivePower(),
-                                                    explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, direction: currentVelocity);
+                                                    explModelPath, explSoundPath, ExplosionSourceType.Bullet, caliber, null, sourceVesselName, null, direction: currentVelocity);
                     }
 
                     KillBullet();

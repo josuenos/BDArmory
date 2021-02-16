@@ -299,13 +299,9 @@ namespace BDArmory.UI
             get { return PauseMenu.isOpen || Time.timeScale == 0; }
         }
 
-        void Start()
+        void Awake()
         {
             Instance = this;
-
-            //wmgr toolbar
-            if (HighLogic.LoadedSceneIsFlight)
-                maySavethisInstance = true;     //otherwise later we should NOT save the current window positions!
 
             // Create settings file if not present.
             if (ConfigNode.Load(BDArmorySettings.settingsConfigURL) == null)
@@ -325,8 +321,36 @@ namespace BDArmory.UI
 
             WindowRectGps.width = WindowRectToolbar.width - 10;
 
-            //settings
+            // Load settings
             LoadConfig();
+        }
+
+        void Start()
+        {
+            //wmgr toolbar
+            if (HighLogic.LoadedSceneIsFlight)
+                maySavethisInstance = true;     //otherwise later we should NOT save the current window positions!
+
+            // // Create settings file if not present.
+            // if (ConfigNode.Load(BDArmorySettings.settingsConfigURL) == null)
+            // {
+            //     var node = new ConfigNode();
+            //     node.AddNode("BDASettings");
+            //     node.Save(BDArmorySettings.settingsConfigURL);
+            // }
+
+            // // window position settings
+            // WindowRectToolbar = new Rect(Screen.width - toolWindowWidth - 40, 150, toolWindowWidth, toolWindowHeight);
+            // // Default, if not in file.
+            // WindowRectGps = new Rect(0, 0, WindowRectToolbar.width - 10, 0);
+            // SetupSettingsSize();
+            // BDAWindowSettingsField.Load();
+            // CheckIfWindowsSettingsAreWithinScreen();
+
+            // WindowRectGps.width = WindowRectToolbar.width - 10;
+
+            // //settings
+            // LoadConfig();
 
             physRangeTimer = Time.time;
             GAME_UI_ENABLED = true;
@@ -959,7 +983,7 @@ namespace BDArmory.UI
                     ActiveWeaponManager.AutoFireCosAngleAdjustment =
                         GUI.HorizontalSlider(
                             new Rect(leftIndent + (90), (guardLines * entryHeight), contentWidth - 90 - 38, entryHeight),
-                            ActiveWeaponManager.AutoFireCosAngleAdjustment, 0, 4);
+                            ActiveWeaponManager.AutoFireCosAngleAdjustment, 0, 3);
                     ActiveWeaponManager.AutoFireCosAngleAdjustment = Mathf.Round(ActiveWeaponManager.AutoFireCosAngleAdjustment * 20) / 20;
                     if (ActiveWeaponManager.AutoFireCosAngleAdjustment != oldAutoFireCosAngleAdjustment)
                         ActiveWeaponManager.OnAFCAAUpdated(null, null);
@@ -1550,7 +1574,14 @@ namespace BDArmory.UI
                 BDArmorySettings.AUTO_ENABLE_VESSEL_SWITCHING = GUI.Toggle(SRightRect(line), BDArmorySettings.AUTO_ENABLE_VESSEL_SWITCHING, Localizer.Format("#LOC_BDArmory_Settings_AutoEnableVesselSwitching"));
                 BDArmorySettings.RESET_HP = GUI.Toggle(SLeftRect(++line), BDArmorySettings.RESET_HP, Localizer.Format("#LOC_BDArmory_Settings_ResetHP"));
                 BDArmorySettings.DESTROY_UNCONTROLLED_WMS = GUI.Toggle(SRightRect(line), BDArmorySettings.DESTROY_UNCONTROLLED_WMS, Localizer.Format("#LOC_BDArmory_Settings_DestroyWMWhenNotControlled"));
-                BDArmorySettings.AUTONOMOUS_COMBAT_SEATS = GUI.Toggle(SRightRect(++line), BDArmorySettings.AUTONOMOUS_COMBAT_SEATS, Localizer.Format("#LOC_BDArmory_Settings_AutonomousCombatSeats"));
+                if (BDArmorySettings.KERBAL_SAFETY != (BDArmorySettings.KERBAL_SAFETY = GUI.Toggle(SLeftRect(++line), BDArmorySettings.KERBAL_SAFETY, Localizer.Format("#LOC_BDArmory_Settings_KerbalSafety"))))
+                {
+                    if (BDArmorySettings.KERBAL_SAFETY)
+                        KerbalSafetyManager.Instance.EnableKerbalSafety();
+                    else
+                        KerbalSafetyManager.Instance.DisableKerbalSafety();
+                }
+                BDArmorySettings.AUTONOMOUS_COMBAT_SEATS = GUI.Toggle(SRightRect(line), BDArmorySettings.AUTONOMOUS_COMBAT_SEATS, Localizer.Format("#LOC_BDArmory_Settings_AutonomousCombatSeats"));
                 if (HighLogic.LoadedSceneIsEditor)
                 {
                     if (BDArmorySettings.SHOW_CATEGORIES != (BDArmorySettings.SHOW_CATEGORIES = GUI.Toggle(SLeftRect(++line), BDArmorySettings.SHOW_CATEGORIES, Localizer.Format("#LOC_BDArmory_Settings_ShowEditorSubcategories"))))//"Show Editor Subcategories"
@@ -1847,6 +1878,31 @@ namespace BDArmory.UI
                     }
                 }
             }
+
+            // if (GUI.Button(SLineRect(++line), "timing test")) // Timing tests.
+            // {
+            //     var test = FlightGlobals.ActiveVessel.transform.position;
+            //     float FiringTolerance = 1f;
+            //     float targetRadius = 20f;
+            //     Vector3 finalAimTarget = new Vector3(10f, 20f, 30f);
+            //     Vector3 pos = new Vector3(2f, 3f, 4f);
+            //     float theta_const = Mathf.Deg2Rad * 1f;
+            //     float test_out = 0f;
+            //     int iters = 10000000;
+            //     var now = Time.realtimeSinceStartup;
+            //     for (int i = 0; i < iters; ++i)
+            //     {
+            //         test_out = i > iters ? 1f : 1f - 0.5f * FiringTolerance * FiringTolerance * targetRadius * targetRadius / (finalAimTarget - pos).sqrMagnitude;
+            //     }
+            //     Debug.Log("DEBUG sqrMagnitude " + (Time.realtimeSinceStartup - now) / iters + "s/iter, out: " + test_out);
+            //     now = Time.realtimeSinceStartup;
+            //     for (int i = 0; i < iters; ++i)
+            //     {
+            //         var theta = FiringTolerance * targetRadius / (finalAimTarget - pos).magnitude + theta_const;
+            //         test_out = i > iters ? 1f : 1f - 0.5f * (theta * theta);
+            //     }
+            //     Debug.Log("DEBUG magnitude " + (Time.realtimeSinceStartup - now) / iters + "s/iter, out: " + test_out);
+            // }
 
             ++line;
             if (GUI.Button(SLineRect(++line), Localizer.Format("#LOC_BDArmory_Settings_EditInputs")))//"Edit Inputs"

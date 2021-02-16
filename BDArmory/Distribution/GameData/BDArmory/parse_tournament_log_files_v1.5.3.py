@@ -18,18 +18,20 @@ for round in sorted(roundDir for roundDir in tournamentDir.iterdir() if roundDir
 	tournamentData[round.name] = {}
 	for heat in sorted(round.glob("*.log")):
 		with open(heat, "r") as logFile:
-			tournamentData[round.name][heat.name] = {'result': None, 'craft': {}}
+			tournamentData[round.name][heat.name] = {'result': None, 'duration': 0, 'craft': {}}
 			for line in logFile:
 				line = line.strip()
 				if 'BDArmoryCompetition' not in line:
 					continue  # Ignore irrelevant lines
 				_, field = line.split(' ', 1)
-				if field.startswith('ALIVE:'):
+				if field.startswith('Dumping Results'):
+					tournamentData[round.name][heat.name]['duration'] = float(field[field.find('(') + 4:field.find(')') - 1])
+				elif field.startswith('ALIVE:'):
 					state, craft = field.split(':', 1)
 					tournamentData[round.name][heat.name]['craft'][craft] = {'state': state}
 				elif field.startswith('DEAD:'):
 					state, order, time, craft = field.split(':', 3)
-					tournamentData[round.name][heat.name]['craft'][craft] = {'state': state, 'deathOrder': order, 'deathTime': time}
+					tournamentData[round.name][heat.name]['craft'][craft] = {'state': state, 'deathOrder': int(order), 'deathTime': float(time)}
 				elif field.startswith('MIA:'):
 					state, craft = field.split(':', 1)
 					tournamentData[round.name][heat.name]['craft'][craft] = {'state': state}
@@ -53,7 +55,6 @@ for round in sorted(roundDir for roundDir in tournamentDir.iterdir() if roundDir
 					_, craft, rammers = field.split(':', 2)
 					data = rammers.split(':')
 					tournamentData[round.name][heat.name]['craft'][craft].update({'rammedPartsLostBy': {player: int(partsLost) for player, partsLost in zip(data[1::2], data[::2])}})
-				# Ignore OTHERKILL for now.
 				elif field.startswith('CLEANKILL:'):
 					_, craft, killer = field.split(':', 2)
 					tournamentData[round.name][heat.name]['craft'][craft].update({'cleanKillBy': killer})
@@ -63,6 +64,9 @@ for round in sorted(roundDir for roundDir in tournamentDir.iterdir() if roundDir
 				elif field.startswith('CLEANRAM:'):
 					_, craft, killer = field.split(':', 2)
 					tournamentData[round.name][heat.name]['craft'][craft].update({'cleanRamKillBy': killer})
+				elif field.startswith('OTHERKILL'):
+					_, craft, reason = field.split(':', 2)
+					tournamentData[round.name][heat.name]['craft'][craft].update({'otherKillReason': reason})
 				elif field.startswith('ACCURACY:'):
 					_, craft, accuracy = field.split(':', 2)
 					hits, shots = accuracy.split('/')
@@ -88,13 +92,27 @@ with open(tournamentDir / 'results.json', 'w') as outFile:
 craftNames = sorted(list(set(craft for round in tournamentData.values() for heat in round.values() for craft in heat['craft'].keys())))
 teamWins = Counter([team for round in tournamentData.values() for heat in round.values() if heat['result']['result'] == "Win" for team in heat['result']['teams']])
 teamDraws = Counter([team for round in tournamentData.values() for heat in round.values() if heat['result']['result'] == "Draw" for team in heat['result']['teams']])
-teams = {team: members for round in tournamentData.values() for heat in round.values() for team, members in heat['result']['teams'].items()}
+teams = {team: members for round in tournamentData.values() for heat in round.values() if 'teams' in heat['result'] for team, members in heat['result']['teams'].items()}
 summary = {
 	'craft': {
 		craft: {
 			'survivedCount': len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'ALIVE']),
-			'deathCount': len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'DEAD']),
-			'cleanKills': len([1 for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() if any((field in data and data[field] == craft) for field in ('cleanKillBy', 'cleanMissileKillBy', 'cleanRamKillBy'))]),
+			'deathCount': (
+				len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'DEAD']),  # Total
+				len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'DEAD' and 'cleanKillBy' in heat['craft'][craft]]),  # Bullets
+				len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'DEAD' and 'cleanMissileKillBy' in heat['craft'][craft]]),  # Missiles
+				len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'DEAD' and 'cleanRamKillBy' in heat['craft'][craft]]),  # Rams
+				len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'DEAD' and not any(field in heat['craft'][craft] for field in ('cleanKillBy', 'cleanMissileKillBy', 'cleanRamKillBy')) and any(field in heat['craft'][craft] for field in ('hitsBy', 'missileHitsBy', 'rammedPartsLostBy'))]),  # Dirty kill
+				len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'DEAD' and not any(field in heat['craft'][craft] for field in ('hitsBy', 'missileHitsBy', 'rammedPartsLostBy')) and not any('rammedPartsLostBy' in data and craft in data['rammedPartsLostBy'] for data in heat['craft'].values())]),  # Suicide (died without being hit or ramming anyone).
+			),
+			'deathOrder': sum([heat['craft'][craft]['deathOrder'] / len(heat['craft']) if 'deathOrder' in heat['craft'][craft] else 1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft']]),
+			'deathTime': sum([heat['craft'][craft]['deathTime'] if 'deathTime' in heat['craft'][craft] else heat['duration'] for round in tournamentData.values() for heat in round.values() if craft in heat['craft']]),
+			'cleanKills': (
+				len([1 for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() if any((field in data and data[field] == craft) for field in ('cleanKillBy', 'cleanMissileKillBy', 'cleanRamKillBy'))]),  # Total
+				len([1 for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() if 'cleanKillBy' in data and data['cleanKillBy'] == craft]),  # Bullets
+				len([1 for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() if 'cleanMissileKillBy' in data and data['cleanMissileKillBy'] == craft]),  # Missiles
+				len([1 for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() if 'cleanRamKillBy' in data and data['cleanRamKillBy'] == craft]),  # Rams
+			),
 			'assists': len([1 for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() if data['state'] == 'DEAD' and any(field in data and craft in data[field] for field in ('hitsBy', 'missileHitsBy', 'rammedPartsLostBy')) and not any((field in data and data[field] == craft) for field in ('cleanKillBy', 'cleanMissileKillBy', 'cleanRamKillBy'))]),
 			'hits': sum([heat['craft'][craft]['hits'] for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and 'hits' in heat['craft'][craft]]),
 			'bulletDamage': sum([data[field][craft] for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() for field in ('bulletDamageBy',) if field in data and craft in data[field]]),
@@ -113,7 +131,7 @@ summary = {
 }
 
 for craft in summary['craft'].values():
-	spawns = craft['survivedCount'] + craft['deathCount']
+	spawns = craft['survivedCount'] + craft['deathCount'][0]
 	craft.update({
 		'damage/hit': craft['bulletDamage'] / craft['hits'] if craft['hits'] > 0 else 0,
 		'hits/spawn': craft['hits'] / spawns if spawns > 0 else 0,
@@ -124,25 +142,29 @@ with open(tournamentDir / 'summary.json', 'w') as outFile:
 	json.dump(summary, outFile, indent=2)
 
 if len(summary['craft']) > 0:
-	csv_summary = "craft," + ",".join(k for k in next(iter(summary['craft'].values())).keys()) + "\n"
-	csv_summary += "\n".join(craft + "," + ",".join(str(v) for v in scores.values()) for craft, scores in summary['craft'].items())
+	csv_summary = "craft," + ",".join(
+		",".join(('deathCount', 'dcB', 'dcM', 'dcR', 'dcA', 'dcS')) if k == 'deathCount' else
+		",".join(('cleanKills', 'ckB', 'ckM', 'ckR')) if k == 'cleanKills' else
+		k for k in next(iter(summary['craft'].values())).keys()) + "\n"
+	csv_summary += "\n".join(craft + "," + ",".join(str(int(100 * v) / 100) if not isinstance(v, tuple) else ",".join(str(int(100 * sf) / 100) for sf in v) for v in scores.values()) for craft, scores in summary['craft'].items())
 	with open(tournamentDir / 'summary.csv', 'w') as outFile:
 		outFile.write(csv_summary)
 
 	# Write results to console
 	name_length = max([len(craft) for craft in summary['craft']])
-	print(f"Name{' '*(name_length-4)}\tSurvive\tDeaths\tKills\tAssists\tHits\tDamage\tMisHits\tMisDmg\tRam\tAcc%\tDmg/Hit\tHits/Sp\tDmg/Sp")
+	print(f"Name{' '*(name_length-4)}\tSurvive\tDeaths (BMRAS)\tD.Order\tD.Time\tKills (BMR)\tAssists\tHits\tDamage\tMisHits\tMisDmg\tRam\tAcc%\tDmg/Hit\tHits/Sp\tDmg/Sp")
 	for craft in sorted(summary['craft']):
-		spawns = summary['craft'][craft]['survivedCount'] + summary['craft'][craft]['deathCount']
+		spawns = summary['craft'][craft]['survivedCount'] + summary['craft'][craft]['deathCount'][0]
 		print(
 			f"{craft}{' '*(name_length-len(craft))}\t"
-			+ '\t'.join(f'{score}' if isinstance(score, int) else f'{score:.0f}' if field in ('bulletDamage', 'missileDamage') else f'{score:.1f}' if field in ('damage/hit', 'hits/spawn', 'damage/spawn') else f'{score:.2f}' for field, score in summary['craft'][craft].items())
+			+ '\t'.join(f'{score}' if isinstance(score, int) else f'{score:.0f}' if field in ('bulletDamage', 'missileDamage') else f'{score[0]} ({" ".join(str(s) for s in score[1:])})' if field in ('deathCount', 'cleanKills') else f'{score:.1f}' if field in ('deathTime', 'damage/hit', 'hits/spawn', 'damage/spawn') else f'{score:.3f}' if field in ('deathOrder',) else f'{score:.2f}' for field, score in summary['craft'][craft].items())
 		)
 
 	teamNames = sorted(list(set([team for result_type in summary['team results'].values() for team in result_type])))
-	name_length = max([len(team) for team in teamNames])
-	print(f"\nTeam{' '*(name_length-4)}\tWins\tDraws\tVessels")
-	for team in teamNames:
-		print(f"{team}{' '*(name_length-len(team))}\t{teamWins[team]}\t{teamDraws[team]}\t{summary['teams'][team]}")
+	if len(teamNames) > 0:
+		name_length = max([len(team) for team in teamNames])
+		print(f"\nTeam{' '*(name_length-4)}\tWins\tDraws\tVessels")
+		for team in teamNames:
+			print(f"{team}{' '*(name_length-len(team))}\t{teamWins[team]}\t{teamDraws[team]}\t{summary['teams'][team]}")
 else:
 	print("No valid log files found.")

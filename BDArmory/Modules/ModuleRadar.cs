@@ -692,7 +692,7 @@ namespace BDArmory.Modules
 
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                if (targetVessel==null)
+                if (targetVessel == null)
                     Debug.Log("[BDArmory]: Trying to radar lock target with (" + radarName + ")");
                 else
                     Debug.Log("[BDArmory]: Trying to radar lock target " + targetVessel.vesselName + " with (" + radarName + ")");
@@ -722,7 +722,7 @@ namespace BDArmory.Modules
                     // If locked onto a vessel that was not our target, return false
                     if ((attemptedLocks[i].vessel != null) && (targetVessel != null) && (attemptedLocks[i].vessel != targetVessel))
                         return false;
-                    
+
                     if (!locked && !omnidirectional)
                     {
                         float targetAngle = VectorUtils.SignedAngle(referenceTransform.forward,

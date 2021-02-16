@@ -74,12 +74,16 @@ namespace BDArmory.Misc
                 }
 
                 // Rough estimate of turning radius and arc length to travel
-                float futureTime = Mathf.Clamp((missile.vessel.LandedOrSplashed ? 0f : missile.dropTime), 0f, 2f);
-                Vector3 futureRelPosition = (targetPosition + targetVelocity * futureTime) - (missile.part.transform.position + launcherVelocity * futureTime);
-                float missileTurnRadius = (ml.optimumAirspeed * ml.optimumAirspeed) / maxEstimatedGForce; 
-                float targetAngle = Vector3.Angle(missile.GetForwardTransform(), futureRelPosition);
-                float arcLength = Mathf.Deg2Rad * targetAngle * missileTurnRadius;
-
+                float arcLength = 0;
+                if (missile.GetWeaponClass() != WeaponClasses.SLW) // If the missile isn't a torpedo
+                {
+                    float futureTime = Mathf.Clamp((missile.vessel.LandedOrSplashed ? 0f : missile.dropTime), 0f, 2f);
+                    Vector3 futureRelPosition = (targetPosition + targetVelocity * futureTime) - (missile.part.transform.position + launcherVelocity * futureTime);
+                    float missileTurnRadius = (ml.optimumAirspeed * ml.optimumAirspeed) / maxEstimatedGForce;
+                    float targetAngle = Vector3.Angle(missile.GetForwardTransform(), futureRelPosition);
+                    arcLength = Mathf.Deg2Rad * targetAngle * missileTurnRadius;
+                }
+                
                 // Add additional range term for the missile to manuever to target at missileActiveTime
                 rangeAddMin += arcLength;
             }

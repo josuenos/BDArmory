@@ -2,7 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
+using System.Reflection;
 using System.Text;
 using BDArmory.Control;
 using BDArmory.Core;
@@ -11,9 +11,6 @@ using BDArmory.Guidances;
 using BDArmory.Misc;
 using BDArmory.Targeting;
 using BDArmory.UI;
-using Expansions.Missions;
-using KSP.UI.Screens;
-using Smooth.Algebraics;
 using UnityEngine;
 
 namespace BDArmory.Modules
@@ -97,7 +94,7 @@ namespace BDArmory.Modules
         // Note: min/max is replaced by off-target/on-target in localisation, but the variable names are kept to avoid reconfiguring existing craft.
         // Dynamic Damping
         [KSPField(guiName = "#LOC_BDArmory_DynamicDamping", groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true), UI_Label(scene = UI_Scene.All)]
-        public string DynamicDampingLabel = "";
+        private string DynamicDampingLabel = "";
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_DynamicDampingMin", advancedTweakable = true,
             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
@@ -116,7 +113,7 @@ namespace BDArmory.Modules
 
         // Dynamic Pitch
         [KSPField(guiName = "#LOC_BDArmory_DynamicDampingPitch", groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true), UI_Label(scene = UI_Scene.All)]
-        public string PitchLabel = "";
+        private string PitchLabel = "";
 
         [KSPField(isPersistant = true, guiName = "#LOC_BDArmory_DynamicDampingPitch", advancedTweakable = true,
             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
@@ -140,7 +137,7 @@ namespace BDArmory.Modules
 
         // Dynamic Yaw
         [KSPField(guiName = "#LOC_BDArmory_DynamicDampingYaw", groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true), UI_Label(scene = UI_Scene.All)]
-        public string YawLabel = "";
+        private string YawLabel = "";
 
         [KSPField(isPersistant = true, guiName = "#LOC_BDArmory_DynamicDampingYaw", advancedTweakable = true,
             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
@@ -164,7 +161,7 @@ namespace BDArmory.Modules
 
         // Dynamic Roll
         [KSPField(guiName = "#LOC_BDArmory_DynamicDampingRoll", groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true), UI_Label(scene = UI_Scene.All)]
-        public string RollLabel = "";
+        private string RollLabel = "";
 
         [KSPField(isPersistant = true, guiName = "#LOC_BDArmory_DynamicDampingRoll", advancedTweakable = true,
             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
@@ -321,11 +318,11 @@ namespace BDArmory.Modules
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, category = "DoubleSlider", guiName = "#LOC_BDArmory_TurnRadiusTwiddleFactorMin", advancedTweakable = true,//Turn radius twiddle factors (category seems to have no effect)
             groupName = "pilotAI_Terrain", groupDisplayName = "#LOC_BDArmory_PilotAI_Terrain", groupStartCollapsed = true),
-            UI_FloatRange(minValue = 1f, maxValue = 5f, stepIncrement = 0.5f, scene = UI_Scene.All)]
+            UI_FloatRange(minValue = 1f, maxValue = 5f, stepIncrement = 0.1f, scene = UI_Scene.All)]
         public float turnRadiusTwiddleFactorMin = 2.0f; // Minimum and maximum twiddle factors for the turn radius. Depends on roll rate and how the vessel behaves under fire.
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, category = "DoubleSlider", guiName = "#LOC_BDArmory_TurnRadiusTwiddleFactorMax", advancedTweakable = true,//Turn radius twiddle factors (category seems to have no effect)
             groupName = "pilotAI_Terrain", groupDisplayName = "#LOC_BDArmory_PilotAI_Terrain", groupStartCollapsed = true),
-            UI_FloatRange(minValue = 1f, maxValue = 5f, stepIncrement = 0.5f, scene = UI_Scene.All)]
+            UI_FloatRange(minValue = 1f, maxValue = 5f, stepIncrement = 0.1f, scene = UI_Scene.All)]
         public float turnRadiusTwiddleFactorMax = 4.0f; // Minimum and maximum twiddle factors for the turn radius. Depends on roll rate and how the vessel behaves under fire.
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_AllowRamming", advancedTweakable = true, //Toggle Allow Ramming
@@ -386,6 +383,55 @@ namespace BDArmory.Modules
             UI_Toggle(enabledText = "#LOC_BDArmory_On", disabledText = "#LOC_BDArmory_Off")]//On--Off
         public bool standbyMode = false;
 
+        private static Dictionary<string, List<System.Tuple<string, object>>> storedSettings; // Stored settings for each vessel.
+        [KSPEvent(advancedTweakable = false, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_StoreSettings", active = true)]//Store Settings
+        public void StoreSettings()
+        {
+            var vesselName = HighLogic.LoadedSceneIsFlight ? vessel.GetDisplayName() : EditorLogic.fetch.ship.shipName;
+            if (storedSettings == null)
+            {
+                storedSettings = new Dictionary<string, List<System.Tuple<string, object>>>();
+            }
+            if (storedSettings.ContainsKey(vesselName))
+            {
+                if (storedSettings[vesselName] == null)
+                {
+                    storedSettings[vesselName] = new List<System.Tuple<string, object>>();
+                }
+                else
+                {
+                    storedSettings[vesselName].Clear();
+                }
+            }
+            else
+            {
+                storedSettings.Add(vesselName, new List<System.Tuple<string, object>>());
+            }
+            var fields = typeof(BDModulePilotAI).GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            foreach (var field in fields)
+            {
+                storedSettings[vesselName].Add(new System.Tuple<string, object>(field.Name, field.GetValue(this)));
+            }
+            Events["RestoreSettings"].active = true;
+        }
+        [KSPEvent(advancedTweakable = false, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_RestoreSettings", active = false)]//Restore Settings
+        public void RestoreSettings()
+        {
+            var vesselName = HighLogic.LoadedSceneIsFlight ? vessel.GetDisplayName() : EditorLogic.fetch.ship.shipName;
+            if (storedSettings == null || !storedSettings.ContainsKey(vesselName) || storedSettings[vesselName] == null || storedSettings[vesselName].Count == 0)
+            {
+                Debug.Log("[BDModulePilotAI]: No stored settings found for vessel " + vesselName + ".");
+                return;
+            }
+            foreach (var setting in storedSettings[vesselName])
+            {
+                var field = typeof(BDModulePilotAI).GetField(setting.Item1, BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                if (field != null)
+                {
+                    field.SetValue(this, setting.Item2);
+                }
+            }
+        }
         #endregion
 
         #region AI Internal Parameters
@@ -688,6 +734,10 @@ namespace BDArmory.Modules
             CustomDynamicAxisField = CustomDynamicAxisFields;
             ToggleDynamicDampingFields();
             // InitSteerDamping();
+            if ((HighLogic.LoadedSceneIsFlight || HighLogic.LoadedSceneIsEditor) && storedSettings != null && storedSettings.ContainsKey(HighLogic.LoadedSceneIsFlight ? vessel.GetDisplayName() : EditorLogic.fetch.ship.shipName))
+            {
+                Events["RestoreSettings"].active = true;
+            }
         }
 
         protected override void OnDestroy()
@@ -1616,7 +1666,7 @@ namespace BDArmory.Modules
 
             if (command != PilotCommands.Free && (vessel.transform.position - flightCenter).sqrMagnitude < radius * radius * 1.5f)
             {
-                Debug.Log("[BDArmory]: AI Pilot reached command destination.");
+                Debug.Log("[BDModulePilotAI]: AI Pilot reached command destination.");
                 command = PilotCommands.Free;
             }
 
@@ -1840,7 +1890,7 @@ namespace BDArmory.Modules
         {
             if (v == vessel)
             {
-                terrainAlertDetectionRadius = 2f * BDACompetitionMode.GetRadius(vessel);
+                terrainAlertDetectionRadius = 2f * vessel.GetRadius();
             }
         }
 

@@ -217,7 +217,7 @@ namespace BDArmory.Radar
             {
                 float width = RadarScreenSize * BDArmorySettings.RADAR_WINDOW_SCALE + BorderSize + ControlsWidth + Gap * 3;
                 float height = RadarScreenSize * BDArmorySettings.RADAR_WINDOW_SCALE + BorderSize + HeaderSize;
-                BDArmorySetup.WindowRectRadar = new Rect(Screen.width - width, Screen.height - height, width, height);
+                BDArmorySetup.WindowRectRadar = new Rect(BDArmorySetup.WindowRectRadar.x, BDArmorySetup.WindowRectRadar.y, width, height);
                 radarRectInitialized = true;
             }
         }

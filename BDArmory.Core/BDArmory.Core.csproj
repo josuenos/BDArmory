@@ -42,6 +42,7 @@
     <Compile Include="Dependencies.cs" />
     <Compile Include="Enum\DamageOperation.cs" />
     <Compile Include="Events\DamageEventArgs.cs" />
+    <Compile Include="Extension\CrewExtensions.cs" />
     <Compile Include="Extension\DamageFX.cs" />
     <Compile Include="Extension\PartExtensions.cs" />
     <Compile Include="Extension\VesselExtensions.cs" />

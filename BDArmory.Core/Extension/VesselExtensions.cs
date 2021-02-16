@@ -69,5 +69,34 @@ namespace BDArmory.Core.Extension
                 (float)FlightGlobals.currentMainBody.GetAltitude(position));
             return radarAlt;
         }
+
+        // Get a vessel's "radius".
+        public static float GetRadius(this Vessel vessel)
+        {
+            //get vessel size
+            Vector3 size = vessel.vesselSize;
+
+            //get largest dimension
+            float radius;
+
+            if (size.x > size.y && size.x > size.z)
+            {
+                radius = size.x / 2;
+            }
+            else if (size.y > size.x && size.y > size.z)
+            {
+                radius = size.y / 2;
+            }
+            else if (size.z > size.x && size.z > size.y)
+            {
+                radius = size.z / 2;
+            }
+            else
+            {
+                radius = size.x / 2;
+            }
+
+            return radius;
+        }
     }
 }

@@ -449,6 +449,34 @@ namespace BDArmory.Targeting
                 return 0;
             }
         }
+
+        public float TargetPriProtectVIP(MissileFire mf) // If target is attacking our VIP(s)
+        {
+            if (mf == null) return 0;
+            if ((mf.vessel != null) && (mf.currentTarget != null) && (mf.currentTarget.weaponManager != null))
+            {
+                bool attackingOurVIPs = mf.currentTarget.weaponManager.isVIP;
+                return ((attackingOurVIPs == true) ? 1 : -1); // Ranges -1 to 1, 1 if target is attacking our VIP(s), -1 if it is not
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+        public float TargetPriAttackVIP(MissileFire mf) // If target is enemy VIP
+        {
+            if (mf == null) return 0;
+            if (mf.vessel != null)
+            {
+                bool isVIP = mf.isVIP;
+                return ((isVIP == true) ? 1 : -1); // Ranges -1 to 1, 1 if target is an enemy VIP, -1 if it is not
+            }
+            else
+            {
+                return 0;
+            }
+        }
         // End functions used for prioritizing targets
         #endregion
 

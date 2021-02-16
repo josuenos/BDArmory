@@ -18,10 +18,29 @@ namespace BDArmory.Misc
 
             if (BDArmorySettings.BD_TANKS)
             {
-                if (part.HasFuel() && penetrationFactor > 1.2 && part.GetDamagePercentage() < 0.75f)
+                if (part.HasFuel())
                 {
-                    BulletHitFX.AttachLeak(hitLoc, part, caliber, explosivedamage, attacker);
+                    var alreadyburning = part.GetComponentInChildren<FireFX>();
+                    var rubbertank = part.FindModuleImplementing<ModuleSelfSealingTank>();
+                    if (rubbertank != null)
+                    {
+                        if (rubbertank.SSTank && part.GetDamagePercentage() > 0.66f) return;
+                    }
+                    if (penetrationFactor > 1.2)
+                    {
+                        if (alreadyburning != null)
+                        {
+                            BulletHitFX.AttachFire(hitLoc, part, caliber, attacker);
+                        }
+                        else
+                        {
+                            BulletHitFX.AttachLeak(hitLoc, part, caliber, explosivedamage, attacker);
+                        }
+                    }
                 }
+            }
+            if (BDArmorySettings.BD_FIRES_ENABLED)
+            {
                 if (part.isBattery())
                 {
                     var alreadyburning = part.GetComponentInChildren<FireFX>();
@@ -326,7 +345,7 @@ namespace BDArmory.Misc
                             crewMember.UnregisterExperienceTraits(part);
                             //crewMember.outDueToG = true; //implement temp KO to simulate wounding?
                             crewMember.Die();
-                            if (part.isKerbalEVA())
+                            if (part.IsKerbalEVA())
                             {
                                 part.Die();
                             }

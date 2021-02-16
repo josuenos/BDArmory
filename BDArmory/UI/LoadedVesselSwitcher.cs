@@ -252,8 +252,7 @@ namespace BDArmory.UI
                     SetNewHeight(_windowHeight);
                     // this Rect initialization ensures any save issues with height or width of the window are resolved
                     BDArmorySetup.WindowRectVesselSwitcher = new Rect(BDArmorySetup.WindowRectVesselSwitcher.x, BDArmorySetup.WindowRectVesselSwitcher.y, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH, _windowHeight);
-                    BDArmorySetup.WindowRectVesselSwitcher = GUI.Window(10293444, BDArmorySetup.WindowRectVesselSwitcher, WindowVesselSwitcher, windowTitle,//"BDA Vessel Switcher"
-                        BDArmorySetup.BDGuiSkin.window);
+                    BDArmorySetup.WindowRectVesselSwitcher = GUI.Window(10293444, BDArmorySetup.WindowRectVesselSwitcher, WindowVesselSwitcher, windowTitle, BDArmorySetup.BDGuiSkin.window); //"BDA Vessel Switcher"
                     Misc.Misc.UpdateGUIRect(BDArmorySetup.WindowRectVesselSwitcher, _guiCheckIndex);
                 }
                 else
@@ -618,7 +617,7 @@ namespace BDArmory.UI
             // selects current target
             if (targetName != "")
             {
-                Rect targettingButtonRect = new Rect(_margin + vesselButtonWidth + _offset, height, _buttonHeight, _buttonHeight);
+                Rect targetingButtonRect = new Rect(_margin + vesselButtonWidth + _offset, height, _buttonHeight, _buttonHeight);
                 GUIStyle targButton = BDArmorySetup.BDGuiSkin.button;
                 if (wm.currentGun != null && wm.currentGun.recentlyFiring)
                 {
@@ -635,7 +634,7 @@ namespace BDArmory.UI
                         targButton = blueLight;
                     }
                 }
-                if (GUI.Button(targettingButtonRect, incomingThreat ? "><" : "[]", targButton))
+                if (GUI.Button(targetingButtonRect, incomingThreat ? "><" : "[]", targButton))
                     ForceSwitchVessel(targetVessel);
             }
 

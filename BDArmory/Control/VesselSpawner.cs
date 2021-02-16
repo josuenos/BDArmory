@@ -6,6 +6,7 @@ using System.Linq;
 using KSP.UI.Screens;
 using UnityEngine;
 using BDArmory.Core;
+using BDArmory.Core.Extension;
 using BDArmory.Modules;
 using BDArmory.Misc;
 using BDArmory.UI;
@@ -228,7 +229,7 @@ namespace BDArmory.Control
             else // Spawn the specific vessels.
             {
                 spawnConfig.craftFiles = spawnConfig.teamsSpecific.SelectMany(v => v.ToList()).ToList();
-                spawnConfig.numberOfTeams = 1;
+                // spawnConfig.numberOfTeams = 1;
             }
             if (spawnConfig.craftFiles.Count == 0)
             {
@@ -263,11 +264,24 @@ namespace BDArmory.Control
             #region Pre-spawning
             if (spawnConfig.killEverythingFirst)
             {
-                // Kill all vessels (including debris).
                 var vesselsToKill = FlightGlobals.Vessels.ToList();
+                // Spawn in the SpawnProbe at the camera position and switch to it so that we can clean up the other vessels properly.
+                var dummyVar = EditorFacility.None;
+                Vector3d dummySpawnCoords;
+                FlightGlobals.currentMainBody.GetLatLonAlt(FlightCamera.fetch.transform.position + 100f * (FlightCamera.fetch.transform.position - FlightGlobals.currentMainBody.transform.position).normalized, out dummySpawnCoords.x, out dummySpawnCoords.y, out dummySpawnCoords.z);
+                Vessel spawnProbe = SpawnVesselFromCraftFile($"{Environment.CurrentDirectory}/GameData/BDArmory/craft/SpawnProbe.craft", dummySpawnCoords, 0, 0f, out dummyVar);
+                spawnProbe.Landed = false; // Tell KSP that it's not landed so KSP doesn't mess with its position.
+                yield return new WaitWhile(() => spawnProbe != null && (!spawnProbe.loaded || spawnProbe.packed));
+                while (spawnProbe != null && FlightGlobals.ActiveVessel != spawnProbe)
+                {
+                    LoadedVesselSwitcher.Instance.ForceSwitchVessel(spawnProbe);
+                    yield return new WaitForFixedUpdate();
+                }
+                // Kill all other vessels (including debris).
                 foreach (var vessel in vesselsToKill)
                     RemoveVessel(vessel);
-
+                // Finally, remove the SpawnProbe
+                RemoveVessel(spawnProbe);
                 originalTeams.Clear();
             }
             while (removeVesselsPending > 0)
@@ -396,7 +410,7 @@ namespace BDArmory.Control
                 teamVesselNames = new List<List<string>>();
                 var currentTeamNames = new List<string>();
                 int spawnedTeamCount = 0;
-                if (spawnConfig.assignTeams) useOriginalTeamNames = true;
+                if (spawnConfig.assignTeams && spawnConfig.numberOfTeams == 1) useOriginalTeamNames = true;
                 Vector3 teamSpawnPosition;
                 foreach (var team in spawnConfig.teamsSpecific)
                 {
@@ -435,10 +449,13 @@ namespace BDArmory.Control
                             vessel.vesselName = potentialName;
                         }
                         currentTeamNames.Add(vessel.vesselName);
-                        if (spawnConfig.assignTeams) // Assign team names based on folders.
+                        if (spawnConfig.assignTeams)
                         {
-                            var paths = craftUrl.Split(Path.DirectorySeparatorChar);
-                            originalTeams[vessel.vesselName] = paths[paths.Length - 2];
+                            if (spawnConfig.numberOfTeams == 1) // Assign team names based on folders.
+                            {
+                                var paths = craftUrl.Split(Path.DirectorySeparatorChar);
+                                originalTeams[vessel.vesselName] = paths[paths.Length - 2];
+                            }
                         }
                         spawnedVessels.Add(vessel.GetName(), new Tuple<Vessel, Vector3d, Vector3, float, EditorFacility>(vessel, craftSpawnPosition, direction, vessel.GetHeightFromTerrain() - 35f, shipFacility)); // Store the vessel, its spawning point (which is different from its position) and height from the terrain!
                         ++spawnedVesselCount;
@@ -516,8 +533,6 @@ namespace BDArmory.Control
                     var distanceUnderWater = -FlightGlobals.getAltitudeAtPos(finalSpawnPositions[vesselName]);
                     if (distanceUnderWater >= 0) // Under water, move the vessel to the surface.
                     {
-                        // finalSpawnPositions[vesselName] += (float)distanceUnderWater * localRadialUnitVector;
-                        // if (!spawnAirborne)
                         vessel.Splashed = true; // Set the vessel as splashed.
                     }
                 }
@@ -1141,7 +1156,7 @@ namespace BDArmory.Control
                                 }
                                 BDACompetitionMode.Instance.rammingInformation[vessel.GetName()].vessel = vessel;
                                 BDACompetitionMode.Instance.rammingInformation[vessel.GetName()].partCount = vessel.parts.Count;
-                                BDACompetitionMode.Instance.rammingInformation[vessel.GetName()].radius = BDACompetitionMode.GetRadius(vessel);
+                                BDACompetitionMode.Instance.rammingInformation[vessel.GetName()].radius = vessel.GetRadius();
                                 foreach (var otherVesselName in BDACompetitionMode.Instance.rammingInformation.Keys)
                                 {
                                     if (otherVesselName == vessel.GetName()) continue;
@@ -1454,12 +1469,13 @@ namespace BDArmory.Control
             }
             if (vessel != FlightGlobals.ActiveVessel && vessel.vesselType != VesselType.SpaceObject)
             {
-                Debug.Log("DEBUG Recovering " + vessel.vesselName);
-                ShipConstruction.RecoverVesselFromFlight(vessel.protoVessel, HighLogic.CurrentGame.flightState, true);
+                if (BDArmorySettings.KERBAL_SAFETY)
+                    KerbalSafetyManager.Instance.RecoverVesselNow(vessel);
+                else
+                    ShipConstruction.RecoverVesselFromFlight(vessel.protoVessel, HighLogic.CurrentGame.flightState, true);
             }
             else
             {
-                Debug.Log("DEBUG Killing " + vessel.vesselName);
                 if (vessel.vesselType == VesselType.SpaceObject)
                 {
                     var cometVessel = vessel.FindVesselModuleImplementing<CometVessel>();

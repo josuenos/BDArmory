@@ -343,26 +343,33 @@ namespace BDArmory.FX
                 {
                     if (BDArmorySettings.BD_FIRES_ENABLED)
                     {
-                        int i;
                         int explosiveMod = 10; //10% chance of AP rounds starting fires from sparks/tracers/etc
                         if (explosive)
                         {
-                            explosiveMod = 3; //33% chance of starting fires from HE rounds
+                            explosiveMod = 33; //33% chance of starting fires from HE rounds
                             explosive = false;
                         }
-                        i = UnityEngine.Random.Range(1, explosiveMod);
-                        if (i == 6)
+                        //if (incindiary)
+                        //{
+                        //    explosiveMod = 90; //90% chance of starting fires from inc rounds
+                        //    explosive = false;
+                        //}
+                        double Diceroll = UnityEngine.Random.Range(0, 100);
+                        if (Diceroll <= explosiveMod)
                         {
                             explosive = true;
                         }
+                        //Debug.Log("[FIRE DEBUG] diceroll: " + Diceroll);
                         if (explosive)
                         {
+                            int leakcount = 1;
                             foreach (var existingLeakFX in hitPart.GetComponentsInChildren<FuelLeakFX>())
                             {
                                 existingLeakFX.lifeTime = 0; //kill leakFX, start fire
+                                leakcount++;
                             }
                             leak.drainDuration = 0;
-                            AttachFire(hit, hitPart, caliber, sourcevessel);
+                            AttachFire(hit, hitPart, caliber, sourcevessel, -1, leakcount);
                         }
                     }
                     else
@@ -389,7 +396,7 @@ namespace BDArmory.FX
                 fuelLeak.SetActive(true);
             }
         }
-        public static void AttachFire(RaycastHit hit, Part hitPart, float caliber, string sourcevessel, float burntime = -1)
+        public static void AttachFire(RaycastHit hit, Part hitPart, float caliber, string sourcevessel, float burntime = -1, int ignitedLeaks = 1)
         {
             if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_FIRES_ENABLED)
             {
@@ -398,7 +405,7 @@ namespace BDArmory.FX
                 var fire = FireFXPool.GetPooledObject();
                 var fireFX = fire.GetComponentInChildren<FireFX>();
                 fireFX.AttachAt(hitPart, hit, new Vector3(0.25f, 0f, 0f), sourcevessel);
-                fireFX.burnRate = ((caliber / 50) * BDArmorySettings.BD_TANK_LEAK_RATE);
+                fireFX.burnRate = (((caliber / 50) * BDArmorySettings.BD_TANK_LEAK_RATE)*ignitedLeaks);
                 //fireFX.transform.localScale = Vector3.one * (caliber/10);
 
                 Debug.Log("[BDArmory]: BulletHit fire, burn rate: " + fireFX.burnRate);

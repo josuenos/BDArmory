@@ -40,7 +40,7 @@
     <DebugType>portable</DebugType>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+    <!-- <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet> -->
     <LangVersion>default</LangVersion>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
@@ -48,7 +48,7 @@
     <OutputPath>bin\Release\</OutputPath>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>BasicCorrectnessRules.ruleset</CodeAnalysisRuleSet>
+    <!-- <CodeAnalysisRuleSet>BasicCorrectnessRules.ruleset</CodeAnalysisRuleSet> -->
     <Optimize>true</Optimize>
     <CodeAnalysisIgnoreGeneratedCode>false</CodeAnalysisIgnoreGeneratedCode>
     <Prefer32Bit>false</Prefer32Bit>
@@ -193,6 +193,7 @@
     <Compile Include="Modules\ClusterBomb.cs" />
     <Compile Include="Modules\EngageableWeapon.cs" />
     <Compile Include="Modules\IEngageService.cs" />
+    <Compile Include="Modules\KerbalSafety.cs" />
     <Compile Include="Modules\MissileBase.cs" />
     <Compile Include="Modules\MissileFire.cs" />
     <Compile Include="Modules\MissileLauncher.cs" />
