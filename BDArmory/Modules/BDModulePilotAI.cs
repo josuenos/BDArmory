@@ -875,13 +875,13 @@ namespace BDArmory.Modules
             if (gainAltInhibited && (!belowMinAltitude || !(currentStatus == "Engaging" || currentStatus == "Evading" || currentStatus.StartsWith("Gain Alt"))))
             { // Allow switching between "Engaging", "Evading" and "Gain Alt." while below minimum altitude without disabling the gain altitude inhibitor.
                 gainAltInhibited = false;
-                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("DEBUG " + vessel.vesselName + " is no longer inhibiting gain alt");
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDModulePilotAI]: " + vessel.vesselName + " is no longer inhibiting gain alt");
             }
 
             if (!gainAltInhibited && belowMinAltitude && (currentStatus == "Engaging" || currentStatus == "Evading"))
             { // Vessel went below minimum altitude while "Engaging" or "Evading", enable the gain altitude inhibitor.
                 gainAltInhibited = true;
-                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("DEBUG " + vessel.vesselName + " was " + currentStatus + " and went below min altitude, inhibiting gain alt.");
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDModulePilotAI]: " + vessel.vesselName + " was " + currentStatus + " and went below min altitude, inhibiting gain alt.");
             }
 
             if (vessel.srfSpeed < minSpeed)

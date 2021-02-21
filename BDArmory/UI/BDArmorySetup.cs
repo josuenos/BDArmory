@@ -1786,13 +1786,14 @@ namespace BDArmory.UI
                         BDACompetitionMode.Instance.RunDebugChecks();
                     }
                 }
+
+                ++line;
             }
 
             //competition mode
             if (HighLogic.LoadedSceneIsFlight)
             {
-                ++line;
-                if (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.REMOTE_LOGGING_VISIBLE)
+                if (BDArmorySettings.REMOTE_LOGGING_VISIBLE)
                 {
                     bool remoteLoggingEnabled = BDArmorySettings.REMOTE_LOGGING_ENABLED;
                     BDArmorySettings.REMOTE_LOGGING_ENABLED = GUI.Toggle(SLeftRect(++line), remoteLoggingEnabled, Localizer.Format("#LOC_BDArmory_Settings_RemoteLogging"));//"Remote Logging"
@@ -1800,11 +1801,14 @@ namespace BDArmory.UI
                     {
                         GUI.Label(SLeftRect(++line), $"{Localizer.Format("#LOC_BDArmory_Settings_CompetitionID")}: ", leftLabel); // Competition hash.
                         BDArmorySettings.COMPETITION_HASH = GUI.TextField(SRightRect(line), BDArmorySettings.COMPETITION_HASH);
+                        GUI.Label(SLeftSliderRect(++line), $"{Localizer.Format("#LOC_BDArmory_Settings_RemoteInterheatDelay")}: ({BDArmorySettings.REMOTE_INTERHEAT_DELAY}s)", leftLabel); // Inter-heat delay
+                        BDArmorySettings.REMOTE_INTERHEAT_DELAY = (int)GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.REMOTE_INTERHEAT_DELAY, 1f, 30f);
                     }
                 }
                 else
                     BDArmorySettings.REMOTE_LOGGING_ENABLED = false;
 
+                ++line;
                 bool origPm = BDArmorySettings.PEACE_MODE;
                 BDArmorySettings.PEACE_MODE = GUI.Toggle(SLeftRect(++line), BDArmorySettings.PEACE_MODE, Localizer.Format("#LOC_BDArmory_Settings_PeaceMode"));//"Peace Mode"
                 if (BDArmorySettings.PEACE_MODE && !origPm)

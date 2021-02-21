@@ -120,7 +120,7 @@ namespace BDArmory.UI
             switch (service.status)
             {
                 case BDAScoreService.StatusType.Waiting:
-                    statusLine = status + " " + (30 + service.retryFindStartedAt - Planetarium.GetUniversalTime()).ToString("0") + "s";
+                    statusLine = status + " " + (BDArmorySettings.REMOTE_INTERHEAT_DELAY - (Planetarium.GetUniversalTime() - service.retryFindStartedAt)).ToString("0") + "s";
                     break;
                 default:
                     statusLine = status;

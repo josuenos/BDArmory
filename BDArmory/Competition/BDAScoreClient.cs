@@ -15,7 +15,7 @@ namespace BDArmory.Competition
     {
         private BDAScoreService service;
 
-        private string baseUrl = "https://bdascores.herokuapp.com";
+        private string baseUrl;
 
         public string vesselPath = "";
 
@@ -36,6 +36,7 @@ namespace BDArmory.Competition
 
         public BDAScoreClient(BDAScoreService service, string vesselPath, string hash)
         {
+            this.baseUrl = "https://" + BDArmorySettings.REMOTE_ORCHESTRATION_BASE_URL;
             this.service = service;
             this.vesselPath = vesselPath + "/" + hash;
             this.competitionHash = hash;

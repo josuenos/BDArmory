@@ -269,6 +269,13 @@ namespace BDArmory.Control
                 var dummyVar = EditorFacility.None;
                 Vector3d dummySpawnCoords;
                 FlightGlobals.currentMainBody.GetLatLonAlt(FlightCamera.fetch.transform.position + 100f * (FlightCamera.fetch.transform.position - FlightGlobals.currentMainBody.transform.position).normalized, out dummySpawnCoords.x, out dummySpawnCoords.y, out dummySpawnCoords.z);
+                if (!File.Exists($"{Environment.CurrentDirectory}/GameData/BDArmory/craft/SpawnProbe.craft"))
+                {
+                    message = "GameData/BDArmory/craft/SpawnProbe.craft is missing. Please create the craft (a simple octo2 probe core will do).";
+                    BDACompetitionMode.Instance.competitionStatus.Add(message);
+                    Debug.LogError("[VesselSpawner]: " + message);
+                    yield break;
+                }
                 Vessel spawnProbe = SpawnVesselFromCraftFile($"{Environment.CurrentDirectory}/GameData/BDArmory/craft/SpawnProbe.craft", dummySpawnCoords, 0, 0f, out dummyVar);
                 spawnProbe.Landed = false; // Tell KSP that it's not landed so KSP doesn't mess with its position.
                 yield return new WaitWhile(() => spawnProbe != null && (!spawnProbe.loaded || spawnProbe.packed));

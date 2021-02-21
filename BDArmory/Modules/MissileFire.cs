@@ -3107,7 +3107,7 @@ namespace BDArmory.Modules
                     {
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
                         {
-                            Debug.Log("[BDArmory]: " + vessel.vesselName + targetDebugText + selectedWeapon.GetShortName());
+                            Debug.Log("[BDArmory]: " + vessel.vesselName + targetDebugText + (selectedWeapon != null ? selectedWeapon.GetShortName() : ""));
                         }
                         return;
                     }
