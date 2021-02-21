@@ -141,10 +141,12 @@ namespace BDArmory.Core
 
 
         // Remote logging
-        [BDAPersistantSettingsField] public static bool REMOTE_LOGGING_VISIBLE = false;            // Show/hide the remote orchestration toggle
-        [BDAPersistantSettingsField] public static bool REMOTE_LOGGING_ENABLED = false;            // Enable/disable remote orchestration
-        [BDAPersistantSettingsField] public static string REMOTE_CLIENT_SECRET = "";               // Token used to authorize remote orchestration client
-        [BDAPersistantSettingsField] public static string COMPETITION_HASH = "";                   // Competition hash used for orchestration
+        [BDAPersistantSettingsField] public static bool REMOTE_LOGGING_VISIBLE = false;                                   // Show/hide the remote orchestration toggle
+        [BDAPersistantSettingsField] public static bool REMOTE_LOGGING_ENABLED = false;                                   // Enable/disable remote orchestration
+        [BDAPersistantSettingsField] public static string REMOTE_ORCHESTRATION_BASE_URL = "bdascores.herokuapp.com";      // Base URL used for orchestration (note: we can't include the https:// as it breaks KSP's serialisation routine)
+        [BDAPersistantSettingsField] public static string REMOTE_CLIENT_SECRET = "";                                      // Token used to authorize remote orchestration client
+        [BDAPersistantSettingsField] public static string COMPETITION_HASH = "";                                          // Competition hash used for orchestration
+        [BDAPersistantSettingsField] public static float REMOTE_INTERHEAT_DELAY = 30;                                     // Delay between heats.
 
         // Spawner settings
         [BDAPersistantSettingsField] public static bool SHOW_SPAWN_OPTIONS = true;                 // Show spawn options.

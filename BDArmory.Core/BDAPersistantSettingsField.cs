@@ -33,7 +33,9 @@ namespace BDArmory.Core
                 if (fieldValue.GetType() == typeof(Vector2d))
                     settings.SetValue(field.Current.Name, ((Vector2d)fieldValue).ToString("G"), true);
                 else
+                {
                     settings.SetValue(field.Current.Name, field.Current.GetValue(null).ToString(), true);
+                }
             }
             field.Dispose();
             fileNode.Save(BDArmorySettings.settingsConfigURL);
@@ -113,7 +115,7 @@ namespace BDArmory.Core
                 double y = double.Parse(strings[1]);
                 return new Vector2d(x, y);
             }
-            
+
             Debug.LogError("[BDArmory]: BDAPersistantSettingsField to parse settings field of type " + type + " and value " + value);
             return null;
         }
