@@ -114,6 +114,8 @@ namespace BDArmory.Modules
         public Vector3 finalAimTarget;
         Vector3 lastFinalAimTarget;
         public Vessel visualTargetVessel;
+        private Part visualTargetPart;
+        private int targetID = 0;
         bool targetAcquired;
 
         public Vector3? FiringSolutionVector => finalAimTarget.IsZero() ? (Vector3?)null : (finalAimTarget - fireTransforms[0].position).normalized;
@@ -2305,10 +2307,20 @@ namespace BDArmory.Modules
 
                     if (visualTargetVessel != null && visualTargetVessel.loaded)
                     {
-                        targetPosition = ray.direction *
-                                         Vector3.Distance(visualTargetVessel.transform.position,
-                                             FlightCamera.fetch.mainCamera.transform.position) +
-                                         FlightCamera.fetch.mainCamera.transform.position;
+                        if (BDArmorySettings.ADVANCED_TARGETING && !BDArmorySettings.TARGET_COM && visualTargetPart != null)
+                        {
+                            targetPosition = ray.direction *
+                                             Vector3.Distance(visualTargetPart.transform.position,
+                                                 FlightCamera.fetch.mainCamera.transform.position) +
+                                             FlightCamera.fetch.mainCamera.transform.position;
+                        }
+                        else
+                        {
+                            targetPosition = ray.direction *
+                                             Vector3.Distance(visualTargetVessel.transform.position,
+                                                 FlightCamera.fetch.mainCamera.transform.position) +
+                                             FlightCamera.fetch.mainCamera.transform.position;
+                        }
                     }
                 }
             }
@@ -2659,6 +2671,7 @@ namespace BDArmory.Modules
             {
                 autoFire = false;
                 visualTargetVessel = null;
+                visualTargetPart = null;
             }
         }
 
@@ -2879,6 +2892,21 @@ namespace BDArmory.Modules
                 {
                     targetRadius = visualTargetVessel.GetRadius();
                     targetPosition = visualTargetVessel.CoM;
+                    if (!BDArmorySettings.TARGET_COM)
+                    {
+                        TargetInfo currentTarget = visualTargetVessel.gameObject.GetComponent<TargetInfo>();
+                        if (visualTargetPart == null)
+                        {
+                            targetID = UnityEngine.Random.Range(0, Mathf.Min(currentTarget.targetPartList.Count, 5));
+                            if (!turret) //make fixed guns all get the same target part
+                            {
+                                targetID = 0;
+                            }
+                            visualTargetPart = currentTarget.targetPartList[targetID];
+                            //Debug.Log("[MTD] MW TargetID: " + targetID);
+                        }
+                        targetPosition = visualTargetPart.transform.position;
+                    }
                     targetVelocity = visualTargetVessel.rb_velocity;
                     targetAcquired = true;
                     return;

@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using BDArmory.Core;
 using BDArmory.Core.Extension;
 using BDArmory.Misc;
@@ -25,6 +26,8 @@ namespace BDArmory.Targeting
         public float radarJammingDistance;
         public bool alreadyScheduledRCSUpdate = false;
         public float radarMassAtUpdate = 0f;
+
+        public List<Part> targetPartList = new List<Part>();
 
         public bool isLandedOrSurfaceSplashed
         {
@@ -224,6 +227,7 @@ namespace BDArmory.Targeting
                 GameEvents.onVesselPartCountChanged.Add(VesselModified);
                 //massRoutine = StartCoroutine(MassRoutine());              // TODO: CHECK BEHAVIOUR AND SIDE EFFECTS!
             }
+            UpdateTargetPartList();
         }
 
         void OnPeaceEnabled()
@@ -268,6 +272,56 @@ namespace BDArmory.Targeting
                     Team = null;
                 }
             }
+            if (HighLogic.LoadedSceneIsFlight)
+            {
+                if (BDArmorySetup.windowSettingsEnabled)
+                {
+                    UpdateTargetPartList();
+                }
+            }
+        }
+
+        public void UpdateTargetPartList()
+        {
+            targetPartList.Clear();
+            int targetCount = 0;
+            using (List<Part>.Enumerator part = vessel.Parts.GetEnumerator())
+                while (part.MoveNext())
+                {
+                    if (part.Current == null) continue;
+                    if (BDArmorySettings.TARGET_WEAPONS)
+                    {
+                        if (part.Current.FindModuleImplementing<ModuleWeapon>() || part.Current.FindModuleImplementing<MissileTurret>())
+                        {
+                            targetPartList.Add(part.Current);
+                            targetCount++;
+                        }
+                    }
+                    if (BDArmorySettings.TARGET_ENGINES)
+                    {
+                        if (part.Current.FindModuleImplementing<ModuleEngines>() || part.Current.FindModuleImplementing<ModuleEnginesFX>())
+                        {
+                            targetPartList.Add(part.Current);
+                            targetCount++;
+                        }
+                    }
+                    if (BDArmorySettings.TARGET_COMMAND)
+                    {
+                        if (part.Current.FindModuleImplementing<ModuleCommand>())
+                        {
+                            targetPartList.Add(part.Current);
+                            targetCount++;
+                        }
+                    }
+                    //else if nothing prioritized, or all priority targets destroyed
+                    if (!BDArmorySettings.TARGET_COMMAND && !BDArmorySettings.TARGET_ENGINES && !BDArmorySettings.TARGET_WEAPONS || (targetCount < 1))
+                    {
+                        targetPartList.Add(part.Current);
+                    }
+                }
+            targetPartList = targetPartList.OrderBy(w => w.mass).ToList(); //weight target part priority by part mass, also serves as a default 'target heaviest part' in case other options not selected
+            targetPartList.Reverse(); //Order by mass is lightest to heaviest. We want H>L
+            //Debug.Log("[MTD]: Rebuilt target part list, count: " + targetPartList.Count);
         }
 
         public int NumFriendliesEngaging(BDTeam team)
@@ -531,6 +585,7 @@ namespace BDArmory.Targeting
             {
                 if (!alreadyScheduledRCSUpdate)
                     StartCoroutine(UpdateRCSDelayed());
+                UpdateTargetPartList();
             }
         }
 

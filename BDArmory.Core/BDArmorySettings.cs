@@ -139,6 +139,14 @@ namespace BDArmory.Core
         [BDAPersistantSettingsField] public static bool BD_FIRE_DOT = false; //do fires do DoT
         [BDAPersistantSettingsField] public static float BD_FIRE_DAMAGE = 5; //do fires do DoT
 
+        //Advanced Targeting settings
+        [BDAPersistantSettingsField] public static int MULTI_TARGET_NUM = 1;
+        [BDAPersistantSettingsField] public static bool ADVANCED_TARGETING = false;
+        [BDAPersistantSettingsField] public static bool ADV_TARGET_TOGGLE = false;
+        [BDAPersistantSettingsField] public static bool TARGET_COM = true; //target CoM Y/N
+        [BDAPersistantSettingsField] public static bool TARGET_WEAPONS = false; //target guns/turrets
+        [BDAPersistantSettingsField] public static bool TARGET_ENGINES = false; //Exactly what is says on the tin
+        [BDAPersistantSettingsField] public static bool TARGET_COMMAND = false; //Cockpits/probecores
 
         // Remote logging
         [BDAPersistantSettingsField] public static bool REMOTE_LOGGING_VISIBLE = false;                                   // Show/hide the remote orchestration toggle
