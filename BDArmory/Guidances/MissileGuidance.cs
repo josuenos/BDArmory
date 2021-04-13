@@ -192,7 +192,7 @@ namespace BDArmory.Guidances
 
                 if (currentDistanceSqr <= previousDistanceSqr)
                 {
-                    Debug.Log("[BDArmory]: Accurate time to impact failed");
+                    Debug.Log("[BDArmory.MissileGuidance]: Accurate time to impact failed");
 
                     timeToImpact = 0;
                     return false;
@@ -366,6 +366,7 @@ namespace BDArmory.Guidances
             Vector3 previousTorque, float maxTorque, float maxAoA, FloatCurve liftCurve, FloatCurve dragCurve)
         {
             Rigidbody rb = ml.part.rb;
+            if (rb == null || rb.mass == 0) return Vector3.zero;
             double airDensity = ml.vessel.atmDensity;
             double airSpeed = ml.vessel.srfSpeed;
             Vector3d velocity = ml.vessel.Velocity();

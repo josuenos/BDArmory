@@ -27,9 +27,9 @@ namespace BDArmory.Core.Utils
 
         static public void PrintConfigNode(ConfigNode configNode, string indent = "")
         {
-            Debug.Log("DEBUG " + indent + configNode.ToString() + ":: ");
+            Debug.Log("[BDArmory.ConfigNodeUtils]: " + indent + configNode.ToString() + ":: ");
             for (int i = 0; i < configNode.values.Count; ++i)
-                Debug.Log("DEBUG  " + indent + configNode.values[i].name + ": " + configNode.values[i].value);
+                Debug.Log("[BDArmory.ConfigNodeUtils]:   " + indent + configNode.values[i].name + ": " + configNode.values[i].value);
             foreach (var node in configNode.GetNodes())
             {
                 PrintConfigNode(node, indent + " ");

@@ -53,7 +53,7 @@ namespace BDArmory.UI
             // first pass, then sort
             for (int i = 0; i < radars.Length; i++)
             {
-                if (string.IsNullOrEmpty(radars[i].radarName)) radars[i].radarName = radars[i].part?.partInfo?.title;
+                if (string.IsNullOrEmpty(radars[i].radarName)) radars[i].radarName = (radars[i].part == null ? null : radars[i].part.partInfo == null ? null : radars[i].part.partInfo.title);
                 GUIContent gui = new GUIContent(radars[i].radarName);
             }
             Array.Sort(radars, delegate (ModuleRadar r1, ModuleRadar r2) { return r1.radarName.CompareTo(r2.radarName); });

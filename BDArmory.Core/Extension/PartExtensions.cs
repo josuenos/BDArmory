@@ -26,7 +26,7 @@ namespace BDArmory.Core.Extension
             {
                 Dependencies.Get<DamageService>().AddDamageToPart_svc(p, damage);
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                    Debug.Log("[BDArmory]: Standard Hitpoints Applied : " + damage);
+                    Debug.Log("[BDArmory.PartExtensions]: Standard Hitpoints Applied : " + damage);
             }
         }
 
@@ -138,8 +138,8 @@ namespace BDArmory.Core.Extension
             Dependencies.Get<DamageService>().AddDamageToPart_svc(p, damage_);
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log("[BDArmory]: mass: " + mass + " caliber: " + caliber + " multiplier: " + multiplier + " velocity: " + impactVelocity + " penetrationfactor: " + penetrationfactor);
-                Debug.Log("[BDArmory]: Ballistic Hitpoints Applied : " + damage_);
+                Debug.Log("[BDArmory.PartExtensions]: mass: " + mass + " caliber: " + caliber + " multiplier: " + multiplier + " velocity: " + impactVelocity + " penetrationfactor: " + penetrationfactor);
+                Debug.Log("[BDArmory.PartExtensions]: Ballistic Hitpoints Applied : " + damage_);
             }
         }
 
@@ -154,7 +154,7 @@ namespace BDArmory.Core.Extension
 
             Dependencies.Get<DamageService>().AddDamageToPart_svc(p, damage);
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: Explosive Hitpoints Applied to " + p.name + ": " + damage);
+                Debug.Log("[BDArmory.PartExtensions]: Explosive Hitpoints Applied to " + p.name + ": " + damage);
         }
 
         /// <summary>
@@ -168,7 +168,7 @@ namespace BDArmory.Core.Extension
 
             Dependencies.Get<DamageService>().AddDamageToKerbal_svc(kerbal, damage);
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: Hitpoints Applied to " + kerbal.name + ": " + damage);
+                Debug.Log("[BDArmory.PartExtensions]: Hitpoints Applied to " + kerbal.name + ": " + damage);
         }
 
         public static void AddForceToPart(Rigidbody rb, Vector3 force, Vector3 position, ForceMode mode)
@@ -177,8 +177,9 @@ namespace BDArmory.Core.Extension
             // Add The force to part
             //////////////////////////////////////////////////////////
 
+            if (rb == null || rb.mass == 0) return;
             rb.AddForceAtPosition(force, position, mode);
-            Debug.Log("[BDArmory]: Force Applied : " + force.magnitude);
+            Debug.Log("[BDArmory.PartExtensions]: Force Applied : " + force.magnitude);
         }
 
         public static void Destroy(this Part p)
@@ -219,7 +220,7 @@ namespace BDArmory.Core.Extension
 
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log("[BDArmory]: Armor Removed : " + massToReduce);
+                Debug.Log("[BDArmory.PartExtensions]: Armor Removed : " + massToReduce);
             }
         }
 
@@ -295,6 +296,8 @@ namespace BDArmory.Core.Extension
             return volume;
         }
 
+        private static bool tweakScaleChecked = false;
+        private static bool tweakScaleInstalled = false;
         public static Vector3 GetSize(this Part part)
         {
             var size = part.GetComponentInChildren<MeshFilter>().mesh.bounds.size;
@@ -305,7 +308,14 @@ namespace BDArmory.Core.Extension
             // }
 
             float scaleMultiplier = 1f;
-            if (part.Modules.Contains("TweakScale"))
+            if (!tweakScaleChecked)
+            {
+                foreach (var assy in AssemblyLoader.loadedAssemblies)
+                    if (assy.assembly.FullName.Contains("TweakScale"))
+                        tweakScaleInstalled = true;
+                tweakScaleChecked = true;
+            }
+            if (tweakScaleInstalled && part.Modules.Contains("TweakScale"))
             {
                 var tweakScaleModule = part.Modules["TweakScale"];
                 scaleMultiplier = tweakScaleModule.Fields["currentScale"].GetValue<float>(tweakScaleModule) /
@@ -399,9 +409,9 @@ namespace BDArmory.Core.Extension
 
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
                         {
-                            Debug.Log("[BDArmory]: Damage Before Reduction : " + damage);
-                            Debug.Log("[BDArmory]: Damage Reduction (%) : " + 100*(1-Mathf.Clamp01((113f - _damageReduction) / 100f)));
-                            Debug.Log("[BDArmory]: Damage After Armor : " + (damage *= Mathf.Clamp01((113f - _damageReduction) / 100f)));
+                            Debug.Log("[BDArmory.PartExtensions]: Damage Before Reduction : " + damage);
+                            Debug.Log("[BDArmory.PartExtensions]: Damage Reduction (%) : " + 100 * (1 - Mathf.Clamp01((113f - _damageReduction) / 100f)));
+                            Debug.Log("[BDArmory.PartExtensions]: Damage After Armor : " + (damage *= Mathf.Clamp01((113f - _damageReduction) / 100f)));
                         }
 
                         damage *= Mathf.Clamp01((113f - _damageReduction) / 100f); ;

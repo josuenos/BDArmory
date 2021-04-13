@@ -67,7 +67,7 @@ namespace BDArmory.Misc
                 missileActiveTime = Mathf.Min((missile.vessel.LandedOrSplashed ? 0f : missile.dropTime) + Mathf.Sqrt(2 * blastRadius / maxMissileAccel), 2f); // Clamp at 2s for now
 
                 // Rough range estimate of max missile G in a turn after launch, the following code is quite janky but works decently well in practice
-                float maxEstimatedGForce = (bodyGravity * ml.maxTorque); // Rough estimate of max G based on missile torque
+                float maxEstimatedGForce = Mathf.Max(bodyGravity * ml.maxTorque, 15f); // Rough estimate of max G based on missile torque, use minimum of 15G to prevent some VLS parts from not working
                 if (ml.aero) // If missile has aerodynamics, modify G force by AoA limit
                 {
                     maxEstimatedGForce *= Mathf.Sin(ml.maxAoA * Mathf.Deg2Rad);
@@ -75,7 +75,7 @@ namespace BDArmory.Misc
 
                 // Rough estimate of turning radius and arc length to travel
                 float arcLength = 0;
-                if (missile.GetWeaponClass() != WeaponClasses.SLW) // If the missile isn't a torpedo
+                if ((!missile.vessel.LandedOrSplashed) && (missile.GetWeaponClass() != WeaponClasses.SLW)) // If the missile isn't a torpedo
                 {
                     float futureTime = Mathf.Clamp((missile.vessel.LandedOrSplashed ? 0f : missile.dropTime), 0f, 2f);
                     Vector3 futureRelPosition = (targetPosition + targetVelocity * futureTime) - (missile.part.transform.position + launcherVelocity * futureTime);

@@ -49,7 +49,7 @@ namespace BDArmory.Misc
                 pool.RemoveRange(count, size - count);
                 lastIndex = 0;
             }
-            Debug.Log("[ObjectPool]: Resizing " + poolObjectName + " pool to " + size);
+            Debug.Log("[BDArmory.ObjectPool]: Resizing " + poolObjectName + " pool to " + size);
         }
 
         private void AddObjectsToPool(int count)
@@ -65,7 +65,7 @@ namespace BDArmory.Misc
 
         private void ReplacePoolObject(int index)
         {
-            Debug.Log("[ObjectPool]: Object of type " + poolObjectName + " was null at position " + index + ", replacing it.");
+            Debug.Log("[BDArmory.ObjectPool]: Object of type " + poolObjectName + " was null at position " + index + ", replacing it.");
             GameObject obj = Instantiate(poolObject);
             obj.transform.SetParent(transform);
             obj.SetActive(false);
@@ -105,7 +105,7 @@ namespace BDArmory.Misc
             if (canGrow)
             {
                 var size = (int)(pool.Count * 1.2) + 1; // Grow by 20% + 1
-                Debug.Log("[ObjectPool]: Increasing pool size to " + size + " for " + poolObjectName);
+                Debug.Log("[BDArmory.ObjectPool]: Increasing pool size to " + size + " for " + poolObjectName);
                 AddObjectsToPool(size - pool.Count);
 
                 if (disableAfterDelay > 0f) DisableAfterDelay(pool[pool.Count - 1], disableAfterDelay);
@@ -140,7 +140,7 @@ namespace BDArmory.Misc
 
         public static ObjectPool CreateObjectPool(GameObject obj, int size, bool canGrow, bool destroyOnLoad, float disableAfterDelay = 0f, bool forceReUse = false)
         {
-            Debug.Log("[ObjectPool]: Creating object pool of size " + size + " for " + obj.name);
+            Debug.Log("[BDArmory.ObjectPool]: Creating object pool of size " + size + " for " + obj.name);
             GameObject poolObject = new GameObject(obj.name + "Pool");
             ObjectPool op = poolObject.AddComponent<ObjectPool>();
             op.poolObject = obj;

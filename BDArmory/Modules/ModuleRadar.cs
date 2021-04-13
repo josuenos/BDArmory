@@ -454,7 +454,7 @@ namespace BDArmory.Modules
             // check for not updated legacy part:
             if ((canScan && (radarMinDistanceDetect == float.MaxValue)) || (canLock && (radarMinDistanceLockTrack == float.MaxValue)))
             {
-                Debug.Log("[BDArmory]: WARNING: " + part.name + " has legacy definition, missing new radarDetectionCurve and radarLockTrackCurve definitions! Please update for the part to be usable!");
+                Debug.Log("[BDArmory.ModuleRadar]: WARNING: " + part.name + " has legacy definition, missing new radarDetectionCurve and radarLockTrackCurve definitions! Please update for the part to be usable!");
             }
         }
 
@@ -470,7 +470,7 @@ namespace BDArmory.Modules
         IEnumerator StartUpRoutine()
         {
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: StartupRoutine: " + radarName + " enabled: " + radarEnabled);
+                Debug.Log("[BDArmory.ModuleRadar]: StartupRoutine: " + radarName + " enabled: " + radarEnabled);
             while (!FlightGlobals.ready || vessel.packed)
             {
                 yield return null;
@@ -693,15 +693,15 @@ namespace BDArmory.Modules
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
                 if (targetVessel == null)
-                    Debug.Log("[BDArmory]: Trying to radar lock target with (" + radarName + ")");
+                    Debug.Log("[BDArmory.ModuleRadar]: Trying to radar lock target with (" + radarName + ")");
                 else
-                    Debug.Log("[BDArmory]: Trying to radar lock target " + targetVessel.vesselName + " with (" + radarName + ")");
+                    Debug.Log("[BDArmory.ModuleRadar]: Trying to radar lock target " + targetVessel.vesselName + " with (" + radarName + ")");
             }
 
             if (currentLocks == maxLocks)
             {
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                    Debug.Log("[BDArmory]: - Failed, this radar already has the maximum allowed targets locked.");
+                    Debug.Log("[BDArmory.ModuleRadar]: - Failed, this radar already has the maximum allowed targets locked.");
                 return false;
             }
 
@@ -734,7 +734,7 @@ namespace BDArmory.Modules
                     currLocks = lockedTargets.Count;
 
                     if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                        Debug.Log("[BDArmory]: - Acquired lock on target (" + attemptedLocks[i].vessel?.name + ")");
+                        Debug.Log("[BDArmory.ModuleRadar]: - Acquired lock on target (" + (attemptedLocks[i].vessel != null ? attemptedLocks[i].vessel.name : null) + ")");
 
                     vesselRadarData.AddRadarContact(this, lockedTarget, true);
                     vesselRadarData.UpdateLockedTargets();
@@ -743,7 +743,7 @@ namespace BDArmory.Modules
             }
 
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: - Failed to lock on target.");
+                Debug.Log("[BDArmory.ModuleRadar]: - Failed to lock on target.");
 
             return false;
         }
@@ -857,7 +857,7 @@ namespace BDArmory.Modules
             }
 
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log("[BDArmory]: Radar Targets were cleared (" + radarName + ").");
+                Debug.Log("[BDArmory.ModuleRadar]: Radar Targets were cleared (" + radarName + ").");
         }
 
         public void SetActiveLock(TargetSignatureData target)
@@ -1062,7 +1062,7 @@ namespace BDArmory.Modules
             }
             yield return null;
             vesselRadarData.LinkVRD(vrd);
-            Debug.Log("[BDArmory]: Radar data link recovered: Local - " + vessel.vesselName + ", External - " +
+            Debug.Log("[BDArmory.ModuleRadar]: Radar data link recovered: Local - " + vessel.vesselName + ", External - " +
                       vrd.vessel.vesselName);
         }
 

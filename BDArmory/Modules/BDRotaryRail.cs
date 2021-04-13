@@ -510,7 +510,7 @@ namespace BDArmory.Modules
                         return;
                     }
                 }
-                Debug.LogError("[BDRotaryRail]: No missiles found, but missile count is non-zero.");
+                Debug.LogError("[BDArmory.BDRotaryRail]: No missiles found, but missile count is non-zero.");
             }
         }
 

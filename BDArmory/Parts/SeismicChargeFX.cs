@@ -77,8 +77,9 @@ namespace BDArmory.Parts
                 explodePart = other.gameObject.GetComponentUpwards<Part>();
                 explodePart.Unpack();
             }
-            catch (NullReferenceException)
+            catch (NullReferenceException e)
             {
+                Debug.LogWarning("[BDArmory.SeismicChargeFX]: Exception thrown in OnTriggerEnter: " + e.Message + "\n" + e.StackTrace);
             }
 
             if (explodePart != null)
@@ -93,8 +94,9 @@ namespace BDArmory.Parts
                 {
                     hitBuilding = other.gameObject.GetComponentUpwards<DestructibleBuilding>();
                 }
-                catch (NullReferenceException)
+                catch (NullReferenceException e)
                 {
+                    Debug.LogWarning("[BDArmory.SeismicChargeFX]: Exception thrown in OnTriggerEnter: " + e.Message + "\n" + e.StackTrace);
                 }
                 if (hitBuilding != null && hitBuilding.IsIntact)
                 {

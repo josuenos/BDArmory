@@ -30,6 +30,7 @@ namespace BDArmory.Modules
 
         Coroutine startupRoutine;
         Coroutine shutdownRoutine;
+        Coroutine reloadRoutine;
 
         bool finalFire;
 
@@ -92,10 +93,11 @@ namespace BDArmory.Modules
         public bool autoFire;
         public float autoFireLength = 0;
         public float autoFireTimer = 0;
+        public float autofireShotCount = 0;
 
         //used by AI to lead moving targets
         private float targetDistance = 8000f;
-        private float targetRadius = 35f; // Radius of target 2° @ 1km.
+        public float targetRadius = 35f; // Radius of target 2° @ 1km.
         public float targetAdjustedMaxCosAngle
         {
             get
@@ -114,6 +116,8 @@ namespace BDArmory.Modules
         public Vector3 finalAimTarget;
         Vector3 lastFinalAimTarget;
         public Vessel visualTargetVessel;
+        public Part visualTargetPart;
+        private int targetID = 0;
         bool targetAcquired;
 
         public Vector3? FiringSolutionVector => finalAimTarget.IsZero() ? (Vector3?)null : (finalAimTarget - fireTransforms[0].position).normalized;
@@ -223,6 +227,7 @@ namespace BDArmory.Modules
         }
 
         public double ammoCount;
+        public double ammoMaxCount;
         public string ammoLeft; //#191
 
         public string GetSubLabel() //think BDArmorySetup only calls this for the first instance of a particular ShortName, so this probably won't result in a group of n guns having n GetSublabelCalls per frame
@@ -269,6 +274,9 @@ namespace BDArmory.Modules
         public Transform[] fireTransforms;
 
         [KSPField]
+        public string muzzleTransformName = "muzzleTransform";
+
+        [KSPField]
         public string shellEjectTransformName = "shellEject";
         public Transform[] shellEjectTransforms;
 
@@ -278,6 +286,13 @@ namespace BDArmory.Modules
         [KSPField]
         public string deployAnimName = "deployAnim";
         AnimationState deployState;
+
+        [KSPField]
+        public bool hasReloadAnim = false;
+
+        [KSPField]
+        public string reloadAnimName = "reloadAnim";
+        AnimationState reloadState;
 
         [KSPField]
         public bool hasFireAnimation = false;
@@ -291,11 +306,22 @@ namespace BDArmory.Modules
         private bool spinningDown;
 
         //weapon specifications
+        [KSPField(advancedTweakable = true, isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "#LOC_BDArmory_FiringPriority"),
+            UI_FloatRange(minValue = 0, maxValue = 10, stepIncrement = 1, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
+        public float priority = 0; //per-weapon priority selection override
+
+        [KSPField(isPersistant = true)]
+        public bool BurstOverride = false;
+
+        [KSPField(advancedTweakable = true, isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_FiringBurstCount"),//Burst Firing Count
+            UI_FloatRange(minValue = 1f, maxValue = 100f, stepIncrement = 1, scene = UI_Scene.All)]
+        public float fireBurstLength = 1;
+
         [KSPField(isPersistant = true)]
         public bool FireAngleOverride = false;
 
         [KSPField(advancedTweakable = true, isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "#LOC_BDArmory_FiringAngle"),
-            UI_FloatRange(minValue = 0f, maxValue = 3, stepIncrement = 0.05f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
+            UI_FloatRange(minValue = 0f, maxValue = 4, stepIncrement = 0.05f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
         public float FiringTolerance = 1.0f; //per-weapon override of maxcosfireangle
 
         [KSPField]
@@ -346,6 +372,8 @@ namespace BDArmory.Modules
         [KSPField]
         public float ReloadTime = 10;
         public float ReloadTimer = 0;
+        public float ReloadAnimTime = 10;
+        public float AnimTimer = 0;
 
         [KSPField]
         public bool BurstFire = false; // set to true for weapons that fire multiple times per triggerpull
@@ -411,6 +439,7 @@ namespace BDArmory.Modules
         public float thrust = 1;
         public float thrustTime = 1;
         public float blastRadius = 1;
+        public bool choker = false;
         public bool descendingOrder = true;
         public float thrustDeviation = 0.10f;
         [KSPField] public bool rocketPod = true; //is the RL a rocketpod, or a gyrojet gun?
@@ -420,6 +449,18 @@ namespace BDArmory.Modules
         private RocketInfo rocketInfo;
 
         public float tntMass = 0;
+
+        [KSPField]
+        public bool impulseWeapon = false;
+
+        [KSPField]
+        public bool graviticWeapon = false;
+
+        [KSPField]
+        public float Impulse = 0;
+
+        [KSPField]
+        public float massAdjustment = 0; //tons
 
         //deprectated
         //[KSPField] public float cannonShellRadius = 30; //max radius of explosion forces/damage
@@ -601,7 +642,7 @@ namespace BDArmory.Modules
             }
             weaponManager.gunRippleIndex = weaponManager.gunRippleIndex + 1;
 
-            //Debug.Log("incrementing ripple index to: " + weaponManager.gunRippleIndex);
+            //Debug.Log([BDArmory.ModuleWeapon]: incrementing ripple index to: " + weaponManager.gunRippleIndex);
         }
 
         #endregion KSPFields
@@ -752,6 +793,8 @@ namespace BDArmory.Modules
             FAOFlight.onFieldChanged = FAOCos;
             Fields["FiringTolerance"].guiActive = FireAngleOverride;
             Fields["FiringTolerance"].guiActiveEditor = FireAngleOverride;
+            Fields["fireBurstLength"].guiActive = BurstOverride;
+            Fields["fireBurstLength"].guiActiveEditor = BurstOverride;
             vessel.Velocity();
             if (BurstFire)
             {
@@ -779,6 +822,11 @@ namespace BDArmory.Modules
                 if (rocketPod && externalAmmo)
                 {
                     BeltFed = false;
+                    PartResource rocketResource = GetRocketResource();
+                    if (rocketResource != null)
+                    {
+                        part.resourcePriorityOffset = +2; //make rocketpods draw from internal ammo first, if any, before using external supply
+                    }
                 }
                 if (!rocketPod)
                 {
@@ -813,7 +861,7 @@ namespace BDArmory.Modules
 
             }
             muzzleFlashEmitters = new List<KSPParticleEmitter>();
-            using (var mtf = part.FindModelTransforms("muzzleTransform").AsEnumerable().GetEnumerator())
+            using (var mtf = part.FindModelTransforms(muzzleTransformName).AsEnumerable().GetEnumerator())
                 while (mtf.MoveNext())
                 {
                     if (mtf.Current == null) continue;
@@ -962,6 +1010,14 @@ namespace BDArmory.Modules
                 deployState.normalizedTime = 0;
                 deployState.speed = 0;
                 deployState.enabled = true;
+                ReloadAnimTime = (ReloadTime - deployState.length);
+            }
+            if (hasReloadAnim)
+            {
+                reloadState = Misc.Misc.SetUpSingleAnimation(reloadAnimName, part);
+                reloadState.normalizedTime = 0;
+                reloadState.speed = 0;
+                reloadState.enabled = true;
             }
             if (hasFireAnimation)
             {
@@ -978,12 +1034,12 @@ namespace BDArmory.Modules
                     if (rocketInfo == null)
                     {
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                            Debug.Log("[BDArmory]: Failed To load rocket : " + currentType);
+                            Debug.Log("[BDArmory.ModuleWeapon]: Failed To load rocket : " + currentType);
                     }
                     else
                     {
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                            Debug.Log("[BDArmory]: AmmoType Loaded : " + currentType);
+                            Debug.Log("[BDArmory.ModuleWeapon]: AmmoType Loaded : " + currentType);
                     }
                 }
                 else
@@ -991,12 +1047,12 @@ namespace BDArmory.Modules
                     if (bulletInfo == null)
                     {
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                            Debug.Log("[BDArmory]: Failed To load bullet : " + currentType);
+                            Debug.Log("[BDArmory.ModuleWeapon]: Failed To load bullet : " + currentType);
                     }
                     else
                     {
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                            Debug.Log("[BDArmory]: BulletType Loaded : " + currentType);
+                            Debug.Log("[BDArmory.ModuleWeapon]: BulletType Loaded : " + currentType);
                     }
                 }
             }
@@ -1057,6 +1113,25 @@ namespace BDArmory.Modules
 
             Misc.Misc.RefreshAssociatedWindows(part);
         }
+        [KSPEvent(advancedTweakable = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_BurstLengthOverride_Enable", active = true)]//Burst length override
+        public void ToggleBurstLengthOverride()
+        {
+            BurstOverride = !BurstOverride;
+
+            if (BurstOverride == false)
+            {
+                Events["ToggleBurstLengthOverride"].guiName = Localizer.Format("#LOC_BDArmory_BurstLengthOverride_Enable");// Enable Burst Fire length Override
+            }
+            else
+            {
+                Events["ToggleBurstLengthOverride"].guiName = Localizer.Format("#LOC_BDArmory_BurstLengthOverride_Disable");// Disable Burst Fire length Override
+            }
+
+            Fields["fireBurstLength"].guiActive = BurstOverride;
+            Fields["fireBurstLength"].guiActiveEditor = BurstOverride;
+
+            Misc.Misc.RefreshAssociatedWindows(part);
+        }
         void FAOCos(BaseField field, object obj)
         {
             maxAutoFireCosAngle = Mathf.Cos((FiringTolerance * Mathf.Deg2Rad));
@@ -1085,8 +1160,7 @@ namespace BDArmory.Modules
                                   (vessel.isActiveVessel || BDArmorySettings.REMOTE_SHOOTING) && !MapView.MapIsEnabled &&
                                   !aiControlled);
                     if ((userFiring || autoFire || agHoldFiring) &&
-                        (yawRange == 0 || (maxPitch - minPitch) == 0 ||
-                         turret.TargetInRange(finalAimTarget, 10, float.MaxValue)))
+                        (!turret || turret.TargetInRange(finalAimTarget, 10, float.MaxValue)))
                     {
                         if (useRippleFire && ((pointingAtSelf || isOverheated || isReloading) || (aiControlled && engageRangeMax < targetDistance)))// is weapon within set max range?
                         {
@@ -1100,6 +1174,12 @@ namespace BDArmory.Modules
                     }
                     else
                     {
+                        if (weaponManager.gunRippleIndex == rippleIndex)
+                        {
+                            StartCoroutine(IncrementRippleIndex(0));
+                            finalFire = false;
+                        }
+
                         if (spinDownAnimation) spinningDown = true;
                         if (!oneShotSound && wasFiring)
                         {
@@ -1125,10 +1205,8 @@ namespace BDArmory.Modules
                 // Draw gauges
                 if (vessel.isActiveVessel)
                 {
-                    vessel.GetConnectedResourceTotals(AmmoID, out double ammoCurrent, out double ammoMax);
-                    gauge.UpdateAmmoMeter((float)(ammoCurrent / ammoMax));
+                    gauge.UpdateAmmoMeter((float)(ammoCount / ammoMaxCount));
 
-                    ammoCount = ammoCurrent;
                     if (showReloadMeter)
                     {
                         if (isReloading)
@@ -1151,9 +1229,9 @@ namespace BDArmory.Modules
             {
                 if (!vessel.IsControllable)
                 {
-                    if (weaponState != WeaponStates.PoweringDown || weaponState != WeaponStates.Disabled)
+                    if (!(weaponState == WeaponStates.PoweringDown || weaponState == WeaponStates.Disabled))
                     {
-                        if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[ModuleWeapon]: Vessel is uncontrollable, disabling weapon " + part.name);
+                        if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.ModuleWeapon]: Vessel is uncontrollable, disabling weapon " + part.name);
                         DisableWeapon();
                     }
                     return;
@@ -1171,7 +1249,7 @@ namespace BDArmory.Modules
                         if ((userFiring || autoFire || agHoldFiring) &&
                             (!turret || turret.TargetInRange(targetPosition, 10, float.MaxValue)))
                         {
-                            if (useRippleFire && (aiControlled && engageRangeMax < targetDistance))// is weapon within set max range?
+                            if (useRippleFire && ((pointingAtSelf || isOverheated || isReloading) || (aiControlled && engageRangeMax < targetDistance)))// is weapon within set max range?
                             {
                                 StartCoroutine(IncrementRippleIndex(0));
                                 finalFire = false;
@@ -1205,7 +1283,9 @@ namespace BDArmory.Modules
                     }
                     audioSource.Stop();
                 }
-
+                vessel.GetConnectedResourceTotals(AmmoID, out double ammoCurrent, out double ammoMax); //ammo count was originally updating only for active vessel, while reload can be called by any loaded vessel, and needs current ammo count
+                ammoCount = ammoCurrent;
+                ammoMaxCount = ammoMax;
                 if (!BeltFed)
                 {
                     ReloadWeapon();
@@ -1380,7 +1460,7 @@ namespace BDArmory.Modules
                                 PooledBullet pBullet = firedBullet.GetComponent<PooledBullet>();
 
 
-                                firedBullet.transform.position = fireTransform.position;
+                                pBullet.transform.position = fireTransform.position;
 
                                 pBullet.caliber = bulletInfo.caliber;
                                 pBullet.bulletVelocity = bulletInfo.bulletVelocity;
@@ -1406,12 +1486,9 @@ namespace BDArmory.Modules
 
                                 timeFired = Time.time - iTime;
 
-                                Vector3 firedVelocity =
-                                    VectorUtils.GaussianDirectionDeviation(fireTransform.forward, (maxDeviation / 2)) * bulletVelocity;
-
+                                Vector3 firedVelocity = VectorUtils.GaussianDirectionDeviation(fireTransform.forward, (maxDeviation / 2)) * bulletVelocity;
                                 pBullet.currentVelocity = (part.rb.velocity + Krakensbane.GetFrameVelocityV3f()) + firedVelocity; // use the real velocity, w/o offloading
-                                firedBullet.transform.position += (part.rb.velocity + Krakensbane.GetFrameVelocityV3f()) * Time.fixedDeltaTime
-                                                                    + pBullet.currentVelocity * iTime;
+                                pBullet.transform.position += (part.rb.velocity + Krakensbane.GetFrameVelocityV3f()) * Time.fixedDeltaTime; // Initially, put the bullet at the fireTransform position at the start of the next physics frame
 
                                 pBullet.sourceVessel = vessel;
                                 pBullet.bulletTexturePath = bulletTexturePath;
@@ -1455,6 +1532,14 @@ namespace BDArmory.Modules
                                     pBullet.bulletType = PooledBullet.PooledBulletTypes.Standard;
                                     pBullet.airDetonation = false;
                                 }
+                                if (impulseWeapon)
+                                {
+                                    pBullet.impulse = Impulse;
+                                }
+                                if (graviticWeapon)
+                                {
+                                    pBullet.massMod = massAdjustment;
+                                }
                                 switch (bulletDragType)
                                 {
                                     case BulletDragTypes.None:
@@ -1472,12 +1557,25 @@ namespace BDArmory.Modules
 
                                 pBullet.bullet = BulletInfo.bullets[currentType];
                                 pBullet.gameObject.SetActive(true);
+
+                                if (!pBullet.CheckBulletCollision(iTime, true)) // Check that the bullet won't immediately hit anything.
+                                {
+                                    pBullet.MoveBullet(iTime); // Move the bullet forward by the amount of time within the physics frame determined by it's firing rate.
+                                }
+                                else
+                                {
+                                    // Debug.Log("DEBUG immediately hit after " + pBullet.DistanceTraveled + "m and time " + iTime);
+                                }
                             }
                             //heat
                             heat += heatPerShot;
                             //EC
                             DrainECPerShot();
                             RoundsRemaining++;
+                            if (BurstOverride)
+                            {
+                                autofireShotCount++;
+                            }
                         }
                         else
                         {
@@ -1493,7 +1591,10 @@ namespace BDArmory.Modules
 
                 if (useRippleFire)
                 {
-                    StartCoroutine(IncrementRippleIndex(initialFireDelay * TimeWarp.CurrentRate));
+                    if (!BurstFire || (BurstFire && (RoundsRemaining >= RoundsPerMag)))
+                    {
+                        StartCoroutine(IncrementRippleIndex(initialFireDelay * TimeWarp.CurrentRate));
+                    }
                 }
             }
             else
@@ -1516,7 +1617,7 @@ namespace BDArmory.Modules
                 chargeAmount = requestResourceAmount * TimeWarp.fixedDeltaTime;
             }
             float timeGap = (60 / roundsPerMinute) * TimeWarp.CurrentRate;
-            beamDuration = timeGap * 0.8f;
+            //beamDuration = timeGap * 0.8f;
             if ((!pulseLaser || ((Time.time - timeFired > timeGap) && pulseLaser))
                 && !pointingAtSelf && !Misc.Misc.CheckMouseIsOnGui() && WMgrAuthorized() && !isOverheated) // && !isReloading)
             {
@@ -1564,7 +1665,10 @@ namespace BDArmory.Modules
                         heat += heatPerShot;
                         if (useRippleFire)
                         {
-                            StartCoroutine(IncrementRippleIndex(initialFireDelay * TimeWarp.CurrentRate));
+                            if (!BurstFire || (BurstFire && (RoundsRemaining >= RoundsPerMag)))
+                            {
+                                StartCoroutine(IncrementRippleIndex(initialFireDelay * TimeWarp.CurrentRate));
+                            }
                         }
                     }
                     else
@@ -1585,6 +1689,10 @@ namespace BDArmory.Modules
                     if (!BeltFed)
                     {
                         RoundsRemaining++;
+                    }
+                    if (BurstOverride)
+                    {
+                        autofireShotCount++;
                     }
                     return true;
                 }
@@ -1660,6 +1768,24 @@ namespace BDArmory.Modules
                             }
                             emp.softEMP = true;
                         }
+                        else if (impulseWeapon)
+                        {
+                            if (!pulseLaser)
+                            {
+                                damage = Impulse * TimeWarp.fixedDeltaTime;
+                            }
+                            if (p.rb != null && p.rb.mass > 0)
+                            {
+                                if (Impulse > 0)
+                                {
+                                    p.rb.AddForceAtPosition((p.transform.position - tf.position).normalized * (float)damage, p.transform.position, ForceMode.Acceleration);
+                                }
+                                else
+                                {
+                                    p.rb.AddForceAtPosition((tf.position - p.transform.position).normalized * (float)damage, p.transform.position, ForceMode.Acceleration);
+                                }
+                            }
+                        }
                         else
                         {
                             damage = (laserDamage / (1 + Mathf.PI * Mathf.Pow(tanAngle * distance, 2)) * TimeWarp.fixedDeltaTime * 0.425f);
@@ -1685,6 +1811,24 @@ namespace BDArmory.Modules
                                         p.AddSkinThermalFlux(damage);
                                     }
                                 }
+                            }
+                        }
+                        if (graviticWeapon)
+                        {
+                            if (p.rb != null && p.rb.mass > 0)
+                            {
+                                float duration = BDArmorySettings.WEAPON_FX_DURATION;
+                                if (!pulseLaser)
+                                {
+                                    duration = BDArmorySettings.WEAPON_FX_DURATION * TimeWarp.fixedDeltaTime;
+                                }
+                                var ME = p.FindModuleImplementing<ModuleMassAdjust>();
+                                if (ME == null)
+                                {
+                                    ME = (ModuleMassAdjust)p.AddModule("ModuleMassAdjust");
+                                }
+                                ME.massMod += (massAdjustment * TimeWarp.fixedDeltaTime);
+                                ME.duration += duration;
                             }
                         }
                         if (BDArmorySettings.INSTAKILL) p.Destroy();
@@ -1786,7 +1930,6 @@ namespace BDArmory.Modules
                 bool effectsShot = false;
                 for (float iTime = Mathf.Min(Time.time - timeFired - timeGap, TimeWarp.fixedDeltaTime); iTime >= 0; iTime -= timeGap)
                 {
-
                     if (BDArmorySettings.INFINITE_AMMO)
                     {
                         rocketsLeft = 1;
@@ -1829,6 +1972,12 @@ namespace BDArmory.Modules
                                 rocket.maxAirDetonationRange = maxAirDetonationRange;
                                 rocket.tntMass = rocketInfo.tntMass;
                                 rocket.shaped = rocketInfo.shaped;
+                                rocket.concussion = impulseWeapon;
+                                rocket.gravitic = graviticWeapon;
+                                rocket.EMP = electroLaser; //borrowing this as a EMP weapon bool, since a rocket isn't going to be a laser
+                                rocket.choker = choker;
+                                rocket.impulse = Impulse;
+                                rocket.massMod = massAdjustment;
                                 rocket.randomThrustDeviation = thrustDeviation;
                                 rocket.bulletDmgMult = bulletDmgMult;
                                 rocket.sourceVessel = vessel;
@@ -1842,7 +1991,7 @@ namespace BDArmory.Modules
                             {
                                 if (externalAmmo)
                                 {
-                                    part.RequestResource(ammoName, 1d);
+                                    part.RequestResource(ammoName.GetHashCode(), (double)requestResourceAmount, ResourceFlowMode.STAGE_PRIORITY_FLOW_BALANCE);
                                 }
                                 else
                                 {
@@ -1852,6 +2001,10 @@ namespace BDArmory.Modules
                             if (!BeltFed)
                             {
                                 RoundsRemaining++;
+                            }
+                            if (BurstOverride)
+                            {
+                                autofireShotCount++;
                             }
                             UpdateRocketScales();
                         }
@@ -1882,6 +2035,12 @@ namespace BDArmory.Modules
                                         rocket.maxAirDetonationRange = maxAirDetonationRange;
                                         rocket.tntMass = rocketInfo.tntMass;
                                         rocket.shaped = rocketInfo.shaped;
+                                        rocket.concussion = impulseWeapon;
+                                        rocket.gravitic = graviticWeapon;
+                                        rocket.EMP = electroLaser;
+                                        rocket.choker = choker;
+                                        rocket.impulse = Impulse;
+                                        rocket.massMod = massAdjustment;
                                         rocket.randomThrustDeviation = thrustDeviation;
                                         rocket.bulletDmgMult = bulletDmgMult;
                                         rocket.sourceVessel = vessel;
@@ -1893,12 +2052,16 @@ namespace BDArmory.Modules
                                     }
                                     if (!BDArmorySettings.INFINITE_AMMO)
                                     {
-                                        part.RequestResource(ammoName, 1d);
+                                        part.RequestResource(ammoName.GetHashCode(), (double)requestResourceAmount, ResourceFlowMode.STAGE_PRIORITY_FLOW_BALANCE);
                                     }
                                     heat += heatPerShot;
                                     if (!BeltFed)
                                     {
                                         RoundsRemaining++;
+                                    }
+                                    if (BurstOverride)
+                                    {
+                                        autofireShotCount++;
                                     }
                                 }
                             }
@@ -1914,7 +2077,10 @@ namespace BDArmory.Modules
             }
             if (useRippleFire)
             {
-                StartCoroutine(IncrementRippleIndex(initialFireDelay * TimeWarp.CurrentRate));
+                if (!BurstFire || (BurstFire && (RoundsRemaining >= RoundsPerMag)))
+                {
+                    StartCoroutine(IncrementRippleIndex(initialFireDelay * TimeWarp.CurrentRate));
+                }
             }
         }
 
@@ -1943,13 +2109,21 @@ namespace BDArmory.Modules
             if (!externalAmmo)
             {
                 PartResource rocketResource = GetRocketResource();
-                rocketQty = rocketResource.amount;
-                rocketsMax = rocketResource.maxAmount;
+                if (rocketResource != null)
+                {
+                    rocketQty = rocketResource.amount;
+                    rocketsMax = rocketResource.maxAmount;
+                }
+                else
+                {
+                    rocketQty = 0;
+                    rocketsMax = 0;
+                }
             }
             else
             {
                 rocketQty = (RoundsPerMag - RoundsRemaining);
-                rocketsMax = RoundsPerMag;
+                rocketsMax = Mathf.Min(RoundsPerMag, (float)ammoCount);
             }
             var rocketsLeft = Math.Floor(rocketQty);
 
@@ -2023,7 +2197,7 @@ namespace BDArmory.Modules
             fireState.speed = fireAnimSpeed;
             fireState.normalizedTime = Mathf.Repeat(fireState.normalizedTime, 1);
 
-            //Debug.Log("fireAnim time: " + fireState.normalizedTime + ", speed; " + fireState.speed);
+            //Debug.Log("[BDArmory.ModuleWeapon]: fireAnim time: " + fireState.normalizedTime + ", speed; " + fireState.speed);
         }
 
         void WeaponFX()
@@ -2305,10 +2479,20 @@ namespace BDArmory.Modules
 
                     if (visualTargetVessel != null && visualTargetVessel.loaded)
                     {
-                        targetPosition = ray.direction *
-                                         Vector3.Distance(visualTargetVessel.transform.position,
-                                             FlightCamera.fetch.mainCamera.transform.position) +
-                                         FlightCamera.fetch.mainCamera.transform.position;
+                        if (BDArmorySettings.ADVANCED_TARGETING && !BDArmorySettings.TARGET_COM && visualTargetPart != null)
+                        {
+                            targetPosition = ray.direction *
+                                             Vector3.Distance(visualTargetPart.transform.position,
+                                                 FlightCamera.fetch.mainCamera.transform.position) +
+                                             FlightCamera.fetch.mainCamera.transform.position;
+                        }
+                        else
+                        {
+                            targetPosition = ray.direction *
+                                             Vector3.Distance(visualTargetVessel.transform.position,
+                                                 FlightCamera.fetch.mainCamera.transform.position) +
+                                             FlightCamera.fetch.mainCamera.transform.position;
+                        }
                     }
                 }
             }
@@ -2320,63 +2504,23 @@ namespace BDArmory.Modules
 
             if ((BDArmorySettings.AIM_ASSIST || aiControlled) && eWeaponType == WeaponTypes.Ballistic)//Gun targeting
             {
-                float effectiveVelocity = bulletVelocity;
-                relativeVelocity = targetVelocity - part.rb.velocity;
-                Quaternion.FromToRotation(targetAccelerationPrevious, targetAcceleration).ToAngleAxis(out float accelDAngle, out Vector3 accelDAxis);
-                Vector3 leadTarget = targetPosition;
-
-                int iterations = 6;
-                while (--iterations >= 0)
-                {
-                    finalTarget = targetPosition;
-                    float time = (leadTarget - fireTransforms[0].position).magnitude / effectiveVelocity - (Time.fixedDeltaTime * 1.5f);
-
-                    if (targetAcquired)
-                    {
-                        finalTarget += relativeVelocity * time;
-#if DEBUG
-                        relVelAdj = relativeVelocity * time;
-                        var vc = finalTarget;
-#endif
-                        var accelDExtAngle = accelDAngle * time / 3;
-                        var extrapolatedAcceleration =
-                            Quaternion.AngleAxis(accelDExtAngle, accelDAxis)
-                            * targetAcceleration
-                            * Mathf.Cos(accelDExtAngle * Mathf.Deg2Rad * 2.222f);
-                        finalTarget += 0.5f * extrapolatedAcceleration * time * time;
-#if DEBUG
-                        accAdj = (finalTarget - vc);
-#endif
-                    }
-                    else if (Misc.Misc.GetRadarAltitudeAtPos(targetPosition) < 2000)
-                    {
-                        //this vessel velocity compensation against stationary
-                        finalTarget += (-(part.rb.velocity + Krakensbane.GetFrameVelocityV3f()) * time);
-                    }
-
-                    leadTarget = finalTarget;
-
-                    if (bulletDrop) //rocket gravity ajdustment already done in TrajectorySim
-                    {
-#if DEBUG
-                        var vc = finalTarget;
-#endif
-                        Vector3 up = (VectorUtils.GetUpDirection(finalTarget) + 2 * VectorUtils.GetUpDirection(fireTransforms[0].position)).normalized;
-                        float gAccel = ((float)FlightGlobals.getGeeForceAtPosition(finalTarget).magnitude
-                            + (float)FlightGlobals.getGeeForceAtPosition(fireTransforms[0].position).magnitude * 2) / 3;
-                        Vector3 intermediateTarget = finalTarget + (0.5f * gAccel * time * time * up);
-
-                        var avGrav = (FlightGlobals.getGeeForceAtPosition(finalTarget) + 2 * FlightGlobals.getGeeForceAtPosition(fireTransforms[0].position)) / 3;
-                        effectiveVelocity = bulletVelocity
-                            * (float)Vector3d.Dot((intermediateTarget - fireTransforms[0].position).normalized, (finalTarget - fireTransforms[0].position).normalized)
-                            + Vector3.Project(avGrav, finalTarget - fireTransforms[0].position).magnitude * time / 2 * (Vector3.Dot(avGrav, finalTarget - fireTransforms[0].position) < 0 ? -1 : 1);
-                        finalTarget = intermediateTarget;
-#if DEBUG
-                        gravAdj = (finalTarget - vc);
-#endif
-                    }
-                }
+                var bulletEffectiveVelocity = part.rb.velocity + bulletVelocity * fireTransforms[0].forward;
+                var bulletAcceleration = bulletDrop ? (Vector3)FlightGlobals.getGeeForceAtPosition((fireTransforms[0].position + targetPosition) / 2f) : Vector3.zero; // Drag is ignored.
+                var bulletRelativePosition = targetPosition - fireTransforms[0].position;
+                var bulletRelativeVelocity = targetVelocity - bulletEffectiveVelocity;
+                var bulletRelativeAcceleration = targetAcceleration - bulletAcceleration;
+                var timeToCPA = AIUtils.ClosestTimeToCPA(bulletRelativePosition, bulletRelativeVelocity, bulletRelativeAcceleration, maxTargetingRange / bulletVelocity);
+                var targetPredictedPosition = AIUtils.PredictPosition(targetPosition, targetVelocity, targetAcceleration, timeToCPA);
+                var bulletDropOffset = -0.5f * bulletAcceleration * timeToCPA * timeToCPA;
+                finalTarget = targetPredictedPosition + bulletDropOffset;
                 targetDistance = Vector3.Distance(finalTarget, fireTransforms[0].position);
+#if DEBUG
+                relVelAdj = (targetVelocity - part.rb.velocity) * timeToCPA;
+                accAdj = 0.5f * targetAcceleration * timeToCPA * timeToCPA;
+                gravAdj = bulletDropOffset;
+                var missDistance = AIUtils.PredictPosition(bulletRelativePosition, bulletRelativeVelocity, bulletRelativeAcceleration, timeToCPA);
+                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("DEBUG δt: " + timeToCPA + ", miss: " + missDistance + ", bullet drop: " + bulletDropOffset + ", final: " + finalTarget + ", target: " + targetPosition + ", " + targetVelocity + ", " + targetAcceleration + ", distance: " + targetDistance);
+#endif
             }
             if (aiControlled && eWeaponType == WeaponTypes.Rocket)//Rocket targeting
             {
@@ -2530,7 +2674,7 @@ namespace BDArmory.Modules
                                 }
                                 catch (NullReferenceException e)
                                 {
-                                    Debug.LogError("[ModuleWeapon]: NullReferenceException while simulating trajectory: " + e.Message);
+                                    Debug.LogError("[BDArmory.ModuleWeapon]: NullReferenceException while simulating trajectory: " + e.Message);
                                 }
 
                                 if (hitVessel == null || hitVessel != vessel)
@@ -2607,22 +2751,22 @@ namespace BDArmory.Modules
                     fireTransform = rockets[0].parent; // support for legacy RLs
                 }
 
-                Vector3 targetRelPos = (finalAimTarget) - fireTransform.position;
+                Vector3 targetRelPos = finalAimTarget - fireTransform.position;
                 Vector3 aimDirection = fireTransform.forward;
                 float targetCosAngle = Vector3.Dot(aimDirection, targetRelPos.normalized);
                 var maxAutoFireCosAngle2 = targetAdjustedMaxCosAngle;
 
                 if (eWeaponType != WeaponTypes.Rocket) //guns/lasers
                 {
-                    Vector3 targetDiffVec = finalAimTarget - lastFinalAimTarget;
-                    Vector3 projectedTargetPos = targetDiffVec;
+                    // Vector3 targetDiffVec = finalAimTarget - lastFinalAimTarget;
+                    // Vector3 projectedTargetPos = targetDiffVec;
                     //projectedTargetPos /= TimeWarp.fixedDeltaTime;
                     //projectedTargetPos *= TimeWarp.fixedDeltaTime;
-                    projectedTargetPos *= 2; //project where the target will be in 2 timesteps
-                    projectedTargetPos += finalAimTarget;
+                    // projectedTargetPos *= 2; //project where the target will be in 2 timesteps
+                    // projectedTargetPos += finalAimTarget;
 
-                    targetDiffVec.Normalize();
-                    Vector3 lastTargetRelPos = (lastFinalAimTarget) - fireTransform.position;
+                    // targetDiffVec.Normalize();
+                    // Vector3 lastTargetRelPos = (lastFinalAimTarget) - fireTransform.position;
 
                     if (BDATargetManager.CheckSafeToFireGuns(weaponManager, aimDirection, 1000, 0.999962f) //~0.5 degree of unsafe angle, was 0.999848f (1deg)
                         && targetCosAngle >= maxAutoFireCosAngle2) //check if directly on target
@@ -2655,17 +2799,33 @@ namespace BDArmory.Modules
             }
 
             //disable autofire after burst length
-            if (autoFire && Time.time - autoFireTimer > autoFireLength)
+            if (BurstOverride)
             {
-                autoFire = false;
-                visualTargetVessel = null;
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.ModuleWeapon]: AutoFire length: " + autofireShotCount);
+                if (autoFire && autofireShotCount >= fireBurstLength)
+                {
+                    autoFire = false;
+                    visualTargetVessel = null;
+                    visualTargetPart = null;
+                    autofireShotCount = 0;
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.ModuleWeapon]: shotcount reset; length: " + autofireShotCount);
+                }
+            }
+            else
+            {
+                if (autoFire && Time.time - autoFireTimer > autoFireLength)
+                {
+                    autoFire = false;
+                    visualTargetVessel = null;
+                    visualTargetPart = null;
+                }
             }
         }
 
         IEnumerator AimAndFireAtEndOfFrame()
         {
-            if (eWeaponType != WeaponTypes.Laser) yield return new WaitForEndOfFrame();
-            if (this == null) yield break;
+            // Note: waiting until EndOfFrame is a bad idea, as that is intended for rendering the frame buffer into a texture. This decouples the physics and Krakensbane shifts from the rendering, causing inaccuracies.
+            if (this == null || FlightGlobals.currentMainBody == null) yield break;
 
             UpdateTargetVessel();
             updateAcceleration(targetVelocity, targetPosition);
@@ -2838,6 +2998,8 @@ namespace BDArmory.Modules
             if (heat < maxHeat / 3 && isOverheated) //reset on cooldown
             {
                 isOverheated = false;
+                autofireShotCount = 0;
+                //Debug.Log("[BDArmory.ModuleWeapon]: AutoFire length: " + autofireShotCount);
             }
         }
         void ReloadWeapon()
@@ -2845,8 +3007,12 @@ namespace BDArmory.Modules
             if (isReloading)
             {
                 ReloadTimer = Mathf.Clamp((ReloadTimer + 1 * TimeWarp.fixedDeltaTime / ReloadTime), 0, 1);
+                if (hasDeployAnim)
+                {
+                    AnimTimer = Mathf.Clamp((AnimTimer + 1 * TimeWarp.fixedDeltaTime / (ReloadAnimTime)), 0, 1);
+                }
             }
-            if (RoundsRemaining >= RoundsPerMag && !isReloading)
+            if ((RoundsRemaining >= RoundsPerMag && !isReloading) && (ammoCount > 0 || BDArmorySettings.INFINITE_AMMO))
             {
                 isReloading = true;
                 autoFire = false;
@@ -2854,14 +3020,50 @@ namespace BDArmory.Modules
                 wasFiring = false;
                 weaponManager.ResetGuardInterval();
                 showReloadMeter = true;
+                if (hasReloadAnim)
+                {
+                    if (reloadRoutine != null)
+                    {
+                        StopCoroutine(reloadRoutine);
+                        reloadRoutine = null;
+                    }
+                    reloadRoutine = StartCoroutine(ReloadRoutine());
+                }
+                else
+                {
+                    StopShutdownStartupRoutines();
+                    shutdownRoutine = StartCoroutine(ShutdownRoutine(true));
+                }
+            }
+            if (!hasReloadAnim && hasDeployAnim && (AnimTimer >= 1 && isReloading))
+            {
+                if (rocketPod)
+                {
+                    RoundsRemaining = 0;
+                    UpdateRocketScales();
+                }
+                if (weaponState == WeaponStates.Disabled || weaponState == WeaponStates.PoweringDown)
+                {
+                }
+                else
+                {
+                    StopShutdownStartupRoutines(); //if weapon un-selected while reloading, don't activate weapon
+                    startupRoutine = StartCoroutine(StartupRoutine(true));
+                }
             }
             if (ReloadTimer >= 1 && isReloading)
             {
                 RoundsRemaining = 0;
+                autofireShotCount = 0;
                 gauge.UpdateReloadMeter(1);
                 showReloadMeter = false;
                 isReloading = false;
                 ReloadTimer = 0;
+                AnimTimer = 0;
+                if (eWeaponType == WeaponTypes.Rocket && rocketPod)
+                {
+                    UpdateRocketScales();
+                }
             }
         }
         void UpdateTargetVessel()
@@ -2879,6 +3081,26 @@ namespace BDArmory.Modules
                 {
                     targetRadius = visualTargetVessel.GetRadius();
                     targetPosition = visualTargetVessel.CoM;
+                    if (BDArmorySettings.ADVANCED_TARGETING && !BDArmorySettings.TARGET_COM)
+                    {                        
+                        if (visualTargetPart == null || visualTargetPart.vessel != visualTargetVessel)
+                        {
+                            TargetInfo currentTarget = visualTargetVessel.gameObject.GetComponent<TargetInfo>();
+                            if (currentTarget == null)
+                            {
+                                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.ModuleWeapon]: Targeted vessel " + (visualTargetVessel != null ? visualTargetVessel.vesselName : "'unknown'") + " has no TargetInfo");
+                                return;
+                            }
+                            targetID = UnityEngine.Random.Range(0, Mathf.Min(currentTarget.targetPartList.Count, BDArmorySettings.MULTI_TARGET_NUM));
+                            if (!turret) //make fixed guns all get the same target part
+                            {
+                                targetID = 0;
+                            }
+                            visualTargetPart = currentTarget.targetPartList[targetID];
+                            //Debug.Log("[BDArmory.MTD] MW TargetID: " + targetID);
+                        }
+                        targetPosition = visualTargetPart.transform.position;
+                    }
                     targetVelocity = visualTargetVessel.rb_velocity;
                     targetAcquired = true;
                     return;
@@ -2889,7 +3111,7 @@ namespace BDArmory.Modules
                     slaved = true;
                     targetRadius = weaponManager.slavedTarget.vessel != null ? weaponManager.slavedTarget.vessel.GetRadius() : 35f;
                     targetPosition = weaponManager.slavedPosition;
-                    targetVelocity = weaponManager.slavedTarget.vessel?.rb_velocity ?? (weaponManager.slavedVelocity - Krakensbane.GetFrameVelocityV3f());
+                    targetVelocity = weaponManager.slavedTarget.vessel != null ? weaponManager.slavedTarget.vessel.rb_velocity : (weaponManager.slavedVelocity - Krakensbane.GetFrameVelocityV3f());
                     targetAcquired = true;
                     return;
                 }
@@ -2903,7 +3125,7 @@ namespace BDArmory.Modules
                     targetAcceleration = targetData.acceleration;
                     if (targetData.vessel)
                     {
-                        targetVelocity = targetData.vessel?.rb_velocity ?? targetVelocity;
+                        targetVelocity = targetData.vessel != null ? targetData.vessel.rb_velocity : targetVelocity;
                         targetPosition = targetData.vessel.CoM;
                         targetRadius = targetData.vessel.GetRadius();
                     }
@@ -2974,11 +3196,19 @@ namespace BDArmory.Modules
             guiStatusString = weaponState.ToString();
         }
 
-        IEnumerator StartupRoutine()
+        IEnumerator StartupRoutine(bool calledByReload = false)
         {
-            weaponState = WeaponStates.PoweringUp;
-            UpdateGUIWeaponState();
-
+            if (hasReloadAnim && isReloading) //wait for relaod to finish before shutting down
+            {
+                while (reloadState.normalizedTime < 1)
+                {
+                    yield return null;
+                }
+            }
+            if (!calledByReload)
+            {
+                UpdateGUIWeaponState();
+            }
             if (hasDeployAnim && deployState)
             {
                 deployState.enabled = true;
@@ -2991,16 +3221,31 @@ namespace BDArmory.Modules
                 deployState.speed = 0;
                 deployState.enabled = false;
             }
-
-            weaponState = WeaponStates.Enabled;
+            if (!calledByReload)
+            {
+                weaponState = WeaponStates.Enabled;
+            }
             UpdateGUIWeaponState();
             BDArmorySetup.Instance.UpdateCursorState();
         }
-
-        IEnumerator ShutdownRoutine()
+        IEnumerator ShutdownRoutine(bool calledByReload = false)
         {
-            weaponState = WeaponStates.PoweringDown;
-            UpdateGUIWeaponState();
+            if (hasReloadAnim && isReloading) //wait for relaod to finish before shutting down
+            {
+                while (reloadState.normalizedTime < 1)
+                {
+                    yield return null;
+                }
+            }
+            if (!calledByReload) //allow isreloading to co-opt the startup/shutdown anim without disabling weapon in the process
+            {
+                weaponState = WeaponStates.PoweringDown;
+                UpdateGUIWeaponState();
+            }
+            else
+            {
+                guiStatusString = "Reloading";
+            }
             BDArmorySetup.Instance.UpdateCursorState();
             if (turret)
             {
@@ -3011,7 +3256,6 @@ namespace BDArmory.Modules
                     yield return new WaitForFixedUpdate();
                 }
             }
-
             if (hasDeployAnim)
             {
                 deployState.enabled = true;
@@ -3024,11 +3268,29 @@ namespace BDArmory.Modules
                 deployState.speed = 0;
                 deployState.enabled = false;
             }
+            if (!calledByReload)
+            {
+                weaponState = WeaponStates.Disabled;
+                UpdateGUIWeaponState();
+            }
+        }
+        IEnumerator ReloadRoutine()
+        {
+            guiStatusString = "Reloading";
 
-            weaponState = WeaponStates.Disabled;
+            reloadState.normalizedTime = 0;
+            reloadState.enabled = true;
+            reloadState.speed = (reloadState.length / ReloadTime);//ensure relaod anim is not longer than reload time
+            while (reloadState.normalizedTime < 1) //wait for animation here
+            {
+                yield return null;
+            }
+            reloadState.normalizedTime = 1;
+            reloadState.speed = 0;
+            reloadState.enabled = false;
+
             UpdateGUIWeaponState();
         }
-
         void StopShutdownStartupRoutines()
         {
             if (shutdownRoutine != null)
@@ -3121,7 +3383,7 @@ namespace BDArmory.Modules
                 var RocketTemplate = GameDatabase.Instance.GetModel(modelpath);
                 if (RocketTemplate == null)
                 {
-                    Debug.LogError("[ModuleWeapon]: model '" + modelpath + "' not found. Expect exceptions if trying to use this rocket.");
+                    Debug.LogError("[BDArmory.ModuleWeapon]: model '" + modelpath + "' not found. Expect exceptions if trying to use this rocket.");
                     return;
                 }
                 RocketTemplate.SetActive(false);
@@ -3186,17 +3448,16 @@ namespace BDArmory.Modules
                 ammoList = BDAcTools.ParseNames(bulletType);
                 currentType = ammoList[(int)AmmoTypeNum - 1].ToString();
                 rocketInfo = RocketInfo.rockets[currentType];
-                guiAmmoTypeString = "";
-                name = rocketInfo.name;
+                guiAmmoTypeString = " "; //reset name
                 rocketMass = rocketInfo.rocketMass;
                 caliber = rocketInfo.caliber;
                 thrust = rocketInfo.thrust;
                 thrustTime = rocketInfo.thrustTime;
                 ProjectileCount = rocketInfo.subProjectileCount;
                 rocketModelPath = rocketInfo.rocketModelPath;
+                SelectedAmmoType = rocketInfo.name; //store selected ammo name as string for retrieval by web orc filter/later GUI implementation
 
                 tntMass = rocketInfo.tntMass;
-                guiAmmoTypeString = " "; //reset name
                 if (rocketInfo.subProjectileCount > 1)
                 {
                     guiAmmoTypeString = Localizer.Format("#LOC_BDArmory_Ammo_Shot") + " "; // maybe add an int value to these for future Missilefire SmartPick expansion? For now, choose loadouts carefuly!
@@ -3205,15 +3466,34 @@ namespace BDArmory.Modules
                 {
                     if (rocketInfo.flak)
                     {
-                        guiAmmoTypeString += Localizer.Format("#LOC_BDArmory_Ammo_Flak");
+                        guiAmmoTypeString += Localizer.Format("#LOC_BDArmory_Ammo_Flak") + " ";
                     }
                     else if (rocketInfo.shaped)
                     {
                         guiAmmoTypeString += Localizer.Format("#LOC_BDArmory_Ammo_Shaped") + " ";
                     }
+                    if (rocketInfo.EMP || rocketInfo.choker || rocketInfo.impulse)
+                    {
+                        if (rocketInfo.EMP)
+                        {
+                            guiAmmoTypeString += Localizer.Format("#LOC_BDArmory_Ammo_EMP") + " ";
+                        }
+                        if (rocketInfo.choker)
+                        {
+                            guiAmmoTypeString += Localizer.Format("#LOC_BDArmory_Ammo_Choker") + " ";
+                        }
+                        if (rocketInfo.impulse)
+                        {
+                            guiAmmoTypeString += Localizer.Format("#LOC_BDArmory_Ammo_Impulse") + " ";
+                        }
+                    }
                     else
                     {
                         guiAmmoTypeString += Localizer.Format("#LOC_BDArmory_Ammo_HE") + " ";
+                    }
+                    if (rocketInfo.gravitic)
+                    {
+                        guiAmmoTypeString += Localizer.Format("#LOC_BDArmory_Ammo_Gravitic") + " ";
                     }
                 }
                 else
@@ -3228,10 +3508,17 @@ namespace BDArmory.Modules
                 {
                     proximityDetonation = false;
                 }
+                graviticWeapon = rocketInfo.gravitic;
+                impulseWeapon = rocketInfo.impulse;
+                electroLaser = rocketInfo.EMP; //borrowing electrolaser bool, should really rename it empWeapon
+                choker = rocketInfo.choker;
                 PAWRefresh();
-                SetInitialDetonationDistance();
                 SelectedAmmoType = rocketInfo.name; //store selected ammo name as string for retrieval by web orc filter/later GUI implementation
-                SetupRocketPool(SelectedAmmoType, rocketModelPath);
+                if (HighLogic.LoadedSceneIsFlight)
+                {
+                    SetInitialDetonationDistance();
+                    SetupRocketPool(SelectedAmmoType, rocketModelPath);
+                }
             }
         }
         protected void SetInitialDetonationDistance()
@@ -3257,7 +3544,7 @@ namespace BDArmory.Modules
             }
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log("[BDArmory]: DetonationDistance = : " + detonationRange);
+                Debug.Log("[BDArmory.ModuleWeapon]: DetonationDistance = : " + detonationRange);
             }
         }
 
@@ -3340,7 +3627,7 @@ namespace BDArmory.Modules
                         BulletInfo binfo = BulletInfo.bullets[ammoList[i].ToString()];
                         if (binfo == null)
                         {
-                            Debug.LogError("[ModuleWeapon]: The requested bullet type (" + ammoList[i].ToString() + ") does not exist.");
+                            Debug.LogError("[BDArmory.ModuleWeapon]: The requested bullet type (" + ammoList[i].ToString() + ") does not exist.");
                             output.AppendLine($"Bullet type: {ammoList[i]} - MISSING");
                             output.AppendLine("");
                             continue;
@@ -3367,6 +3654,20 @@ namespace BDArmory.Modules
                                 output.AppendLine($"- max range: {maxAirDetonationRange} m");
                             }
                         }
+                        if (impulseWeapon || graviticWeapon)
+                        {
+                            output.AppendLine($"Special Weapon:");
+                            if (impulseWeapon)
+                            {
+                                output.AppendLine($"Concussive:");
+                                output.AppendLine($"- Impulse to target:{Impulse}");
+                            }
+                            if (graviticWeapon)
+                            {
+                                output.AppendLine($"Gravitic:");
+                                output.AppendLine($"- weight added per hit:{massAdjustment * 1000} kg");
+                            }
+                        }
                         output.AppendLine("");
                     }
                 }
@@ -3377,7 +3678,7 @@ namespace BDArmory.Modules
                         RocketInfo rinfo = RocketInfo.rockets[ammoList[i].ToString()];
                         if (rinfo == null)
                         {
-                            Debug.LogError("[ModuleWeapon]: The requested rocket type (" + ammoList[i].ToString() + ") does not exist.");
+                            Debug.LogError("[BDArmory.ModuleWeapon]: The requested rocket type (" + ammoList[i].ToString() + ") does not exist.");
                             output.AppendLine($"Rocket type: {ammoList[i]} - MISSING");
                             output.AppendLine("");
                             continue;
@@ -3398,6 +3699,30 @@ namespace BDArmory.Modules
                         {
                             output.AppendLine($"Cluster Rocket");
                             output.AppendLine($" - Submunition count: {rinfo.subProjectileCount}");
+                        }
+                        if (impulseWeapon || graviticWeapon || choker || electroLaser)
+                        {
+                            output.AppendLine($"Special Weapon:");
+                            if (impulseWeapon)
+                            {
+                                output.AppendLine($"Concussion warhead:");
+                                output.AppendLine($"- Impulse to target:{Impulse}");
+                            }
+                            if (graviticWeapon)
+                            {
+                                output.AppendLine($"Gravitic warhead:");
+                                output.AppendLine($"- weight added per part hit:{massAdjustment * 1000} kg");
+                            }
+                            if (electroLaser)
+                            {
+                                output.AppendLine($"EMP warhead:");
+                                output.AppendLine($"- can temporarily shut down targets");
+                            }
+                            if (choker)
+                            {
+                                output.AppendLine($"Atmospheric Deprivation Warhead:");
+                                output.AppendLine($"- Will temporarily knock out air intakes");
+                            }
                         }
                     }
                     if (externalAmmo)

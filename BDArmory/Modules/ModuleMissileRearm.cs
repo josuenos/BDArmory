@@ -29,7 +29,7 @@ namespace BDArmory.Modules
         {
             if (this.part.children.Count != 0)
             {
-                Debug.Log("[ModuleMissileRearm]: Not Empty" + this.part.children.Count);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Not Empty" + this.part.children.Count);
                 return;
             }
             if (ammoCount >= 1)
@@ -45,7 +45,7 @@ namespace BDArmory.Modules
                             {
                                 var partNode = new ConfigNode();
                                 PartSnapshot(AP.partPrefab).CopyTo(partNode);
-                                Debug.Log("[ModuleMissileRearm]: Node" + AP.partPrefab.srfAttachNode.originalPosition);
+                                Debug.Log("[BDArmory.ModuleMissileRearm]: Node" + AP.partPrefab.srfAttachNode.originalPosition);
                                 CreatePart(partNode, MissileTransform.transform.position - MissileTransform.TransformDirection(AP.partPrefab.srfAttachNode.originalPosition),
                                     this.part.transform.rotation, this.part, this.part, "srfAttach");
                                 ammoCount -= 1;
@@ -82,7 +82,7 @@ namespace BDArmory.Modules
                         if (m.moduleName == "MissileLauncher")
                         {
                             MissileName = p.name;
-                            Debug.Log("[ModuleMissileRearm]: " + MissileName);
+                            Debug.Log("[BDArmory.ModuleMissileRearm]: " + MissileName);
                         }
                     }
                 }
@@ -107,7 +107,7 @@ namespace BDArmory.Modules
             var node = id == "srfAttach" ? p.srfAttachNode : p.FindAttachNode(id);
             if (node == null)
             {
-                Debug.Log("[ModuleMissileRearm]: Cannot find attach node {0} on part {1}. Using srfAttach" + id + p);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Cannot find attach node {0} on part {1}. Using srfAttach" + id + p);
                 node = p.srfAttachNode;
             }
             return node;
@@ -126,12 +126,12 @@ namespace BDArmory.Modules
             var tgtPart = dockingNode.referenceNode.attachedPart;
             if (tgtPart == null)
             {
-                Debug.Log("[ModuleMissileRearm]: Node's part {0} is not attached to anything thru the reference node" + dockingNode.part);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Node's part {0} is not attached to anything thru the reference node" + dockingNode.part);
                 return false;
             }
             if (dockingNode.state != dockingNode.st_ready.name)
             {
-                Debug.Log("[ModuleMissileRearm]: Hard reset docking node {0} from state '{1}' to '{2}'" +
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Hard reset docking node {0} from state '{1}' to '{2}'" +
                                 dockingNode.part + dockingNode.state + dockingNode.st_ready.name);
                 dockingNode.dockedPartUId = 0;
                 dockingNode.dockingNodeModuleIndex = 0;
@@ -147,18 +147,18 @@ namespace BDArmory.Modules
             }
             if (dockingNode.fsm.currentStateName != dockingNode.st_preattached.name)
             {
-                Debug.Log("[ModuleMissileRearm]: Node on {0} is unexpected state '{1}'" +
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Node on {0} is unexpected state '{1}'" +
                                 dockingNode.part + dockingNode.fsm.currentStateName);
                 return false;
             }
-            Debug.Log("[ModuleMissileRearm]: Successfully set docking node {0} to state {1} with part {2}" +
+            Debug.Log("[BDArmory.ModuleMissileRearm]: Successfully set docking node {0} to state {1} with part {2}" +
                          dockingNode.part + dockingNode.fsm.currentStateName + tgtPart);
             return true;
         }
 
         static IEnumerator WaitAndMakeLonePart(Part newPart, OnPartReady onPartReady)
         {
-            Debug.Log("[ModuleMissileRearm]: Create lone part vessel for {0}" + newPart);
+            Debug.Log("[BDArmory.ModuleMissileRearm]: Create lone part vessel for {0}" + newPart);
             string originatingVesselName = newPart.vessel.vesselName;
             newPart.physicalSignificance = Part.PhysicalSignificance.NONE;
             newPart.PromoteToPhysicalPart();
@@ -174,10 +174,10 @@ namespace BDArmory.Modules
                 newPart.setParent(null);
             }
             yield return new WaitWhile(() => !newPart.started && newPart.State != PartStates.DEAD);
-            Debug.Log("[ModuleMissileRearm]: Part {0} is in state {1}" + newPart + newPart.State);
+            Debug.Log("[BDArmory.ModuleMissileRearm]: Part {0} is in state {1}" + newPart + newPart.State);
             if (newPart.State == PartStates.DEAD)
             {
-                Debug.Log("[ModuleMissileRearm]: Part {0} has died before fully instantiating" + newPart);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Part {0} has died before fully instantiating" + newPart);
                 yield break;
             }
 
@@ -199,7 +199,7 @@ namespace BDArmory.Modules
             }
             else
             {
-                Debug.Log("[ModuleMissileRearm]: Cannot find Awake() method on {0}. Skip awakening", module);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Cannot find Awake() method on {0}. Skip awakening", module);
             }
         }
 
@@ -215,7 +215,7 @@ namespace BDArmory.Modules
             }
             else
             {
-                Debug.Log("[ModuleMissileRearm]: Cannot find Awake() method on {0}. Skip awakening", module);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Cannot find Awake() method on {0}. Skip awakening", module);
             }
         }
 
@@ -226,7 +226,7 @@ namespace BDArmory.Modules
             if (scienceModule != null)
             {
                 scienceModule.ExperimentData = new List<string>();
-                Debug.Log("[ModuleMissileRearm]: WORKAROUND. Fix null field in ModuleScienceLab module on the part prefab: {0}", module);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: WORKAROUND. Fix null field in ModuleScienceLab module on the part prefab: {0}", module);
             }
 
             // Ensure the module is awaken. Otherwise, any access to base fields list will result in NRE.
@@ -236,9 +236,9 @@ namespace BDArmory.Modules
             {
                 using (var field = module.Fields.GetEnumerator()) { };
             }
-            catch
+            catch (Exception e)
             {
-                Debug.Log("[ModuleMissileRearm]: WORKAROUND. Module {0} on part prefab is not awaken. Call Awake on it", module);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: WORKAROUND. Module " + module + " on part prefab is not awaken. Call Awake on it. Exception: " + e.Message);
                 AwakePartModule(module);
             }
             foreach (var field in module.Fields)
@@ -248,7 +248,7 @@ namespace BDArmory.Modules
                 {
                     //var proto = new StandardOrdinaryTypesProto();
                     //var defValue = proto.ParseFromString("", baseField.FieldInfo.FieldType);
-                    //Debug.Log("[ModuleMissileRearm]: WORKAROUND. Found null field {0} in module prefab {1},"
+                    //Debug.Log("[BDArmory.ModuleMissileRearm]: WORKAROUND. Found null field {0} in module prefab {1},"
                     //                + " fixing to default value of type {2}: {3}",
                     //                baseField.name, module, baseField.FieldInfo.FieldType, defValue);
                     //baseField.SetValue(defValue, module);
@@ -266,15 +266,16 @@ namespace BDArmory.Modules
                 {
                     CleanupFieldsInModule(module);
                 }
-                catch
+                catch (Exception e)
                 {
                     badModules.Add(module);
+                    Debug.LogWarning("[BDArmory.ModuleMissileRearm]: Exception thrown in CleanupModuleFieldsInPart: " + e.Message + "\n" + e.StackTrace);
                 }
             }
             // Cleanup modules that block KIS. It's a bad thing to do but not working KIS is worse.
             foreach (var moduleToDrop in badModules)
             {
-                Debug.Log("[ModuleMissileRearm]: Module on part prefab {0} is setup improperly: name={1}. Drop it!" + part, moduleToDrop);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Module on part prefab {0} is setup improperly: name={1}. Drop it!" + part, moduleToDrop);
                 part.RemoveModule(moduleToDrop);
             }
         }
@@ -440,7 +441,7 @@ namespace BDArmory.Modules
             if (coupleToPart != null)
             {
                 // Wait for part to initialize and then fire ready event.
-                Debug.Log("[ModuleMissileRearm]: Ready to error" + newPart + srcAttachNodeId + tgtAttachNode);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Ready to error" + newPart + srcAttachNodeId + tgtAttachNode);
                 newPart.StartCoroutine(
                     WaitAndCouple(newPart, srcAttachNodeId, tgtAttachNode, onPartReady,
                                   createPhysicsless: createPhysicsless));
@@ -464,7 +465,7 @@ namespace BDArmory.Modules
             }
 
             // Create proper attach nodes.
-            Debug.Log("[ModuleMissileRearm]: Attach new part {0} to {1}: srcNodeId={2}, tgtNode={3}" +
+            Debug.Log("[BDArmory.ModuleMissileRearm]: Attach new part {0} to {1}: srcNodeId={2}, tgtNode={3}" +
                          newPart + newPart.vessel +
                          srcAttachNodeId);
             var srcAttachNode = GetAttachNodeById(newPart, srcAttachNodeId);
@@ -485,7 +486,7 @@ namespace BDArmory.Modules
                 srcDockingNode.state = "PreAttached";
                 srcDockingNode.dockedPartUId = 0;
                 srcDockingNode.dockingNodeModuleIndex = 0;
-                Debug.Log("[ModuleMissileRearm]: Force new node {0} to state {1}" + newPart + srcDockingNode.state);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Force new node {0} to state {1}" + newPart + srcDockingNode.state);
             }
             var tgtDockingNode = GetDockingNode(tgtPart, attachNode: tgtAttachNode);
             if (tgtDockingNode != null)
@@ -494,7 +495,7 @@ namespace BDArmory.Modules
             }
 
             // Wait until part is started. Keep it in position till it happen.
-            Debug.Log("[ModuleMissileRearm]: Wait for part {0} to get alive...", newPart);
+            Debug.Log("[BDArmory.ModuleMissileRearm]: Wait for part {0} to get alive...", newPart);
             newPart.transform.parent = tgtPart.transform;
             var relPos = newPart.transform.localPosition;
             var relRot = newPart.transform.localRotation;
@@ -516,10 +517,10 @@ namespace BDArmory.Modules
                 }
             }
             newPart.transform.parent = newPart.transform;
-            Debug.Log("[ModuleMissileRearm]: Part {0} is in state {1}" + newPart + newPart.State);
+            Debug.Log("[BDArmory.ModuleMissileRearm]: Part {0} is in state {1}" + newPart + newPart.State);
             if (newPart.State == PartStates.DEAD)
             {
-                Debug.Log("[ModuleMissileRearm]: Part {0} has died before fully instantiating", newPart);
+                Debug.Log("[BDArmory.ModuleMissileRearm]: Part {0} has died before fully instantiating", newPart);
                 yield break;
             }
 

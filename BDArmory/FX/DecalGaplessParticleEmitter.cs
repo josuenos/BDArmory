@@ -63,7 +63,6 @@ namespace BDArmory.FX
 
             if (!Emit) return;
 
-            //var velocity = part?.GetComponent<Rigidbody>().velocity ?? rb.velocity;
             var originalLocalPosition = gameObject.transform.localPosition;
             var originalPosition = gameObject.transform.position;
             var startPosition = gameObject.transform.position + velocity * Time.fixedDeltaTime;
@@ -88,7 +87,8 @@ namespace BDArmory.FX
 
         public void EmitParticles()
         {
-            var velocity = part?.GetComponent<Rigidbody>().velocity ?? rb.velocity;
+            var partRB = part != null ? part.GetComponent<Rigidbody>() : null;
+            var velocity = partRB != null ? partRB.velocity : rb.velocity;
             var originalLocalPosition = gameObject.transform.localPosition;
             var originalPosition = gameObject.transform.position;
             var startPosition = gameObject.transform.position + velocity * Time.fixedDeltaTime;
