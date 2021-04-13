@@ -167,7 +167,6 @@
     <Compile Include="Misc\BDATooltips.cs" />
     <Compile Include="Misc\BDAcTools.cs" />
     <Compile Include="Misc\BDTeam.cs" />
-    <Compile Include="Misc\BahaTurretBullet.cs" />
     <Compile Include="Misc\BattleDamageHandler.cs" />
     <Compile Include="Misc\DecoupledBooster.cs" />
     <Compile Include="Misc\IBDWeapon.cs" />
@@ -175,6 +174,7 @@
     <Compile Include="Misc\Misc.cs" />
     <Compile Include="Misc\MissileLaunchParams.cs" />
     <Compile Include="Misc\ObjectPool.cs" />
+    <Compile Include="Misc\ProjectileUtils.cs" />
     <Compile Include="Misc\RippleOption.cs" />
     <Compile Include="Misc\VectorUtils.cs" />
     <Compile Include="Misc\ViewScanResults.cs" />
@@ -201,9 +201,11 @@
     <Compile Include="Modules\ModuleAmmoSwitch.cs" />
     <Compile Include="Modules\ModuleCASE.cs" />
     <Compile Include="Modules\ModuleDrainEC.cs" />
+    <Compile Include="Modules\ModuleDrainIntakes.cs" />
     <Compile Include="Modules\ModuleDrainFuel.cs" />
     <Compile Include="Modules\ModuleECMJammer.cs" />
     <Compile Include="Modules\ModuleEMP.cs" />
+    <Compile Include="Modules\ModuleMassAdjust.cs" />
     <Compile Include="Modules\ModuleMissileRearm.cs" />
     <Compile Include="Modules\ModuleMovingPart.cs" />
     <Compile Include="Modules\ModuleRadar.cs" />
@@ -216,6 +218,7 @@
     <Compile Include="Modules\ModuleWeapon.cs" />
     <Compile Include="Modules\ModuleWingCommander.cs" />
     <Compile Include="Modules\RadarWarningReceiver.cs" />
+    <Compile Include="Modules\RWPS3R2NukeModule.cs" />
     <Compile Include="Parts\GPSTargetInfo.cs" />
     <Compile Include="Parts\SeismicChargeFX.cs" />
     <Compile Include="Parts\TGPCamRotator.cs" />

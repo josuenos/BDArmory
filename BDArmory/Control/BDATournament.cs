@@ -83,7 +83,7 @@ namespace BDArmory.Control
             {
                 message = "Tournament folder (" + folder + ") containing craft files does not exist.";
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
-                Debug.Log("[BDATournament]: " + message);
+                Debug.Log("[BDArmory.BDATournament]: " + message);
                 return false;
             }
             craftFiles = Directory.GetFiles(abs_folder).Where(f => f.EndsWith(".craft")).ToList();
@@ -106,7 +106,7 @@ namespace BDArmory.Control
                     break;
             }
             rounds = new Dictionary<int, Dictionary<int, VesselSpawner.SpawnConfig>>();
-            Debug.Log("[BDATournament]: Generating " + numberOfRounds + " rounds for tournament " + tournamentID + ", each with " + vesselsPerHeat + " vessels per heat.");
+            Debug.Log("[BDArmory.BDATournament]: Generating " + numberOfRounds + " rounds for tournament " + tournamentID + ", each with " + vesselsPerHeat + " vessels per heat.");
             for (int roundIndex = 0; roundIndex < numberOfRounds; ++roundIndex)
             {
                 craftFiles.Shuffle();
@@ -159,7 +159,7 @@ namespace BDArmory.Control
             {
                 message = "Tournament folder (" + folder + ") containing craft files or team folders does not exist.";
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
-                Debug.Log("[BDATournament]: " + message);
+                Debug.Log("[BDArmory.BDATournament]: " + message);
                 return false;
             }
             if (numberOfTeams > 1) // Make teams from the files in the spawn folder.
@@ -169,7 +169,7 @@ namespace BDArmory.Control
                 {
                     message = "Insufficient vessels in AutoSpawn" + (!string.IsNullOrEmpty(folder) ? "/" + folder : "") + " to make " + numberOfTeams + " teams.";
                     BDACompetitionMode.Instance.competitionStatus.Add(message);
-                    Debug.Log("[BDATournament]: " + message);
+                    Debug.Log("[BDArmory.BDATournament]: " + message);
                     return false;
                 }
                 craftFiles.Shuffle();
@@ -203,7 +203,7 @@ namespace BDArmory.Control
             {
                 message = "Insufficient " + (numberOfTeams == 1 ? "craft files" : "folders") + " in '" + folder + "' to generate a tournament.";
                 if (BDACompetitionMode.Instance) BDACompetitionMode.Instance.competitionStatus.Add(message);
-                Debug.Log("[BDATournament]: " + message);
+                Debug.Log("[BDArmory.BDATournament]: " + message);
                 return false;
             }
             teamCount = teamFiles.Count;
@@ -216,7 +216,7 @@ namespace BDArmory.Control
 
             int fullHeatCount = teamFiles.Count / teamsPerHeat;
             rounds = new Dictionary<int, Dictionary<int, VesselSpawner.SpawnConfig>>();
-            Debug.Log("[BDATournament]: Generating " + numberOfRounds + " rounds for tournament " + tournamentID + ", each with " + teamsPerHeat + " teams per heat.");
+            Debug.Log("[BDArmory.BDATournament]: Generating " + numberOfRounds + " rounds for tournament " + tournamentID + ", each with " + teamsPerHeat + " teams per heat.");
             for (int roundIndex = 0; roundIndex < numberOfRounds; ++roundIndex)
             {
                 teamsIndex.Shuffle();
@@ -299,7 +299,7 @@ namespace BDArmory.Control
 
         Tuple<int, int> OptimiseVesselsPerHeat(int count)
         {
-            var options = new List<int> { 8, 7, 6 };
+            var options = count < 11 ? new List<int> { 8, 7, 6, 5 } : new List<int> { 8, 7, 6 };
             foreach (var val in options)
             {
                 if (count % val == 0)
@@ -323,8 +323,9 @@ namespace BDArmory.Control
                 File.WriteAllLines(Path.Combine(Environment.CurrentDirectory, stateFile), strings);
                 return true;
             }
-            catch
+            catch (Exception e)
             {
+                Debug.LogWarning("[BDArmory.BDATournament]: Exception thrown in SaveState: " + e.Message + "\n" + e.StackTrace);
                 return false;
             }
         }
@@ -378,7 +379,7 @@ namespace BDArmory.Control
             }
             catch (Exception e)
             {
-                Debug.LogError(e);
+                Debug.LogError("[BDArmory.BDATournament]: " + e.Message);
                 return false;
             }
         }
@@ -458,7 +459,7 @@ namespace BDArmory.Control
             }
             else
                 message = "Failed to load tournament state.";
-            Debug.Log("[BDATournament]: " + message);
+            Debug.Log("[BDArmory.BDATournament]: " + message);
             // if (BDACompetitionMode.Instance != null)
             //     BDACompetitionMode.Instance.competitionStatus.Add(message);
             tournamentStatus = heatsRemaining > 0 ? TournamentStatus.Stopped : TournamentStatus.Completed;
@@ -472,7 +473,7 @@ namespace BDArmory.Control
                 message = "Tournament state saved to " + stateFile;
             else
                 message = "Failed to save tournament state.";
-            Debug.Log("[BDATournament]: " + message);
+            Debug.Log("[BDArmory.BDATournament]: " + message);
             // if (BDACompetitionMode.Instance != null)
             //     BDACompetitionMode.Instance.competitionStatus.Add(message);
             return true;
@@ -503,7 +504,7 @@ namespace BDArmory.Control
             tournamentStatus = heatsRemaining > 0 ? TournamentStatus.Stopped : TournamentStatus.Completed;
             message = "Tournament generated for " + vesselCount + " craft found in AutoSpawn" + (folder == "" ? "" : "/" + folder);
             BDACompetitionMode.Instance.competitionStatus.Add(message);
-            Debug.Log("[BDATournament]: " + message);
+            Debug.Log("[BDArmory.BDATournament]: " + message);
             SaveTournamentState();
         }
 
@@ -539,7 +540,7 @@ namespace BDArmory.Control
 
                     message = "Running heat " + heatIndex + " of round " + roundIndex + " of tournament " + tournamentState.tournamentID;
                     BDACompetitionMode.Instance.competitionStatus.Add(message);
-                    Debug.Log("[BDATournament]: " + message);
+                    Debug.Log("[BDArmory.BDATournament]: " + message);
 
                     int attempts = 0;
                     competitionStarted = false;
@@ -565,7 +566,7 @@ namespace BDArmory.Control
                     }
                     if (!competitionStarted)
                     {
-                        Debug.Log("[BDATournament]: Failed to run heat, failure reasons: " + VesselSpawner.Instance.spawnFailureReason + ", " + BDACompetitionMode.Instance.competitionStartFailureReason);
+                        Debug.Log("[BDArmory.BDATournament]: Failed to run heat, failure reasons: " + VesselSpawner.Instance.spawnFailureReason + ", " + BDACompetitionMode.Instance.competitionStartFailureReason);
                         tournamentStatus = TournamentStatus.Stopped;
                         yield break;
                     }
@@ -590,11 +591,11 @@ namespace BDArmory.Control
                 }
                 message = "All heats in round " + roundIndex + " have been run.";
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
-                Debug.Log("[BDATournament]: " + message);
+                Debug.Log("[BDArmory.BDATournament]: " + message);
             }
             message = "All rounds in tournament " + tournamentState.tournamentID + " have been run.";
             BDACompetitionMode.Instance.competitionStatus.Add(message);
-            Debug.Log("[BDATournament]: " + message);
+            Debug.Log("[BDArmory.BDATournament]: " + message);
             tournamentStatus = TournamentStatus.Completed;
         }
 
@@ -611,21 +612,34 @@ namespace BDArmory.Control
             yield return new WaitForFixedUpdate();
 
             // NOTE: runs in separate coroutine
-            BDACompetitionMode.Instance.StartCompetitionMode(BDArmorySettings.COMPETITION_DISTANCE);
+            if (BDArmorySettings.RUNWAY_PROJECT)
+            {
+                switch (BDArmorySettings.RUNWAY_PROJECT_ROUND)
+                {
+                    case 33:
+                        BDACompetitionMode.Instance.StartRapidDeployment(0);
+                        break;
+                    default:
+                        BDACompetitionMode.Instance.StartCompetitionMode(BDArmorySettings.COMPETITION_DISTANCE);
+                        break;
+                }
+            }
+            else
+                BDACompetitionMode.Instance.StartCompetitionMode(BDArmorySettings.COMPETITION_DISTANCE);
             yield return new WaitForFixedUpdate(); // Give the competition start a frame to get going.
 
             // start timer coroutine for the duration specified in settings UI
             var duration = Core.BDArmorySettings.COMPETITION_DURATION * 60f;
             message = "Starting " + (duration > 0 ? "a " + duration.ToString("F0") + "s" : "an unlimited") + " duration competition.";
-            Debug.Log("[BDATournament]: " + message);
+            Debug.Log("[BDArmory.BDATournament]: " + message);
             BDACompetitionMode.Instance.competitionStatus.Add(message);
-            while (BDACompetitionMode.Instance.competitionStarting)
+            while (BDACompetitionMode.Instance.competitionStarting || BDACompetitionMode.Instance.sequencedCompetitionStarting)
                 yield return new WaitForFixedUpdate(); // Wait for the competition to actually start.
             if (!BDACompetitionMode.Instance.competitionIsActive)
             {
                 var message = "Competition failed to start.";
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
-                Debug.Log("[BDATournament]: " + message);
+                Debug.Log("[BDArmory.BDATournament]: " + message);
                 tournamentStatus = TournamentStatus.Stopped;
                 yield break;
             }

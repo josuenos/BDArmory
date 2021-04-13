@@ -78,7 +78,7 @@ namespace BDArmory.Misc
                 }
                 else
                 {
-                    Debug.Log("invalid integer: " + valueArray[i]);
+                    Debug.Log("[BDArmory.BDAcTools]: invalid integer: " + valueArray[i]);
                 }
             }
             return newIntList;
@@ -97,7 +97,7 @@ namespace BDArmory.Misc
                 }
                 else
                 {
-                    Debug.Log("invalid float: " + array[i]);
+                    Debug.Log("[BDArmory.BDAcTools]: invalid float: " + array[i]);
                 }
             }
             return list;
@@ -116,7 +116,7 @@ namespace BDArmory.Misc
                 }
                 else
                 {
-                    Debug.Log("FSBDAcTools: invalid float: [len:" + array[i].Length + "] '" + array[i] + "']");
+                    Debug.Log("[BDArmory.BDAcTools]: invalid float: [len:" + array[i].Length + "] '" + array[i] + "']");
                 }
             }
             return list;
@@ -197,7 +197,7 @@ namespace BDArmory.Misc
                         goto foundField;
                     }
                 }
-                Debug.LogWarning("*PartUtils* Unable to find UIPartActionWindow list");
+                Debug.LogWarning("[BDArmory.BDAcTools]: Unable to find UIPartActionWindow list");
                 return null;
             }
             foundField:

@@ -310,7 +310,7 @@ namespace BDArmory.Modules
                 }
                 else
                 {
-                    Debug.Log("invalid integer: " + valueArray[i]);
+                    Debug.Log("[BDArmory.ModuleReactiveArmor]: invalid integer: " + valueArray[i]);
                 }
             }
             return newIntList;

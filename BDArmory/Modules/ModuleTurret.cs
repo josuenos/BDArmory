@@ -66,12 +66,12 @@ namespace BDArmory.Modules
 
             if (!pitchTransform)
             {
-                Debug.LogWarning(part.partInfo.title + " has no pitchTransform");
+                Debug.LogWarning("[BDArmory.ModuleTurret]: " + part.partInfo.title + " has no pitchTransform");
             }
 
             if (!yawTransform)
             {
-                Debug.LogWarning(part.partInfo.title + " has no yawTransform");
+                Debug.LogWarning("[BDArmory.ModuleTurret]: " + part.partInfo.title + " has no yawTransform");
             }
 
             if (!referenceTransform)

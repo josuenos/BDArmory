@@ -220,7 +220,7 @@ namespace BDArmory.Modules
             if (!pilotEnabled || !vessel.isActiveVessel) return;
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                GUI.Label(new Rect(200, Screen.height - 200, 400, 400), $"{vessel.name}: {debugString.ToString()}");
+                GUI.Label(new Rect(200, Screen.height - 300, 600, 300), $"{vessel.name}\n{debugString.ToString()}");
             }
         }
 
@@ -307,8 +307,16 @@ namespace BDArmory.Modules
         {
             if (weaponManager != null && !weaponManager.guardMode)
             {
-                if (weaponManager.Team.IsEnemy(vessel.targetObject?.GetVessel()?.FindPartModuleImplementing<MissileFire>()?.Team))
-                    targetVessel = (Vessel)vessel.targetObject;
+                if (vessel.targetObject != null)
+                {
+                    var nonGuardTargetVessel = vessel.targetObject.GetVessel();
+                    if (nonGuardTargetVessel != null)
+                    {
+                        var targetWeaponManager = nonGuardTargetVessel.FindPartModuleImplementing<MissileFire>();
+                        if (targetWeaponManager != null && weaponManager.Team.IsEnemy(targetWeaponManager.Team))
+                            targetVessel = (Vessel)vessel.targetObject;
+                    }
+                }
             }
         }
 
@@ -318,14 +326,13 @@ namespace BDArmory.Modules
         /// <param name="text">text to write</param>
         protected void DebugLine(string text)
         {
-            debugString.Append(text);
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine(text);
         }
 
         protected void SetStatus(string text)
         {
             currentStatus = text;
-            DebugLine(text);
+            // DebugLine(text);
         }
 
         #endregion utilities
@@ -339,7 +346,7 @@ namespace BDArmory.Modules
             {
                 commandLeader = null;
             }
-            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDGenericAIBase]:" + vessel.vesselName + " was released from command.");
+            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDGenericAIBase]:" + vessel.vesselName + " was released from command.");
             command = PilotCommands.Free;
 
             assignedPositionWorld = vesselTransform.position;
@@ -350,7 +357,7 @@ namespace BDArmory.Modules
             if (!pilotEnabled) return;
             if (leader == vessel || followerIndex < 0) return;
 
-            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDGenericAIBase]:" + vessel.vesselName + " was commanded to follow.");
+            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDGenericAIBase]:" + vessel.vesselName + " was commanded to follow.");
             command = PilotCommands.Follow;
             commandLeader = leader;
             commandFollowIndex = followerIndex;
@@ -366,7 +373,7 @@ namespace BDArmory.Modules
         {
             if (!pilotEnabled) return;
 
-            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDGenericAIBase]:" + vessel.vesselName + " was commanded to go to.");
+            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDGenericAIBase]:" + vessel.vesselName + " was commanded to go to.");
             assignedPositionGeo = gpsCoords;
             command = PilotCommands.FlyTo;
         }
@@ -375,7 +382,7 @@ namespace BDArmory.Modules
         {
             if (!pilotEnabled) return;
 
-            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDGenericAIBase]:" + vessel.vesselName + " was commanded to attack.");
+            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDGenericAIBase]:" + vessel.vesselName + " was commanded to attack.");
             assignedPositionGeo = gpsCoords;
             command = PilotCommands.Attack;
         }

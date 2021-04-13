@@ -9,13 +9,15 @@ namespace BDArmory.Core.Extension
         {
             try
             {
+                if (v == null) return false;
                 return !v.LandedOrSplashed &&
-                       (v.situation == Vessel.Situations.ORBITING ||
-                        v.situation == Vessel.Situations.SUB_ORBITAL ||
-                        v.situation == Vessel.Situations.ESCAPING);
+                           (v.situation == Vessel.Situations.ORBITING ||
+                            v.situation == Vessel.Situations.SUB_ORBITAL ||
+                            v.situation == Vessel.Situations.ESCAPING);
             }
-            catch
+            catch (Exception e)
             {
+                Debug.LogWarning("[BDArmory.VesselExtensions]: Exception thrown in InOrbit: " + e.Message + "\n" + e.StackTrace);
                 return false;
             }
         }
@@ -29,6 +31,7 @@ namespace BDArmory.Core.Extension
         {
             try
             {
+                if (v == null) return Vector3d.zero;
                 if (!v.InOrbit())
                 {
                     return v.srf_velocity;
@@ -38,8 +41,9 @@ namespace BDArmory.Core.Extension
                     return v.obt_velocity;
                 }
             }
-            catch
+            catch (Exception e)
             {
+                Debug.LogWarning("[BDArmory.VesselExtensions]: Exception thrown in Velocity: " + e.Message + "\n" + e.StackTrace);
                 //return v.srf_velocity;
                 return new Vector3d(0, 0, 0);
             }
@@ -53,7 +57,7 @@ namespace BDArmory.Core.Extension
             return GetRadarAltitudeAtPos(futurePosition);
         }
 
-        public static Vector3 GetFuturePosition (this Vessel vessel, float predictionTime = 10)
+        public static Vector3 GetFuturePosition(this Vessel vessel, float predictionTime = 10)
         {
             return vessel.CoM + vessel.Velocity() * predictionTime + 0.5f * vessel.acceleration_immediate * Math.Pow(predictionTime, 2);
         }
@@ -68,6 +72,35 @@ namespace BDArmory.Core.Extension
                         FlightGlobals.currentMainBody.TerrainAltitude(latitudeAtPos, longitudeAtPos)), 0,
                 (float)FlightGlobals.currentMainBody.GetAltitude(position));
             return radarAlt;
+        }
+
+        // Get a vessel's "radius".
+        public static float GetRadius(this Vessel vessel)
+        {
+            //get vessel size
+            Vector3 size = vessel.vesselSize;
+
+            //get largest dimension
+            float radius;
+
+            if (size.x > size.y && size.x > size.z)
+            {
+                radius = size.x / 2;
+            }
+            else if (size.y > size.x && size.y > size.z)
+            {
+                radius = size.y / 2;
+            }
+            else if (size.z > size.x && size.z > size.y)
+            {
+                radius = size.z / 2;
+            }
+            else
+            {
+                radius = size.x / 2;
+            }
+
+            return radius;
         }
     }
 }

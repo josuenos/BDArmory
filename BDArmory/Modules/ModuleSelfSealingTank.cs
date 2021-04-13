@@ -107,7 +107,7 @@ namespace BDArmory.Modules
                             }
                             catch (Exception e)
                             {
-                                Debug.LogError("[ModuleSelfSealingTank]: Exception parsing SSTank: " + e.Message);
+                                Debug.LogError("[BDArmory.ModuleSelfSealingTank]: Exception parsing SSTank: " + e.Message);
                             }
                         }
                         else

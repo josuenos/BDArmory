@@ -34,7 +34,7 @@ namespace BDArmory.UI
 
         private void ReloadIconOnVesselSwitch(Vessel data0, Vessel data1)
         {
-            if (part?.vessel != null && part.vessel.isActiveVessel)
+            if (part!=null && part.vessel != null && part.vessel.isActiveVessel)
             {
                 ForceRedraw();
             }

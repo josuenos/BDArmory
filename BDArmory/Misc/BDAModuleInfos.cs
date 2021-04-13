@@ -44,8 +44,8 @@ namespace BDArmory.Misc
                         string info = partModules.Current.GetInfo();
                         for (int y = 0; y < loadedParts.Current.moduleInfos.Count; y++)
                         {
-                            Debug.Log($"moduleName:  {loadedParts.Current.moduleInfos[y].moduleName}");
-                            Debug.Log($"KeyValue:  {Modules[key]}");
+                            Debug.Log($"[BDArmory.BDAModuleInfos]: moduleName:  {loadedParts.Current.moduleInfos[y].moduleName}");
+                            Debug.Log($"[BDArmory.BDAModuleInfos]: KeyValue:  {Modules[key]}");
                             if (loadedParts.Current.moduleInfos[y].moduleName != Modules[key]) continue;
                             loadedParts.Current.moduleInfos[y].info = info;
                             break;

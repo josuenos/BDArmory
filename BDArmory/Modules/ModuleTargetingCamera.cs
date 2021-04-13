@@ -207,7 +207,7 @@ namespace BDArmory.Modules
         {
             if (!TargetingCamera.Instance)
             {
-                Debug.Log("Tried to enable targeting camera, but camera instance is null.");
+                Debug.Log("[BDArmory.ModuleTargetingCamera]: Tried to enable targeting camera, but camera instance is null.");
                 return;
             }
             if (vessel.isActiveVessel)
@@ -245,7 +245,7 @@ namespace BDArmory.Modules
             {
                 if (!TargetingCamera.Instance)
                 {
-                    Debug.Log("Tried to disable targeting camera, but camera instance is null.");
+                    Debug.Log("[BDArmory.ModuleTargetingCamera]: Tried to disable targeting camera, but camera instance is null.");
                     return;
                 }
 
@@ -327,7 +327,7 @@ namespace BDArmory.Modules
 
                 if (cameraEnabled)
                 {
-                    Debug.Log("[BDArmory]: saved gtp: " + bodyRelativeGTP);
+                    Debug.Log("[BDArmory.ModuleTargetingCamera]: saved gtp: " + bodyRelativeGTP);
                     DelayedEnable();
                 }
             }
@@ -360,8 +360,8 @@ namespace BDArmory.Modules
             delayedEnabling = true;
 
             Vector3d savedGTP = bodyRelativeGTP;
-            Debug.Log("[BDArmory]: saved gtp: " + Misc.Misc.FormattedGeoPos(savedGTP, true));
-            Debug.Log("[BDArmory]: groundStabilized: " + groundStabilized);
+            Debug.Log("[BDArmory.ModuleTargetingCamera]: saved gtp: " + Misc.Misc.FormattedGeoPos(savedGTP, true));
+            Debug.Log("[BDArmory.ModuleTargetingCamera]: groundStabilized: " + groundStabilized);
 
             while (TargetingCamera.Instance == null)
             {
@@ -395,7 +395,7 @@ namespace BDArmory.Modules
             EnableCamera();
             if (groundStabilized)
             {
-                Debug.Log("[BDArmory]: Camera delayed enabled");
+                Debug.Log("[BDArmory.ModuleTargetingCamera]: Camera delayed enabled");
                 groundTargetPosition = VectorUtils.GetWorldSurfacePostion(savedGTP, vessel.mainBody);// vessel.mainBody.GetWorldSurfacePosition(bodyRelativeGTP.x, bodyRelativeGTP.y, bodyRelativeGTP.z);
                 Vector3 lookVector = groundTargetPosition - cameraParentTransform.position;
                 PointCameraModel(lookVector);
@@ -403,7 +403,7 @@ namespace BDArmory.Modules
             }
             delayedEnabling = false;
 
-            Debug.Log("[BDArmory]: post load saved gtp: " + bodyRelativeGTP);
+            Debug.Log("[BDArmory.ModuleTargetingCamera]: post load saved gtp: " + bodyRelativeGTP);
         }
 
         void PointCameraModel(Vector3 lookVector)

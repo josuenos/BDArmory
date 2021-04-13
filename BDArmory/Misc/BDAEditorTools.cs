@@ -91,7 +91,7 @@ namespace BDArmory.Misc
                                   );
             filejammers.WriteLine("NAME;TITLE;AUTHOR;MANUFACTURER;PART_MASS;PART_COST;PART_CRASHTOLERANCE;PART_MAXTEMP;alwaysOn;rcsReduction;rcsReducationFactor;lockbreaker;lockbreak_strength;jammerStrength");
 
-            Debug.Log("Dumping parts...");
+            Debug.Log("[BDArmory.BDAEditorTools]: Dumping parts...");
 
             // 3. iterate weapons and write out fields
             foreach (var item in PartLoader.LoadedPartsList)
@@ -154,7 +154,7 @@ namespace BDArmory.Misc
             filemissiles.Close();
             fileradars.Close();
             filejammers.Close();
-            Debug.Log("...dumping parts complete.");
+            Debug.Log("[BDArmory.BDAEditorTools]: ...dumping parts complete.");
         }
     }
 }

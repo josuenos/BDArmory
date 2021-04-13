@@ -44,7 +44,7 @@ namespace BDArmory.FX
 
         public static List<DestructibleBuilding> IgnoreBuildings = new List<DestructibleBuilding>();
 
-        internal static readonly float ExplosionVelocity = 343f;
+        internal static readonly float ExplosionVelocity = 422.75f;
 
         private float particlesMaxEnergy;
 
@@ -74,7 +74,7 @@ namespace BDArmory.FX
 
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log("[BDArmory]:Explosion started tntMass: {" + Power + "}  BlastRadius: {" + Range + "} StartTime: {" + StartTime + "}, Duration: {" + MaxTime + "}");
+                Debug.Log("[BDArmory.ExplosionFX]:Explosion started tntMass: {" + Power + "}  BlastRadius: {" + Range + "} StartTime: {" + StartTime + "}, Duration: {" + MaxTime + "}");
             }
         }
 
@@ -104,7 +104,7 @@ namespace BDArmory.FX
 
                     if (BDArmorySettings.DRAW_DEBUG_LABELS)
                     {
-                        Debug.Log("[BDArmory]: Enqueueing Blast Event");
+                        Debug.Log("[BDArmory.ExplosionFX]: Enqueueing Blast Event");
                     }
 
                     ExplosionEvents.Enqueue(enuEvents.Current);
@@ -119,6 +119,22 @@ namespace BDArmory.FX
             List<DestructibleBuilding> buildingAdded = new List<DestructibleBuilding>();
             Dictionary<string, int> vesselsHitByMissiles = new Dictionary<string, int>();
 
+            string sourceVesselName = null;
+            if (BDACompetitionMode.Instance)
+            {
+                switch (ExplosionSource)
+                {
+                    case ExplosionSourceType.Missile:
+                        var explosivePart = ExplosivePart ? ExplosivePart.FindModuleImplementing<BDExplosivePart>() : null;
+                        sourceVesselName = explosivePart ? explosivePart.sourcevessel.GetName() : SourceVesselName;
+                        break;
+                    case ExplosionSourceType.Bullet:
+                        sourceVesselName = SourceVesselName;
+                        break;
+                    default:
+                        break;
+                }
+            }
             using (var hitCollidersEnu = Physics.OverlapSphere(Position, Range, 9076737).AsEnumerable().GetEnumerator())
             {
                 while (hitCollidersEnu.MoveNext())
@@ -129,29 +145,13 @@ namespace BDArmory.FX
 
                     if (partHit != null && partHit.mass > 0 && !partsAdded.Contains(partHit))
                     {
-                        string sourceVesselName = null;
-                        if (BDACompetitionMode.Instance)
-                        {
-                            switch (ExplosionSource)
-                            {
-                                case ExplosionSourceType.Missile:
-                                    var explosivePart = ExplosivePart ? ExplosivePart.FindModuleImplementing<BDExplosivePart>() : null;
-                                    sourceVesselName = explosivePart ? explosivePart.sourcevessel.GetName() : SourceVesselName;
-                                    break;
-                                case ExplosionSourceType.Bullet:
-                                    sourceVesselName = SourceVesselName;
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
                         var damaged = ProcessPartEvent(partHit, sourceVesselName, result, partsAdded);
                         // If the explosion derives from a missile explosion, count the parts damaged for missile hit scores.
                         if (damaged && ExplosionSource == ExplosionSourceType.Missile && BDACompetitionMode.Instance)
                         {
                             if (sourceVesselName != null && BDACompetitionMode.Instance.Scores.ContainsKey(sourceVesselName)) // Check that the source vessel is in the competition.
                             {
-                                var damagedVesselName = partHit.vessel?.GetName();
+                                var damagedVesselName = partHit.vessel != null ? partHit.vessel.GetName() : null;
                                 if (damagedVesselName != null && damagedVesselName != sourceVesselName && BDACompetitionMode.Instance.Scores.ContainsKey(damagedVesselName)) // Check that the damaged vessel is in the competition and isn't the source vessel.
                                 {
                                     if (BDACompetitionMode.Instance.Scores[damagedVesselName].missilePartDamageCounts.ContainsKey(sourceVesselName))
@@ -189,9 +189,16 @@ namespace BDArmory.FX
                 string message = "";
                 foreach (var vesselName in vesselsHitByMissiles.Keys)
                     message += (message == "" ? "" : " and ") + vesselName + " had " + vesselsHitByMissiles[vesselName];
-                message += " parts damaged due to missile strike" + (SourceWeaponName != null ? " (" + SourceWeaponName + ")" : "") + (SourceVesselName != null ? " from " + SourceVesselName : "") + ".";
+                message += " parts damaged due to missile strike" + (SourceWeaponName != null ? " (" + SourceWeaponName + ")" : "") + (sourceVesselName != null ? " from " + sourceVesselName : "") + ".";
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
                 // Note: damage hasn't actually been applied to the parts yet, just assigned as events, so we can't know if they survived.
+                foreach (var vesselName in vesselsHitByMissiles.Keys) // Note: sourceVesselName is already checked for being in the competition before damagedVesselName is added to vesselsHitByMissiles, so we don't need to check it here.
+                {
+                    if (BDACompetitionMode.Instance.Scores[vesselName].missileHitCounts.ContainsKey(sourceVesselName))
+                        ++BDACompetitionMode.Instance.Scores[vesselName].missileHitCounts[sourceVesselName];
+                    else
+                        BDACompetitionMode.Instance.Scores[vesselName].missileHitCounts[sourceVesselName] = 1;
+                }
             }
             return result;
         }
@@ -220,7 +227,8 @@ namespace BDArmory.FX
         {
             RaycastHit hit;
             float distance = 0;
-            if (IsInLineOfSight(part, ExplosivePart, out hit, out distance))
+            List<Tuple<float, float, float>> intermediateParts;
+            if (IsInLineOfSight(part, ExplosivePart, out hit, out distance, out intermediateParts))
             {
                 if (IsAngleAllowed(Direction, hit))
                 {
@@ -232,7 +240,8 @@ namespace BDArmory.FX
                         TimeToImpact = distance / ExplosionVelocity,
                         HitPoint = hit.point,
                         Hit = hit,
-                        SourceVesselName = sourceVesselName
+                        SourceVesselName = sourceVesselName,
+                        IntermediateParts = intermediateParts
                     });
                     partsAdded.Add(part);
                     return true;
@@ -259,19 +268,18 @@ namespace BDArmory.FX
         /// <param name="explosivePart"></param>
         /// <param name="hit"> out property with the actual hit</param>
         /// <returns></returns>
-        private bool IsInLineOfSight(Part part, Part explosivePart, out RaycastHit hit, out float distance)
+        private bool IsInLineOfSight(Part part, Part explosivePart, out RaycastHit hit, out float distance, out List<Tuple<float, float, float>> intermediateParts)
         {
             Ray partRay = new Ray(Position, part.transform.position - Position);
-
             var hits = Physics.RaycastAll(partRay, Range, 9076737).AsEnumerable();
+            intermediateParts = new List<Tuple<float, float, float>>();
             using (var hitsEnu = hits.OrderBy(x => x.distance).GetEnumerator())
-            {
                 while (hitsEnu.MoveNext())
                 {
                     Part partHit = hitsEnu.Current.collider.GetComponentInParent<Part>();
                     if (partHit == null) continue;
                     hit = hitsEnu.Current;
-                    distance = Vector3.Distance(Position, hit.point);
+                    distance = hit.distance;
                     if (partHit == part)
                     {
                         return true;
@@ -283,16 +291,13 @@ namespace BDArmory.FX
                         {
                             continue;
                         }
-                        // if there are parts in between but we still inside the critical sphere of damage.
-                        if (distance <= 0.1f * Range)
-                        {
-                            continue;
-                        }
-
-                        return false;
+                        if (FlightGlobals.currentMainBody != null && hit.collider.gameObject == FlightGlobals.currentMainBody.gameObject) return false; // Terrain hit. Full absorption. Should avoid NREs in the following.
+                        var partHP = partHit.Damage();
+                        var partArmour = partHit.GetArmorThickness();
+                        if (partHP > 0) // Ignore parts that are already dead but not yet removed from the game.
+                            intermediateParts.Add(new Tuple<float, float, float>(hit.distance, partHP, partArmour));
                     }
                 }
-            }
 
             hit = new RaycastHit();
             distance = 0;
@@ -347,7 +352,7 @@ namespace BDArmory.FX
             {
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
                 {
-                    Debug.Log("[BDArmory]:Explosion Finished");
+                    Debug.Log("[BDArmory.ExplosionFX]:Explosion Finished");
                 }
 
                 gameObject.SetActive(false);
@@ -377,7 +382,7 @@ namespace BDArmory.FX
                 }
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
                 {
-                    Debug.Log("[BDArmory]: Explosion hit destructible building! Hitpoints Applied: " + Mathf.Round(damageToBuilding) +
+                    Debug.Log("[BDArmory.ExplosionFX]: Explosion hit destructible building! Hitpoints Applied: " + Mathf.Round(damageToBuilding) +
                              ", Building Damage : " + Mathf.Round(building.Damage) +
                              " Building Threshold : " + building.impactMomentumThreshold);
                 }
@@ -388,26 +393,33 @@ namespace BDArmory.FX
         {
             if (eventToExecute.Part == null || eventToExecute.Part.Rigidbody == null || eventToExecute.Part.vessel == null || eventToExecute.Part.partInfo == null) return;
 
-            try
+            Part part = eventToExecute.Part;
+            Rigidbody rb = part.Rigidbody;
+            var realDistance = eventToExecute.Distance;
+
+            if (!eventToExecute.IsNegativePressure)
             {
-                Part part = eventToExecute.Part;
-                Rigidbody rb = part.Rigidbody;
-                var realDistance = eventToExecute.Distance;
+                BlastInfo blastInfo =
+                    BlastPhysicsUtils.CalculatePartBlastEffects(part, realDistance,
+                        part.vessel.totalMass * 1000f, Power, Range);
 
-                if (!eventToExecute.IsNegativePressure)
+                // Overly simplistic approach: simply reduce damage by amount of HP/2 and Armour in the way. (HP/2 to simulate weak parts not fully blocking damage.) Does not account for armour reduction or angle of incidence of intermediate parts.
+                // A better approach would be to properly calculate the damage and pressure in CalculatePartBlastEffects due to the series of parts in the way.
+                var damageWithoutIntermediateParts = blastInfo.Damage;
+                var cumulativeHPOfIntermediateParts = eventToExecute.IntermediateParts.Select(p => p.Item2).Sum();
+                var cumulativeArmourOfIntermediateParts = eventToExecute.IntermediateParts.Select(p => p.Item3).Sum();
+                blastInfo.Damage = Mathf.Max(0f, blastInfo.Damage - 0.5f * cumulativeHPOfIntermediateParts - cumulativeArmourOfIntermediateParts);
+
+                if (blastInfo.Damage > 0)
                 {
-                    BlastInfo blastInfo =
-                        BlastPhysicsUtils.CalculatePartBlastEffects(part, realDistance,
-                            part.vessel.totalMass * 1000f, Power, Range);
-
                     if (BDArmorySettings.DRAW_DEBUG_LABELS)
                     {
                         Debug.Log(
-                            "[BDArmory]: Executing blast event Part: {" + part.name + "}, " +
+                            "[BDArmory.ExplosionFX]: Executing blast event Part: {" + part.name + "}, " +
                             " VelocityChange: {" + blastInfo.VelocityChange + "}," +
                             " Distance: {" + realDistance + "}," +
                             " TotalPressure: {" + blastInfo.TotalPressure + "}," +
-                            " Damage: {" + blastInfo.Damage + "}," +
+                            " Damage: {" + blastInfo.Damage + "} (reduced from " + damageWithoutIntermediateParts + " by " + eventToExecute.IntermediateParts.Count + " parts)," +
                             " EffectiveArea: {" + blastInfo.EffectivePartArea + "}," +
                             " Positive Phase duration: {" + blastInfo.PositivePhaseDuration + "}," +
                             " Vessel mass: {" + Math.Round(part.vessel.totalMass * 1000f) + "}," +
@@ -426,11 +438,14 @@ namespace BDArmory.FX
                         NegativeForce = blastInfo.VelocityChange * 0.25f
                     });
 
-                    AddForceAtPosition(rb,
-                        (eventToExecute.HitPoint + part.rb.velocity * TimeIndex - Position).normalized *
-                        blastInfo.VelocityChange *
-                        BDArmorySettings.EXP_IMP_MOD,
-                        eventToExecute.HitPoint + part.rb.velocity * TimeIndex);
+                    if (rb != null && rb.mass > 0)
+                    {
+                        AddForceAtPosition(rb,
+                            (eventToExecute.HitPoint + rb.velocity * TimeIndex - Position).normalized *
+                            blastInfo.VelocityChange *
+                            BDArmorySettings.EXP_IMP_MOD,
+                            eventToExecute.HitPoint + rb.velocity * TimeIndex);
+                    }
 
                     var damage = part.AddExplosiveDamage(blastInfo.Damage, Caliber, ExplosionSource);
                     if (BDArmorySettings.BATTLEDAMAGE)
@@ -476,25 +491,26 @@ namespace BDArmory.FX
                             break;
                     }
                 }
-                else
+                else if (BDArmorySettings.DRAW_DEBUG_LABELS)
                 {
-                    if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                    {
-                        Debug.Log(
-                            "[BDArmory]: Executing blast event Part: {" + part.name + "}, " +
-                            " VelocityChange: {" + eventToExecute.NegativeForce + "}," +
-                            " Distance: {" + realDistance + "}," +
-                            " Vessel mass: {" + Math.Round(part.vessel.totalMass * 1000f) + "}," +
-                            " TimeIndex: {" + TimeIndex + "}," +
-                            " TimePlanned: {" + eventToExecute.TimeToImpact + "}," +
-                            " NegativePressure: {" + eventToExecute.IsNegativePressure + "}");
-                    }
-                    AddForceAtPosition(rb, (Position - part.transform.position).normalized * eventToExecute.NegativeForce * BDArmorySettings.EXP_IMP_MOD * 0.25f, part.transform.position);
+                    Debug.Log("[BDArmory.ExplosiveFX]: Part " + part.name + " at distance " + realDistance + "m took no damage due to parts with " + cumulativeHPOfIntermediateParts + "HP and " + cumulativeArmourOfIntermediateParts + " Armour in the way.");
                 }
             }
-            catch
+            else
             {
-                // ignored due to depending on previous event an object could be disposed
+                if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                {
+                    Debug.Log(
+                        "[BDArmory.ExplosionFX]: Executing blast event Part: {" + part.name + "}, " +
+                        " VelocityChange: {" + eventToExecute.NegativeForce + "}," +
+                        " Distance: {" + realDistance + "}," +
+                        " Vessel mass: {" + Math.Round(part.vessel.totalMass * 1000f) + "}," +
+                        " TimeIndex: {" + TimeIndex + "}," +
+                        " TimePlanned: {" + eventToExecute.TimeToImpact + "}," +
+                        " NegativePressure: {" + eventToExecute.IsNegativePressure + "}");
+                }
+                if (rb != null && rb.mass > 0)
+                    AddForceAtPosition(rb, (Position - part.transform.position).normalized * eventToExecute.NegativeForce * BDArmorySettings.EXP_IMP_MOD * 0.25f, part.transform.position);
             }
         }
 
@@ -507,13 +523,13 @@ namespace BDArmory.FX
                 var explosionFXTemplate = GameDatabase.Instance.GetModel(explModelPath);
                 if (explosionFXTemplate == null)
                 {
-                    Debug.LogError("[ExplosionFX]: " + explModelPath + " was not found, using the default explosion instead. Please fix your model.");
+                    Debug.LogError("[BDArmory.ExplosionFX]: " + explModelPath + " was not found, using the default explosion instead. Please fix your model.");
                     explosionFXTemplate = GameDatabase.Instance.GetModel(ModuleWeapon.defaultExplModelPath);
                 }
                 var soundClip = GameDatabase.Instance.GetAudioClip(soundPath);
                 if (soundClip == null)
                 {
-                    Debug.LogError("[ExplosionFX]: " + soundPath + " was not found, using the default sound instead. Please fix your model.");
+                    Debug.LogError("[BDArmory.ExplosionFX]: " + soundPath + " was not found, using the default sound instead. Please fix your model.");
                     soundClip = GameDatabase.Instance.GetAudioClip(ModuleWeapon.defaultExplSoundPath);
                 }
                 var eFx = explosionFXTemplate.AddComponent<ExplosionFx>();
@@ -574,11 +590,11 @@ namespace BDArmory.FX
             //////////////////////////////////////////////////////////
             // Add The force to part
             //////////////////////////////////////////////////////////
-            if (rb == null) return;
+            if (rb == null || rb.mass == 0) return;
             rb.AddForceAtPosition(force, position, ForceMode.VelocityChange);
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log("[BDArmory]: Force Applied | Explosive : " + Math.Round(force.magnitude, 2));
+                Debug.Log("[BDArmory.ExplosionFX]: Force Applied | Explosive : " + Math.Round(force.magnitude, 2));
             }
         }
     }
@@ -597,6 +613,7 @@ namespace BDArmory.FX
         public RaycastHit Hit { get; set; }
         public float NegativeForce { get; set; }
         public string SourceVesselName { get; set; }
+        public List<Tuple<float, float, float>> IntermediateParts { get; set; } // distance, HP, armour
     }
 
     internal class BuildingBlastHitEvent : BlastHitEvent

@@ -99,7 +99,7 @@ namespace BDArmory.Parts
             List<ModuleTargetingCamera>.Enumerator mtc = v.FindPartModulesImplementing<ModuleTargetingCamera>().GetEnumerator();
             while (mtc.MoveNext())
             {
-                Debug.Log("[BDArmory] : Vessel switched to vessel with targeting camera.  Refreshing camera state.");
+                Debug.Log("[BDArmory.TargetingCamera]: Vessel switched to vessel with targeting camera.  Refreshing camera state.");
 
                 if (mtc.Current.cameraEnabled)
                 {
@@ -196,7 +196,7 @@ namespace BDArmory.Parts
         {
             if (!parentTransform)
             {
-                Debug.Log("Targeting camera tried setup but parent transform is null");
+                Debug.Log("[BDArmory.TargetingCamera]: Targeting camera tried setup but parent transform is null");
                 return;
             }
 
@@ -205,7 +205,7 @@ namespace BDArmory.Parts
                 cameraTransform = (new GameObject("targetCamObject")).transform;
             }
 
-            Debug.Log("Setting target camera parent");
+            Debug.Log("[BDArmory.TargetingCamera]: Setting target camera parent");
             cameraTransform.parent = parentTransform;
             cameraTransform.localPosition = Vector3.zero;
             cameraTransform.localRotation = Quaternion.identity;
@@ -304,7 +304,7 @@ namespace BDArmory.Parts
                     return cam;
                 }
             }
-            Debug.Log("Couldn't find " + cameraName);
+            Debug.Log("[BDArmory.TargetingCamera]: Couldn't find " + cameraName);
             return null;
         }
 

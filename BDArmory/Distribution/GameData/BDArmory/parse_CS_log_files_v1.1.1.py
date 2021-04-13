@@ -20,7 +20,7 @@ for filename in competition_files:
 		Who_Damaged_Me_Lines = []
 		Clean_Kill_Lines = []  # Shots, rams and missiles all counted.
 		for line in file_data:
-			if not "VesselSpawner" in line:
+			if not "BDArmory.VesselSpawner" in line:
 				continue
 			if " Name:" in line:
 				craft_data.append(["bug", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # Name, clean kills,assists, deaths, hits, shots, damage, accuracy, score, hits/spawn, damage/spawn
