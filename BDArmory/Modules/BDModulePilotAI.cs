@@ -930,7 +930,7 @@ namespace BDArmory.Modules
             // Calculate threat rating from any threats
             float minimumEvasionTime = minEvasionTime;
             threatRating = evasionThreshold + 1f; // Don't evade by default
-            if (weaponManager && (weaponManager.isChaffing || weaponManager.isFlaring))
+            if (weaponManager && (weaponManager.missileIsIncoming || weaponManager.isChaffing || weaponManager.isFlaring))
             {
                 threatRating = 0f; // Allow entering evasion code if we're under missile fire
                 minimumEvasionTime = minEvasionTime * 2f + 1f; // Longer minimum evasion time for missiles, so we don't turn into them
@@ -1022,8 +1022,7 @@ namespace BDArmory.Modules
                     float targetForwardDot = Vector3.Dot(targetVesselRelPos.normalized, vesselTransform.up);
                     float targetVelFrac = (float)(targetVessel.srfSpeed / vessel.srfSpeed);      //this is the ratio of the target vessel's velocity to this vessel's srfSpeed in the forward direction; this allows smart decisions about when to break off the attack
 
-                    float extendTargetDot = Mathf.Cos(extendTargetAngle * Mathf.Deg2Rad);
-                    if (canExtend && targetVelFrac < extendTargetVel && targetForwardDot < extendTargetDot && targetVesselRelPos.magnitude < extendTargetDist) // Target is outside of ~78° cone ahead, closer than 400m and slower than us, so we won't be able to turn to attack it now.
+                    if (canExtend && targetVelFrac < 0.8f && targetForwardDot < 0.2f && targetVesselRelPos.magnitude < 400) // Target is outside of ~78° cone ahead, closer than 400m and slower than us, so we won't be able to turn to attack it now.
                     {
                         if (!extending) startedExtendingAt = Planetarium.GetUniversalTime();
                         extending = true;
@@ -1688,18 +1687,31 @@ namespace BDArmory.Modules
                     useAB = vessel.srfSpeed < minSpeed;
                     useBrakes = false;
                     float targetSpeed = minSpeed;
-                    if (weaponManager.isChaffing)
-                        targetSpeed = maxSpeed;
                     AdjustThrottle(targetSpeed, false, useAB);
                 }
 
-                if (weaponManager.isChaffing || weaponManager.isFlaring) // Missile evasion
+                if ((weaponManager.missileIsIncoming || weaponManager.isChaffing || weaponManager.isFlaring) && (weaponManager.incomingMissileDistance > 2000))
                 {
-                    if ((weaponManager.ThreatClosingTime(weaponManager.incomingMissileVessel) <= 1.5f) && (!weaponManager.isChaffing)) // Missile is about to impact, pull a hard turn
+                    debugString.AppendLine($"Breaking from missile threat!");
+
+                    Vector3 axis = -Vector3.Cross(vesselTransform.up, (weaponManager.incomingMissileVessel.transform.position - vesselTransform.position));
+                    Vector3 breakDirection = Quaternion.AngleAxis(90, axis) * (weaponManager.incomingMissileVessel.transform.position - vesselTransform.position);
+                    //Vector3 breakTarget = vesselTransform.position + breakDirection;
+
+                    if (hasABEngines)
+                        RegainEnergy(s, breakDirection);
+                    else
+                        RegainEnergy(s, breakDirection, 0.66f);
+                    return;
+                }
+                else if ((weaponManager.missileIsIncoming || weaponManager.isChaffing || weaponManager.isFlaring) && (weaponManager.incomingMissileDistance <= 2000))
+                {
+                    float mSqrDist = Vector3.SqrMagnitude(weaponManager.incomingMissileVessel.transform.position - vesselTransform.position);
+                    if (mSqrDist < 810000) //900m
                     {
                         debugString.AppendLine($"Missile about to impact! pull away!");
 
-                        AdjustThrottle(maxSpeed, false, !weaponManager.isFlaring);
+                        AdjustThrottle(maxSpeed, false, false);
 
                         Vector3 cross = Vector3.Cross(weaponManager.incomingMissileVessel.transform.position - vesselTransform.position, vessel.Velocity()).normalized;
                         if (Vector3.Dot(cross, -vesselTransform.forward) < 0)
@@ -1709,38 +1721,6 @@ namespace BDArmory.Modules
                         FlyToPosition(s, vesselTransform.position + (50 * vessel.Velocity() / vessel.srfSpeed) + (100 * cross));
                         return;
                     }
-                    else // Fly at 90 deg to missile to put max distance between ourselves and dispensed flares/chaff
-                    {
-                        debugString.AppendLine($"Breaking from missile threat!");
-
-                        // Break off at 90 deg to missile
-                        Vector3 threatDirection = weaponManager.incomingMissileVessel.transform.position - vesselTransform.position;
-                        threatDirection = Vector3.ProjectOnPlane(threatDirection, upDirection);
-                        float sign = Vector3.SignedAngle(threatDirection, Vector3.ProjectOnPlane(vessel.Velocity(), upDirection), upDirection);
-                        Vector3 breakDirection = Vector3.Cross(Mathf.Sign(sign) * upDirection, threatDirection);
-
-                        // Dive to gain energy and hopefully lead missile into ground
-                        float angle = (Mathf.Clamp((float)vessel.radarAltitude - minAltitude, 0, 1500) / 1500) * 90;
-                        angle = Mathf.Clamp(angle, 0, 75) * Mathf.Deg2Rad;
-                        Vector3 targetDirection = Vector3.RotateTowards(breakDirection, -upDirection, angle, 0);
-                        targetDirection = Vector3.RotateTowards(vessel.Velocity(), targetDirection, 15f * Mathf.Deg2Rad, 0).normalized;
-
-                        steerMode = SteerModes.Aiming;
-
-                        if (weaponManager.isFlaring)
-                            if ((!hasABEngines) && (weaponManager.isFlaring))
-                                AdjustThrottle(maxSpeed, false, useAB, 0.66f);
-                            else
-                                AdjustThrottle(maxSpeed, false, useAB);
-                        else
-                        {
-                            useAB = true;
-                            AdjustThrottle(maxSpeed, false, useAB);
-                        }
-
-                        FlyToPosition(s, vesselTransform.position + (targetDirection * 100), true);
-                        return;
-                    }              
                 }
                 else if (weaponManager.underFire)
                 {
@@ -1792,7 +1772,6 @@ namespace BDArmory.Modules
                             breakTarget += Mathf.Sin((float)vessel.missionTime * 2) * vesselTransform.right * 100;
 
                             steerMode = SteerModes.Aiming;
-                            debugString.AppendLine($" from near side; turning towards attacker");
                         }
                         else // More than 400m to the side.
                         { // This sets breakTarget to be 1500m ahead, then adds a 1000m offset at 90° to ahead.
@@ -1825,7 +1804,7 @@ namespace BDArmory.Modules
             target +=
                 (Quaternion.AngleAxis(angleOff, upDirection) * Vector3.ProjectOnPlane(vesselTransform.up * 500, upDirection));
             //+ (Mathf.Sin (Time.time/3) * upDirection * minAltitude/3);
-            debugString.AppendLine($"Evading unknown attacker");
+
             FlyToPosition(s, target);
         }
 
