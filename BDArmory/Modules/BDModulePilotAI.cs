@@ -84,7 +84,7 @@ namespace BDArmory.Modules
             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
             UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
         public float steerKiAdjust = 0.25f;
-        
+
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true,
              guiName = "#LOC_BDArmory_Custom_SteerKi_Clamps", //Steer Ki
              groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
@@ -555,7 +555,7 @@ namespace BDArmory.Modules
         public float dynSteerDampingPitchValue;
         public float dynSteerDampingYawValue;
         public float dynSteerDampingRollValue;
-        
+
         //custom ki clamp
         private bool customKiClampToggle;
 
@@ -729,7 +729,7 @@ namespace BDArmory.Modules
             customDynamicAxisField.guiActive = dynamicDamping;
             customDynamicAxisField.guiActiveEditor = dynamicDamping;
         }
-        
+
         void ToggleKiClamps()
         {
             var pitch = Fields["pitchKiClamp"];
@@ -755,7 +755,7 @@ namespace BDArmory.Modules
             toggle.guiActiveEditor = true;
         }
 
-    protected override void Start()
+        protected override void Start()
         {
             base.Start();
 
@@ -800,7 +800,7 @@ namespace BDArmory.Modules
 
             bodyGravity = (float)PhysicsGlobals.GravitationalAcceleration * (float)vessel.orbit.referenceBody.GeeASL; // Set gravity for calculations;
         }
-        
+
         void Update()
         {
             if (BDArmorySettings.DRAW_DEBUG_LINES && pilotEnabled)
@@ -861,7 +861,7 @@ namespace BDArmory.Modules
                 CustomDynamicAxisField = CustomDynamicAxisFields;
                 ToggleDynamicDampingFields();
             }
-            
+
             //ki clamps
             if (customKiClampToggle != customKiClamps)
             {
@@ -1618,21 +1618,24 @@ namespace BDArmory.Modules
             float yawKi = steerKiAdjust;
             yawIntegral = Mathf.Clamp(yawIntegral, -yawKiClamp, yawKiClamp);
             steerYaw += yawIntegral * yawKi;
-            
+
             float rollKi = steerKiAdjust;
             rollIntegral = Mathf.Clamp(rollIntegral, -rollKiClamp, rollKiClamp);
             steerRoll += rollIntegral * rollKi;
-            
-            s.roll = Mathf.Clamp(steerRoll, -maxSteer, maxSteer); 
+
+            s.roll = Mathf.Clamp(steerRoll, -maxSteer, maxSteer);
             s.yaw = Mathf.Clamp(steerYaw, -finalMaxSteer, finalMaxSteer);
             s.pitch = Mathf.Clamp(steerPitch, Mathf.Min(-finalMaxSteer, -0.2f), finalMaxSteer);
-            
-            Debug.Log("[BDPilotAI] PitchIntegral: " + pitchIntegral); 
-            Debug.Log("[BDPilotAI] YawIntegral: " + yawIntegral); 
-            Debug.Log("[BDPilotAI] RollIntegral: " + rollIntegral); 
-            Debug.Log("[BDPilotAI] SteerPitch: " + steerPitch);
-            Debug.Log("[BDPilotAI] SteerYaw: " + steerYaw); 
-            Debug.Log("[BDPilotAI] SteerRoll: " + steerRoll);
+
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+            {
+                Debug.Log("[BDArmory.BDModulePilotAI]: PitchIntegral: " + pitchIntegral);
+                Debug.Log("[BDArmory.BDModulePilotAI]: YawIntegral: " + yawIntegral);
+                Debug.Log("[BDArmory.BDModulePilotAI]: RollIntegral: " + rollIntegral);
+                Debug.Log("[BDArmory.BDModulePilotAI]: SteerPitch: " + steerPitch);
+                Debug.Log("[BDArmory.BDModulePilotAI]: SteerYaw: " + steerYaw);
+                Debug.Log("[BDArmory.BDModulePilotAI]: SteerRoll: " + steerRoll);
+            }
         }
 
         void FlyExtend(FlightCtrlState s, Vector3 tPosition)
