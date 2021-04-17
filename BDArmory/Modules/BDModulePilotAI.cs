@@ -85,6 +85,31 @@ namespace BDArmory.Modules
             UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
         public float steerKiAdjust = 0.25f;
 
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true,
+             guiName = "#LOC_BDArmory_Custom_SteerKi_Clamps", //Steer Ki
+             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
+         UI_Toggle(scene = UI_Scene.All, enabledText = "#LOC_BDArmory_Enabled",
+             disabledText = "#LOC_BDArmory_Disabled")]
+        public bool customKiClamps = false;
+
+        [KSPField(isPersistant = true,
+             guiName = "#LOC_BDArmory_PitchKi_Clamp", //Steer Ki
+             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", advancedTweakable = true, groupStartCollapsed = true),
+         UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
+        public float pitchKiClamp = 1f;
+
+        [KSPField(isPersistant = true,
+             guiName = "#LOC_BDArmory_YawKi_Clamp", //Steer Ki
+             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", advancedTweakable = true, groupStartCollapsed = true),
+         UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
+        public float yawKiClamp = 0.55f;
+
+        [KSPField(isPersistant = true,
+             guiName = "#LOC_BDArmory_RollKi_Clamp", //Steer Ki
+             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", advancedTweakable = true, groupStartCollapsed = true),
+         UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
+        public float rollKiClamp = 0.45f;
+
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_SteerDamping", //Steer Damping
             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
             UI_FloatRange(minValue = 1f, maxValue = 8f, stepIncrement = 0.1f, scene = UI_Scene.All)]
@@ -456,6 +481,10 @@ namespace BDArmory.Modules
         //Controller Integral
         float pitchIntegral;
         float yawIntegral;
+        float rollIntegral;
+        int lastPitchErrorSign;
+        int lastYawErrorSign;
+        int lastRollErrorSign;
 
         //instantaneous turn radius and possible acceleration from lift
         //properties can be used so that other AI modules can read this for future maneuverability comparisons between craft
@@ -526,6 +555,9 @@ namespace BDArmory.Modules
         public float dynSteerDampingPitchValue;
         public float dynSteerDampingYawValue;
         public float dynSteerDampingRollValue;
+
+        //custom ki clamp
+        private bool customKiClampToggle;
 
         //wing command
         bool useRollHint;
@@ -698,6 +730,31 @@ namespace BDArmory.Modules
             customDynamicAxisField.guiActiveEditor = dynamicDamping;
         }
 
+        void ToggleKiClamps()
+        {
+            var pitch = Fields["pitchKiClamp"];
+            var yaw = Fields["yawKiClamp"];
+            var roll = Fields["rollKiClamp"];
+            pitch.guiActive = customKiClamps;
+            pitch.guiActiveEditor = customKiClamps;
+            yaw.guiActive = customKiClamps;
+            yaw.guiActiveEditor = customKiClamps;
+            roll.guiActive = customKiClamps;
+            roll.guiActiveEditor = customKiClamps;
+
+            StartCoroutine(ToggleKiButtons());
+        }
+
+        IEnumerator ToggleKiButtons()
+        {
+            var toggle = Fields["customKiClamps"];
+            toggle.guiActive = false;
+            toggle.guiActiveEditor = false;
+            yield return new WaitForFixedUpdate();
+            toggle.guiActive = true;
+            toggle.guiActiveEditor = true;
+        }
+
         protected override void Start()
         {
             base.Start();
@@ -803,6 +860,13 @@ namespace BDArmory.Modules
             {
                 CustomDynamicAxisField = CustomDynamicAxisFields;
                 ToggleDynamicDampingFields();
+            }
+
+            //ki clamps
+            if (customKiClampToggle != customKiClamps)
+            {
+                customKiClampToggle = customKiClamps;
+                ToggleKiClamps();
             }
         }
 
@@ -930,10 +994,10 @@ namespace BDArmory.Modules
             // Calculate threat rating from any threats
             float minimumEvasionTime = minEvasionTime;
             threatRating = evasionThreshold + 1f; // Don't evade by default
-            if (weaponManager && (weaponManager.missileIsIncoming || weaponManager.isChaffing || weaponManager.isFlaring))
+            if (weaponManager && (weaponManager.ThreatClosingTime(weaponManager.incomingMissileVessel) <= weaponManager.cmThreshold))
             {
                 threatRating = 0f; // Allow entering evasion code if we're under missile fire
-                minimumEvasionTime = minEvasionTime * 2f + 1f; // Longer minimum evasion time for missiles, so we don't turn into them
+                minimumEvasionTime = 0f; //  Trying to evade missile threats when they don't exist will result in NREs
             }
             else if (weaponManager.underFire && !ramming) // If we're ramming, ignore gunfire.
             {
@@ -1508,7 +1572,7 @@ namespace BDArmory.Modules
             float bankAngle = Vector3.SignedAngle(horizonNormal, rollTarget, vesselTransform.up);
 
             // FlightGlobals.ActiveVessel.mainBody.transform.position - this.vessel.transform.position;
-            if ((Mathf.Abs(bankAngle) > maxBank) && (maxBank != 180))
+            if ((Mathf.Abs(bankAngle) > maxBank) && maxBank != 180)
                 rollTarget = Vector3.RotateTowards(horizonNormal, rollTarget, maxBank / 180 * Mathf.PI, 0.0f);
 
             bankAngle = Vector3.SignedAngle(horizonNormal, rollTarget, vesselTransform.up);
@@ -1526,30 +1590,52 @@ namespace BDArmory.Modules
             if (steerMode == SteerModes.NormalFlight)
             {
                 //premature dive fix
-                pitchError = pitchError * Mathf.Clamp01((21 - Mathf.Exp(Mathf.Abs(rollError) / 30)) / 20);
+                pitchError *= Mathf.Clamp01((21 - Mathf.Exp(Mathf.Abs(rollError) / 30)) / 20);
             }
 
-            float steerPitch = (0.015f * steerMult * pitchError) - (SteerDamping(Mathf.Abs(Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up)), Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up), 1) * -localAngVel.x * (1 + steerKiAdjust));
-            float steerYaw = (0.005f * steerMult * yawError) - (SteerDamping(Mathf.Abs(yawError * (steerMode == SteerModes.Aiming ? (180f / 25f) : 4f)), Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up), 2) * 0.2f * -localAngVel.z * (1 + steerKiAdjust));
+            float steerPitch = (0.015f * steerMult * pitchError) - (SteerDamping(Mathf.Abs(Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up)), Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up), 1) * -localAngVel.x);
+            float steerYaw = (0.005f * steerMult * yawError) - (SteerDamping(Mathf.Abs(yawError * (steerMode == SteerModes.Aiming ? (180f / 25f) : 4f)), Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up), 2) * 0.2f * -localAngVel.z);
 
-            pitchIntegral += pitchError;
-            yawIntegral += yawError;
+            pitchIntegral += pitchError * Time.deltaTime / 90f;
+            yawIntegral += yawError * Time.deltaTime / 90f;
+            rollIntegral += rollError * Time.deltaTime / 90f;
+
+            pitchIntegral = lastPitchErrorSign != Math.Sign(pitchError) ? 0 : pitchIntegral;
+            yawIntegral = lastYawErrorSign != Math.Sign(yawError) ? 0 : yawIntegral;
+            rollIntegral = lastRollErrorSign != Math.Sign(rollError) ? 0 : rollIntegral;
+
+            lastPitchErrorSign = Math.Sign(pitchError);
+            lastYawErrorSign = Math.Sign(yawError);
+            lastRollErrorSign = Math.Sign(rollError);
 
             steerPitch *= dynamicAdjustment;
             steerYaw *= dynamicAdjustment;
 
-            float pitchKi = 0.1f * (steerKiAdjust / 5); //This is what should be allowed to be tweaked by the player, just like the steerMult, it is very low right now
-            pitchIntegral = Mathf.Clamp(pitchIntegral, -0.2f / (pitchKi * dynamicAdjustment), 0.2f / (pitchKi * dynamicAdjustment)); //0.2f is the limit of the integral variable, making it bigger increases overshoot
-            steerPitch += pitchIntegral * pitchKi * dynamicAdjustment; //Adds the integral component to the mix
+            float pitchKi = steerKiAdjust; //This is what should be allowed to be tweaked by the player, just like the steerMult, it is very low right now
+            pitchIntegral = Mathf.Clamp(pitchIntegral, -pitchKiClamp, pitchKiClamp); //0.2f is the limit of the integral variable, making it bigger increases overshoot
+            steerPitch += pitchIntegral * pitchKi; //Adds the integral component to the mix
 
-            float yawKi = 0.1f * (steerKiAdjust / 15);
-            yawIntegral = Mathf.Clamp(yawIntegral, -0.2f / (yawKi * dynamicAdjustment), 0.2f / (yawKi * dynamicAdjustment));
-            steerYaw += yawIntegral * yawKi * dynamicAdjustment;
+            float yawKi = steerKiAdjust;
+            yawIntegral = Mathf.Clamp(yawIntegral, -yawKiClamp, yawKiClamp);
+            steerYaw += yawIntegral * yawKi;
 
-            float roll = Mathf.Clamp(steerRoll, -maxSteer, maxSteer);
-            s.roll = roll;
+            float rollKi = steerKiAdjust;
+            rollIntegral = Mathf.Clamp(rollIntegral, -rollKiClamp, rollKiClamp);
+            steerRoll += rollIntegral * rollKi;
+
+            s.roll = Mathf.Clamp(steerRoll, -maxSteer, maxSteer);
             s.yaw = Mathf.Clamp(steerYaw, -finalMaxSteer, finalMaxSteer);
             s.pitch = Mathf.Clamp(steerPitch, Mathf.Min(-finalMaxSteer, -0.2f), finalMaxSteer);
+
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+            {
+                Debug.Log("[BDArmory.BDModulePilotAI]: PitchIntegral: " + pitchIntegral);
+                Debug.Log("[BDArmory.BDModulePilotAI]: YawIntegral: " + yawIntegral);
+                Debug.Log("[BDArmory.BDModulePilotAI]: RollIntegral: " + rollIntegral);
+                Debug.Log("[BDArmory.BDModulePilotAI]: SteerPitch: " + steerPitch);
+                Debug.Log("[BDArmory.BDModulePilotAI]: SteerYaw: " + steerYaw);
+                Debug.Log("[BDArmory.BDModulePilotAI]: SteerRoll: " + steerRoll);
+            }
         }
 
         void FlyExtend(FlightCtrlState s, Vector3 tPosition)
@@ -1687,31 +1773,18 @@ namespace BDArmory.Modules
                     useAB = vessel.srfSpeed < minSpeed;
                     useBrakes = false;
                     float targetSpeed = minSpeed;
+                    if (weaponManager.isChaffing)
+                        targetSpeed = maxSpeed;
                     AdjustThrottle(targetSpeed, false, useAB);
                 }
 
-                if ((weaponManager.missileIsIncoming || weaponManager.isChaffing || weaponManager.isFlaring) && (weaponManager.incomingMissileDistance > 2000))
+                if ((weaponManager.isChaffing || weaponManager.isFlaring) && weaponManager.incomingMissileVessel != null) // Missile evasion
                 {
-                    debugString.AppendLine($"Breaking from missile threat!");
-
-                    Vector3 axis = -Vector3.Cross(vesselTransform.up, (weaponManager.incomingMissileVessel.transform.position - vesselTransform.position));
-                    Vector3 breakDirection = Quaternion.AngleAxis(90, axis) * (weaponManager.incomingMissileVessel.transform.position - vesselTransform.position);
-                    //Vector3 breakTarget = vesselTransform.position + breakDirection;
-
-                    if (hasABEngines)
-                        RegainEnergy(s, breakDirection);
-                    else
-                        RegainEnergy(s, breakDirection, 0.66f);
-                    return;
-                }
-                else if ((weaponManager.missileIsIncoming || weaponManager.isChaffing || weaponManager.isFlaring) && (weaponManager.incomingMissileDistance <= 2000))
-                {
-                    float mSqrDist = Vector3.SqrMagnitude(weaponManager.incomingMissileVessel.transform.position - vesselTransform.position);
-                    if (mSqrDist < 810000) //900m
+                    if ((weaponManager.ThreatClosingTime(weaponManager.incomingMissileVessel) <= 1.5f) && (!weaponManager.isChaffing)) // Missile is about to impact, pull a hard turn
                     {
                         debugString.AppendLine($"Missile about to impact! pull away!");
 
-                        AdjustThrottle(maxSpeed, false, false);
+                        AdjustThrottle(maxSpeed, false, !weaponManager.isFlaring);
 
                         Vector3 cross = Vector3.Cross(weaponManager.incomingMissileVessel.transform.position - vesselTransform.position, vessel.Velocity()).normalized;
                         if (Vector3.Dot(cross, -vesselTransform.forward) < 0)
@@ -1719,6 +1792,38 @@ namespace BDArmory.Modules
                             cross = -cross;
                         }
                         FlyToPosition(s, vesselTransform.position + (50 * vessel.Velocity() / vessel.srfSpeed) + (100 * cross));
+                        return;
+                    }
+                    else // Fly at 90 deg to missile to put max distance between ourselves and dispensed flares/chaff
+                    {
+                        debugString.AppendLine($"Breaking from missile threat!");
+
+                        // Break off at 90 deg to missile
+                        Vector3 threatDirection = weaponManager.incomingMissileVessel.transform.position - vesselTransform.position;
+                        threatDirection = Vector3.ProjectOnPlane(threatDirection, upDirection);
+                        float sign = Vector3.SignedAngle(threatDirection, Vector3.ProjectOnPlane(vessel.Velocity(), upDirection), upDirection);
+                        Vector3 breakDirection = Vector3.ProjectOnPlane(Vector3.Cross(Mathf.Sign(sign) * upDirection, threatDirection), upDirection);
+
+                        // Dive to gain energy and hopefully lead missile into ground
+                        float angle = (Mathf.Clamp((float)vessel.radarAltitude - minAltitude, 0, 1500) / 1500) * 90;
+                        angle = Mathf.Clamp(angle, 0, 75) * Mathf.Deg2Rad;
+                        Vector3 targetDirection = Vector3.RotateTowards(breakDirection, -upDirection, angle, 0);
+                        targetDirection = Vector3.RotateTowards(vessel.Velocity(), targetDirection, 15f * Mathf.Deg2Rad, 0).normalized;
+
+                        steerMode = SteerModes.Aiming;
+
+                        if (weaponManager.isFlaring)
+                            if (!hasABEngines)
+                                AdjustThrottle(maxSpeed, false, useAB, 0.66f);
+                            else
+                                AdjustThrottle(maxSpeed, false, useAB);
+                        else
+                        {
+                            useAB = true;
+                            AdjustThrottle(maxSpeed, false, useAB);
+                        }
+
+                        FlyToPosition(s, vesselTransform.position + (targetDirection * 100), true);
                         return;
                     }
                 }
@@ -1772,6 +1877,7 @@ namespace BDArmory.Modules
                             breakTarget += Mathf.Sin((float)vessel.missionTime * 2) * vesselTransform.right * 100;
 
                             steerMode = SteerModes.Aiming;
+                            debugString.AppendLine($" from near side; turning towards attacker");
                         }
                         else // More than 400m to the side.
                         { // This sets breakTarget to be 1500m ahead, then adds a 1000m offset at 90° to ahead.
@@ -1804,7 +1910,7 @@ namespace BDArmory.Modules
             target +=
                 (Quaternion.AngleAxis(angleOff, upDirection) * Vector3.ProjectOnPlane(vesselTransform.up * 500, upDirection));
             //+ (Mathf.Sin (Time.time/3) * upDirection * minAltitude/3);
-
+            debugString.AppendLine($"Evading unknown attacker");
             FlyToPosition(s, target);
         }
 
