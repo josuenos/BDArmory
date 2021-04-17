@@ -1252,7 +1252,7 @@ namespace BDArmory.Radar
                                         Vector3 relV = missileBase.vessel.Velocity() - myWpnManager.vessel.Velocity();
                                         bool approaching = Vector3.Dot(relV, vectorFromMissile) > 0;
                                         bool withinRadarFOV = (missileBase.TargetingMode == MissileBase.TargetingModes.Radar || missileBase.TargetingModeTerminal == MissileBase.TargetingModes.Radar) ?
-                                            (Vector3.Angle(missileBase.GetForwardTransform(), vectorFromMissile) <= Mathf.Clamp(missileBase.lockedSensorFOV, 1f, 10f)/2f) : false;
+                                            (Vector3.Angle(missileBase.GetForwardTransform(), vectorFromMissile) <= Mathf.Clamp(missileBase.lockedSensorFOV, 1f, 90f)/2f) : false;
                                         var missileBlastRadiusSqr = missileBase.GetBlastRadius();
                                         missileBlastRadiusSqr *= missileBlastRadiusSqr;
 

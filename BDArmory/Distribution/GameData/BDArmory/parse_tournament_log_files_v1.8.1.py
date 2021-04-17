@@ -13,7 +13,7 @@ parser.add_argument('-q', '--quiet', action='store_true', help="Don't print resu
 parser.add_argument('-n', '--no-files', action='store_true', help="Don't create summary files.")
 parser.add_argument('-s', '--score', action='store_false', help="Compute scores.")
 parser.add_argument('-so', '--scores-only', action='store_true', help="Only display the scores in the summary on the console.")
-parser.add_argument('-w', '--weights', type=str, default="1,0,-1.5,1,2e-3,3,1,5e-3,1e-5,0.5,0.01,1e-7,5e-2", help="Score weights (in order of main columns from 'Wins' to 'Ram').")
+parser.add_argument('-w', '--weights', type=str, default="1,0,-1.5,1,2e-3,3,1,5e-3,1e-5,0.5,0.01,1e-7,0,5e-2", help="Score weights (in order of main columns from 'Wins' to 'Ram').")
 parser.add_argument('-c', '--current-dir', action='store_true', help="Parse the logs in the current directory as if it was a tournament without the folder structure.")
 args = parser.parse_args()
 args.score = args.score or args.scores_only
@@ -42,7 +42,7 @@ if args.score:
 		weights = list(float(w) for w in args.weights.split(','))
 	except:
 		weights = []
-	if len(weights) != 13:
+	if len(weights) != 14:
 		print('Invalid set of weights.')
 		sys.exit()
 
@@ -159,6 +159,7 @@ summary = {
 			'hits': sum([heat['craft'][craft]['hits'] for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and 'hits' in heat['craft'][craft]]),
 			'bulletDamage': sum([data[field][craft] for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() for field in ('bulletDamageBy',) if field in data and craft in data[field]]),
 			'missileHits': sum([data[field][craft] for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() for field in ('missileHitsBy',) if field in data and craft in data[field]]),
+			'missileHitsTaken': sum([sum(heat['craft'][craft]['missileHitsBy'].values()) for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and 'missileHitsBy' in heat['craft'][craft]]),
 			'missilePartsHit': sum([data[field][craft] for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() for field in ('missilePartsHitBy',) if field in data and craft in data[field]]),
 			'missileDamage': sum([data[field][craft] for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() for field in ('missileDamageBy',) if field in data and craft in data[field]]),
 			'ramScore': sum([data[field][craft] for round in tournamentData.values() for heat in round.values() for data in heat['craft'].values() for field in ('rammedPartsLostBy',) if field in data and craft in data[field]]),
@@ -197,7 +198,8 @@ if args.score:
 			weights[9] * craft['missileHits'] +
 			weights[10] * craft['missilePartsHit'] +
 			weights[11] * craft['missileDamage'] +
-			weights[12] * craft['ramScore']
+			weights[12] * craft['missileHitsTaken'] +
+			weights[13] * craft['ramScore']
 		})
 
 if not args.no_files:
@@ -217,7 +219,7 @@ if len(summary['craft']) > 0:
 	if not args.quiet:
 		# Write results to console
 		strings = []
-		headers = ['Name', 'Wins', 'Survive', 'Deaths (BMRAS)', 'D.Order', 'D.Time', 'Kills (BMR)', 'Assists', 'Hits', 'Damage', 'MisHits', 'MisParts', 'MisDmg', 'Ram', 'Acc%', 'Dmg/Hit', 'Hits/Sp', 'Dmg/Sp'] if not args.scores_only else ['Name']
+		headers = ['Name', 'Wins', 'Survive', 'Deaths (BMRAS)', 'D.Order', 'D.Time', 'Kills (BMR)', 'Assists', 'Hits', 'Damage', 'MisHits', 'MisParts', 'MisDmg', 'HitByMis', 'Ram', 'Acc%', 'Dmg/Hit', 'Hits/Sp', 'Dmg/Sp'] if not args.scores_only else ['Name']
 		if args.score:
 			headers.insert(1, 'Score')
 		summary_strings = {'header': {field: field for field in headers}}
@@ -239,6 +241,7 @@ if len(summary['craft']) > 0:
 					'MisHits': f"{tmp['missileHits']}",
 					'MisParts': f"{tmp['missilePartsHit']}",
 					'MisDmg': f"{tmp['missileDamage']:.0f}",
+					'HitByMis': f"{tmp['missileHitsTaken']}",
 					'Ram': f"{tmp['ramScore']}",
 					'Acc%': f"{tmp['accuracy']:.2f}",
 					'Dmg/Hit': f"{tmp['damage/hit']:.1f}",
@@ -248,10 +251,11 @@ if len(summary['craft']) > 0:
 			})
 			if args.score:
 				summary_strings[craft]['Score'] = f"{tmp['score']:.3f}"
+		columns_to_show = [header for header in headers if not all(craft[header] == "0" for craft in list(summary_strings.values())[1:])]
 		column_widths = {column: max(len(craft[column]) + 2 for craft in summary_strings.values()) for column in headers}
-		strings.append(''.join(f"{header:{column_widths[header]}s}" for header in headers))
+		strings.append(''.join(f"{header:{column_widths[header]}s}" for header in columns_to_show))
 		for craft in sorted(summary['craft'], key=None if not args.score else lambda craft: summary['craft'][craft]['score'], reverse=False if not args.score else True):
-			strings.append(''.join(f"{summary_strings[craft][header]:{column_widths[header]}s}" for header in headers))
+			strings.append(''.join(f"{summary_strings[craft][header]:{column_widths[header]}s}" for header in columns_to_show))
 
 		teamNames = sorted(list(set([team for result_type in summary['team results'].values() for team in result_type])))
 		default_team_names = [chr(k) for k in range(ord('A'), ord('A') + len(summary['craft']))]

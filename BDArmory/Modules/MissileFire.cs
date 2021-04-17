@@ -3671,6 +3671,7 @@ namespace BDArmory.Modules
                             float candidateRPM = ((ModuleWeapon)item.Current).roundsPerMinute;
                             bool candidateGimbal = ((ModuleWeapon)item.Current).turret;
                             float candidateTraverse = ((ModuleWeapon)item.Current).yawRange;
+                            float candidateMinrange = ((EngageableWeapon)item.Current).engageRangeMin;
                             int candidatePriority = Mathf.RoundToInt(((ModuleWeapon)item.Current).priority);
                             bool electrolaser = ((ModuleWeapon)item.Current).electroLaser;
                             bool pulseLaser = ((ModuleWeapon)item.Current).pulseLaser;
@@ -3695,6 +3696,10 @@ namespace BDArmory.Modules
                                 targetWeapon = item.Current;
                                 targetWeaponRPM = candidateRPM;
                                 targetWeaponPriority = candidatePriority;
+                            }
+                            if (candidateMinrange > distance)
+                            {
+                                candidateRPM *= .001f; //if within min range massively negatively weight weapon - allows weapon to still be selected if all others lost/out of ammo
                             }
                             else //if equal priority, use standard weighting
                             {

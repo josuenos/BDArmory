@@ -272,53 +272,53 @@ namespace BDArmory.Targeting
                     Team = null;
                 }
             }
-            if (HighLogic.LoadedSceneIsFlight)
-            {
-                if (BDArmorySetup.windowSettingsEnabled)
-                {
-                    UpdateTargetPartList();
-                }
-            }
         }
 
         public void UpdateTargetPartList()
         {
             targetPartList.Clear();
             int targetCount = 0;
-            using (List<Part>.Enumerator part = vessel.Parts.GetEnumerator())
-                while (part.MoveNext())
-                {
-                    if (part.Current == null) continue;
-                    if (BDArmorySettings.TARGET_WEAPONS)
+            if (BDArmorySettings.TARGET_COMMAND || BDArmorySettings.TARGET_ENGINES || BDArmorySettings.TARGET_WEAPONS)
+            {
+                using (List<Part>.Enumerator part = vessel.Parts.GetEnumerator())
+                    while (part.MoveNext())
                     {
-                        if (part.Current.FindModuleImplementing<ModuleWeapon>() || part.Current.FindModuleImplementing<MissileTurret>())
+                        if (part.Current == null) continue;
+                        if (BDArmorySettings.TARGET_WEAPONS)
                         {
-                            targetPartList.Add(part.Current);
-                            targetCount++;
+                            if (part.Current.FindModuleImplementing<ModuleWeapon>() || part.Current.FindModuleImplementing<MissileTurret>())
+                            {
+                                targetPartList.Add(part.Current);
+                                targetCount++;
+                            }
+                        }
+                        if (BDArmorySettings.TARGET_ENGINES)
+                        {
+                            if (part.Current.FindModuleImplementing<ModuleEngines>() || part.Current.FindModuleImplementing<ModuleEnginesFX>())
+                            {
+                                targetPartList.Add(part.Current);
+                                targetCount++;
+                            }
+                        }
+                        if (BDArmorySettings.TARGET_COMMAND)
+                        {
+                            if (part.Current.FindModuleImplementing<ModuleCommand>() || part.Current.FindModuleImplementing<KerbalSeat>())
+                            {
+                                targetPartList.Add(part.Current);
+                                targetCount++;
+                            }
                         }
                     }
-                    if (BDArmorySettings.TARGET_ENGINES)
-                    {
-                        if (part.Current.FindModuleImplementing<ModuleEngines>() || part.Current.FindModuleImplementing<ModuleEnginesFX>())
-                        {
-                            targetPartList.Add(part.Current);
-                            targetCount++;
-                        }
-                    }
-                    if (BDArmorySettings.TARGET_COMMAND)
-                    {
-                        if (part.Current.FindModuleImplementing<ModuleCommand>())
-                        {
-                            targetPartList.Add(part.Current);
-                            targetCount++;
-                        }
-                    }
-                    //else if nothing prioritized, or all priority targets destroyed
-                    if (!BDArmorySettings.TARGET_COMMAND && !BDArmorySettings.TARGET_ENGINES && !BDArmorySettings.TARGET_WEAPONS || (targetCount < 1))
+            }
+            //else if nothing prioritized, or all priority targets destroyed
+            if (targetCount < 1)
+            {
+                using (List<Part>.Enumerator part = vessel.Parts.GetEnumerator())
+                    while (part.MoveNext())
                     {
                         targetPartList.Add(part.Current);
                     }
-                }
+            }
             targetPartList = targetPartList.OrderBy(w => w.mass).ToList(); //weight target part priority by part mass, also serves as a default 'target heaviest part' in case other options not selected
             targetPartList.Reverse(); //Order by mass is lightest to heaviest. We want H>L
             //Debug.Log("[BDArmory.MTD]: Rebuilt target part list, count: " + targetPartList.Count);

@@ -147,7 +147,7 @@ namespace BDArmory.Control
                 message = "Continuous vessel spawning cancelled.";
                 Debug.Log("[BDArmory.VesselSpawner]: " + message);
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
-                BDACompetitionMode.Instance.ResetCompetitionScores();
+                BDACompetitionMode.Instance.ResetCompetitionStuff();
             }
             if (spawnVesselsContinuouslyCoroutine != null)
             {
@@ -256,7 +256,7 @@ namespace BDArmory.Control
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
                 BDACompetitionMode.Instance.LogResults("due to spawning", "auto-dump-from-spawning"); // Log results first.
                 BDACompetitionMode.Instance.StopCompetition();
-                BDACompetitionMode.Instance.ResetCompetitionScores(); // Reset competition scores.
+                BDACompetitionMode.Instance.ResetCompetitionStuff(); // Reset competition scores.
                 BDACompetitionMode.Instance.RemoveDebrisNow(); // Remove debris and space junk.
             }
             yield return new WaitForFixedUpdate();
@@ -874,7 +874,7 @@ namespace BDArmory.Control
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
                 BDACompetitionMode.Instance.LogResults("due to continuous spawning", "auto-dump-from-spawning"); // Log results first.
                 BDACompetitionMode.Instance.StopCompetition();
-                BDACompetitionMode.Instance.ResetCompetitionScores(); // Reset competition scores.
+                BDACompetitionMode.Instance.ResetCompetitionStuff(); // Reset competition scores.
             }
             vesselsToActivate.Clear(); // Clear any pending vessel activations.
             yield return new WaitForFixedUpdate();
