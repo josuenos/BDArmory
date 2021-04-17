@@ -85,31 +85,6 @@ namespace BDArmory.Modules
             UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
         public float steerKiAdjust = 0.25f;
 
-        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true,
-             guiName = "#LOC_BDArmory_Custom_SteerKi_Clamps", //Steer Ki
-             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
-         UI_Toggle(scene = UI_Scene.All, enabledText = "#LOC_BDArmory_Enabled",
-             disabledText = "#LOC_BDArmory_Disabled")]
-        public bool customKiClamps = false;
-
-        [KSPField(isPersistant = true,
-             guiName = "#LOC_BDArmory_PitchKi_Clamp", //Steer Ki
-             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", advancedTweakable = true, groupStartCollapsed = true),
-         UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
-        public float pitchKiClamp = 1f;
-
-        [KSPField(isPersistant = true,
-             guiName = "#LOC_BDArmory_YawKi_Clamp", //Steer Ki
-             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", advancedTweakable = true, groupStartCollapsed = true),
-         UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
-        public float yawKiClamp = 0.55f;
-
-        [KSPField(isPersistant = true,
-             guiName = "#LOC_BDArmory_RollKi_Clamp", //Steer Ki
-             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", advancedTweakable = true, groupStartCollapsed = true),
-         UI_FloatRange(minValue = 0.01f, maxValue = 1f, stepIncrement = 0.01f, scene = UI_Scene.All)]
-        public float rollKiClamp = 0.45f;
-
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_SteerDamping", //Steer Damping
             groupName = "pilotAI_PID", groupDisplayName = "#LOC_BDArmory_PilotAI_PID", groupStartCollapsed = true),
             UI_FloatRange(minValue = 1f, maxValue = 8f, stepIncrement = 0.1f, scene = UI_Scene.All)]
@@ -481,10 +456,6 @@ namespace BDArmory.Modules
         //Controller Integral
         float pitchIntegral;
         float yawIntegral;
-        float rollIntegral;
-        int lastPitchErrorSign;
-        int lastYawErrorSign;
-        int lastRollErrorSign;
 
         //instantaneous turn radius and possible acceleration from lift
         //properties can be used so that other AI modules can read this for future maneuverability comparisons between craft
@@ -555,9 +526,6 @@ namespace BDArmory.Modules
         public float dynSteerDampingPitchValue;
         public float dynSteerDampingYawValue;
         public float dynSteerDampingRollValue;
-
-        //custom ki clamp
-        private bool customKiClampToggle;
 
         //wing command
         bool useRollHint;
@@ -729,32 +697,6 @@ namespace BDArmory.Modules
             customDynamicAxisField.guiActive = dynamicDamping;
             customDynamicAxisField.guiActiveEditor = dynamicDamping;
         }
-
-        void ToggleKiClamps()
-        {
-            var pitch = Fields["pitchKiClamp"];
-            var yaw = Fields["yawKiClamp"];
-            var roll = Fields["rollKiClamp"];
-            pitch.guiActive = customKiClamps;
-            pitch.guiActiveEditor = customKiClamps;
-            yaw.guiActive = customKiClamps;
-            yaw.guiActiveEditor = customKiClamps;
-            roll.guiActive = customKiClamps;
-            roll.guiActiveEditor = customKiClamps;
-
-            StartCoroutine(ToggleKiButtons());
-        }
-
-        IEnumerator ToggleKiButtons()
-        {
-            var toggle = Fields["customKiClamps"];
-            toggle.guiActive = false;
-            toggle.guiActiveEditor = false;
-            yield return new WaitForFixedUpdate();
-            toggle.guiActive = true;
-            toggle.guiActiveEditor = true;
-        }
-
         protected override void Start()
         {
             base.Start();
@@ -860,13 +802,6 @@ namespace BDArmory.Modules
             {
                 CustomDynamicAxisField = CustomDynamicAxisFields;
                 ToggleDynamicDampingFields();
-            }
-
-            //ki clamps
-            if (customKiClampToggle != customKiClamps)
-            {
-                customKiClampToggle = customKiClamps;
-                ToggleKiClamps();
             }
         }
 
@@ -1572,7 +1507,7 @@ namespace BDArmory.Modules
             float bankAngle = Vector3.SignedAngle(horizonNormal, rollTarget, vesselTransform.up);
 
             // FlightGlobals.ActiveVessel.mainBody.transform.position - this.vessel.transform.position;
-            if ((Mathf.Abs(bankAngle) > maxBank) && maxBank != 180)
+            if ((Mathf.Abs(bankAngle) > maxBank) && (maxBank != 180))
                 rollTarget = Vector3.RotateTowards(horizonNormal, rollTarget, maxBank / 180 * Mathf.PI, 0.0f);
 
             bankAngle = Vector3.SignedAngle(horizonNormal, rollTarget, vesselTransform.up);
@@ -1590,52 +1525,30 @@ namespace BDArmory.Modules
             if (steerMode == SteerModes.NormalFlight)
             {
                 //premature dive fix
-                pitchError *= Mathf.Clamp01((21 - Mathf.Exp(Mathf.Abs(rollError) / 30)) / 20);
+                pitchError = pitchError * Mathf.Clamp01((21 - Mathf.Exp(Mathf.Abs(rollError) / 30)) / 20);
             }
 
-            float steerPitch = (0.015f * steerMult * pitchError) - (SteerDamping(Mathf.Abs(Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up)), Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up), 1) * -localAngVel.x);
-            float steerYaw = (0.005f * steerMult * yawError) - (SteerDamping(Mathf.Abs(yawError * (steerMode == SteerModes.Aiming ? (180f / 25f) : 4f)), Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up), 2) * 0.2f * -localAngVel.z);
+            float steerPitch = (0.015f * steerMult * pitchError) - (SteerDamping(Mathf.Abs(Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up)), Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up), 1) * -localAngVel.x * (1 + steerKiAdjust));
+            float steerYaw = (0.005f * steerMult * yawError) - (SteerDamping(Mathf.Abs(yawError * (steerMode == SteerModes.Aiming ? (180f / 25f) : 4f)), Vector3.Angle(targetPosition - vesselTransform.position, vesselTransform.up), 2) * 0.2f * -localAngVel.z * (1 + steerKiAdjust));
 
-            pitchIntegral += pitchError * Time.deltaTime / 90f;
-            yawIntegral += yawError * Time.deltaTime / 90f;
-            rollIntegral += rollError * Time.deltaTime / 90f;
-
-            pitchIntegral = lastPitchErrorSign != Math.Sign(pitchError) ? 0 : pitchIntegral;
-            yawIntegral = lastYawErrorSign != Math.Sign(yawError) ? 0 : yawIntegral;
-            rollIntegral = lastRollErrorSign != Math.Sign(rollError) ? 0 : rollIntegral;
-
-            lastPitchErrorSign = Math.Sign(pitchError);
-            lastYawErrorSign = Math.Sign(yawError);
-            lastRollErrorSign = Math.Sign(rollError);
+            pitchIntegral += pitchError;
+            yawIntegral += yawError;
 
             steerPitch *= dynamicAdjustment;
             steerYaw *= dynamicAdjustment;
 
-            float pitchKi = steerKiAdjust; //This is what should be allowed to be tweaked by the player, just like the steerMult, it is very low right now
-            pitchIntegral = Mathf.Clamp(pitchIntegral, -pitchKiClamp, pitchKiClamp); //0.2f is the limit of the integral variable, making it bigger increases overshoot
-            steerPitch += pitchIntegral * pitchKi; //Adds the integral component to the mix
+            float pitchKi = 0.1f * (steerKiAdjust / 5); //This is what should be allowed to be tweaked by the player, just like the steerMult, it is very low right now
+            pitchIntegral = Mathf.Clamp(pitchIntegral, -0.2f / (pitchKi * dynamicAdjustment), 0.2f / (pitchKi * dynamicAdjustment)); //0.2f is the limit of the integral variable, making it bigger increases overshoot
+            steerPitch += pitchIntegral * pitchKi * dynamicAdjustment; //Adds the integral component to the mix
 
-            float yawKi = steerKiAdjust;
-            yawIntegral = Mathf.Clamp(yawIntegral, -yawKiClamp, yawKiClamp);
-            steerYaw += yawIntegral * yawKi;
+            float yawKi = 0.1f * (steerKiAdjust / 15);
+            yawIntegral = Mathf.Clamp(yawIntegral, -0.2f / (yawKi * dynamicAdjustment), 0.2f / (yawKi * dynamicAdjustment));
+            steerYaw += yawIntegral * yawKi * dynamicAdjustment;
 
-            float rollKi = steerKiAdjust;
-            rollIntegral = Mathf.Clamp(rollIntegral, -rollKiClamp, rollKiClamp);
-            steerRoll += rollIntegral * rollKi;
-
-            s.roll = Mathf.Clamp(steerRoll, -maxSteer, maxSteer);
+            float roll = Mathf.Clamp(steerRoll, -maxSteer, maxSteer);
+            s.roll = roll;
             s.yaw = Mathf.Clamp(steerYaw, -finalMaxSteer, finalMaxSteer);
             s.pitch = Mathf.Clamp(steerPitch, Mathf.Min(-finalMaxSteer, -0.2f), finalMaxSteer);
-
-            if (BDArmorySettings.DRAW_DEBUG_LABELS)
-            {
-                Debug.Log("[BDArmory.BDModulePilotAI]: PitchIntegral: " + pitchIntegral);
-                Debug.Log("[BDArmory.BDModulePilotAI]: YawIntegral: " + yawIntegral);
-                Debug.Log("[BDArmory.BDModulePilotAI]: RollIntegral: " + rollIntegral);
-                Debug.Log("[BDArmory.BDModulePilotAI]: SteerPitch: " + steerPitch);
-                Debug.Log("[BDArmory.BDModulePilotAI]: SteerYaw: " + steerYaw);
-                Debug.Log("[BDArmory.BDModulePilotAI]: SteerRoll: " + steerRoll);
-            }
         }
 
         void FlyExtend(FlightCtrlState s, Vector3 tPosition)
