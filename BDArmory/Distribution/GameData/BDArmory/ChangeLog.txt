@@ -1,4 +1,5 @@
 ﻿FIXES
+	- Fix the floating origin corrections to the vessel traces and apply the corrective rotations to the coordinates such that the local coordinates are (east, up, north) and the identity rotation is a craft pointing nose up with the underside pointing north. Add a simple python script to plot the traces.
 IMPROVEMENTS
 	- Update the in-flight Guard Menu to match the settings in the weapon manager in the SPH.
 	- Dynamically adjust (max) gun range based on the guns that are actually on a vessel.

@@ -354,15 +354,20 @@ namespace BDArmory.Core.Module
 
         public void ReduceArmor(float massToReduce)
         {
-            armorMass -= (massToReduce * (Density / 1000));
-            if (armorMass < 0)
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                armorMass = 0;
+                Debug.Log("[HPTracker] armor mass: " + armorMass + "; mass to reduce: " + (massToReduce * (Density / 1000000000)));
             }
-            Armor -= ((armorMass - massToReduce) / armorMass);
+            float reduceMass = (massToReduce * (Density / 1000000000));
+            Armor -= ((1 - (reduceMass / armorMass)) * armorMass);
             if (Armor < 0)
             {
                 Armor = 0;
+            }
+            armorMass -= reduceMass; //massToReduce is cm/3, armorMass is kg/m3
+            if (armorMass < 0)
+            {
+                armorMass = 0;
             }
         }
 
@@ -407,11 +412,11 @@ namespace BDArmory.Core.Module
                 sizeAdjust = 0.5f; //armor on one side, otherwise will have armor thickness on both sides of the panel, nonsensical + doiuble weight
             }
             SetMaxArmor();
-            armorVolume = ((Armor) *  // thickness * armor mass
+            armorVolume = ((Armor/1000) *  // thickness * armor mass
             ((((partSize.x * partSize.y) * 2) + ((partSize.x * partSize.z) * 2) + ((partSize.y * partSize.z) * 2)) * sizeAdjust)); //mass * surface area approximation of a cylinder, where H/W are unknown
             if (guiArmorTypeString != "None") //don't grab armor panels
             {
-                armorMass = armorVolume * (Density / 1000000);
+                armorMass = armorVolume * Density/1000; //armor mass in tons
                 armorCost = armorVolume * Cost;
             }
             if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[ARMOR]: part size is (X: " + partSize.x + ";, Y: " + partSize.y + "; Z: " + partSize.z);

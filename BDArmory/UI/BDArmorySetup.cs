@@ -1581,6 +1581,7 @@ namespace BDArmory.UI
                 if (BDArmorySettings.ADVANCED_TARGETING != (BDArmorySettings.ADVANCED_TARGETING = GUI.Toggle(SLeftRect(++line), BDArmorySettings.ADVANCED_TARGETING, Localizer.Format("#LOC_BDArmory_Settings_AdvTargeting"))))
                 { updateTargetableParts = true; }
                 BDArmorySettings.AUTONOMOUS_COMBAT_SEATS = GUI.Toggle(SRightRect(line), BDArmorySettings.AUTONOMOUS_COMBAT_SEATS, Localizer.Format("#LOC_BDArmory_Settings_AutonomousCombatSeats"));
+                BDArmorySettings.DISPLAY_COMPETITION_STATUS = GUI.Toggle(SLeftRect(++line), BDArmorySettings.DISPLAY_COMPETITION_STATUS, Localizer.Format("#LOC_BDArmory_Settings_DisplayCompetitionStatus"));
                 if (HighLogic.LoadedSceneIsEditor)
                 {
                     if (BDArmorySettings.SHOW_CATEGORIES != (BDArmorySettings.SHOW_CATEGORIES = GUI.Toggle(SLeftRect(++line), BDArmorySettings.SHOW_CATEGORIES, Localizer.Format("#LOC_BDArmory_Settings_ShowEditorSubcategories"))))//"Show Editor Subcategories"

@@ -2867,7 +2867,7 @@ namespace BDArmory.Modules
                     return false;
                 }
 
-                if (ml.dropTime > 0.3f)
+                if (ml.dropTime >= 0.1f)
                 {
                     //debug lines
                     LineRenderer lr = null;

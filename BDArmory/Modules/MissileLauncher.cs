@@ -29,7 +29,6 @@ namespace BDArmory.Modules
 
         public MissileTurret missileTurret = null;
         public BDRotaryRail rotaryRail = null;
-        //public DroneLauncher drone = null;
 
         [KSPField]
         public string exhaustPrefabPath;
@@ -718,20 +717,6 @@ namespace BDArmory.Modules
             if (HasFired) return;
 
             try // FIXME Remove this once the fix is sufficiently tested.
-/*
-            drone = part.GetComponent<DroneLauncher>();
-            if (drone != null)
-            {
-                Debug.Log("[BDArmory.MissileLauncher]: Launching Drone?");
-                drone.LaunchDrone();
-                Debug.Log("[BDArmory.MissileLauncher]: Drone Launched! " + vessel.vesselName);
-                HasFired = true;
-                BDATargetManager.FiredMissiles.Remove(this);
-                Debug.Log("[BDArmory.MissileLauncher]: Removing MissileLauncher on " + vessel.vesselName);
-            }
-            else
-*/
-
             {
                 SetupExplosive(this.part);
                 HasFired = true;
@@ -1825,14 +1810,8 @@ namespace BDArmory.Modules
             else //TODO: Remove this backguard compatibility
             {
                 Vector3 position = transform.position;//+rigidbody.velocity*Time.fixedDeltaTime;
-                if (isSeismicCharge)
-                {
-                    SeismicChargeFX.CreateSeismicExplosion(position, transform.rotation, explModelPath);
-                }
-                else
-                {
-                    ExplosionFx.CreateExplosion(position, blastPower, explModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, SourceVessel.vesselName, part.FindModuleImplementing<EngageableWeapon>().GetShortName(), default, false, part.mass);
-                }
+                    ExplosionFx.CreateExplosion(position, blastPower, explModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, SourceVessel.vesselName, part.FindModuleImplementing<EngageableWeapon>().GetShortName(), default, false, part.mass*1000);
+
             }
 
             List<BDAGaplessParticleEmitter>.Enumerator e = gaplessEmitters.GetEnumerator();

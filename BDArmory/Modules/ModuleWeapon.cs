@@ -3364,7 +3364,7 @@ namespace BDArmory.Modules
             targetVelocityLowPass.x = Mathf.Round(targetVelocityLowPass.x * 10f) / 10f; // Filter out noise by removing sub-10cm precision.
             targetVelocityLowPass.y = Mathf.Round(targetVelocityLowPass.y * 10f) / 10f;
             targetVelocityLowPass.z = Mathf.Round(targetVelocityLowPass.z * 10f) / 10f;
-            targetAcceleration = (targetVelocityLowPass - (Vector3)Krakensbane.GetLastCorrection() - targetVelocityPrevious) / Time.fixedDeltaTime;
+            targetAcceleration = 0.95f * targetAcceleration + 0.05f * (targetVelocityLowPass - (Vector3)Krakensbane.GetLastCorrection() - targetVelocityPrevious) / Time.fixedDeltaTime; // Smooth out the acceleration calculation to account for oscillating control surfaces in the target.
             float altitude = (float)FlightGlobals.currentMainBody.GetAltitude(position);
             if (altitude < 12 && altitude > -10)
                 targetAcceleration = Vector3.ProjectOnPlane(targetAcceleration, VectorUtils.GetUpDirection(position));

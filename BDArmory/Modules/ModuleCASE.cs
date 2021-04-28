@@ -167,7 +167,7 @@ namespace BDArmory.Modules
                 GetBlastRadius();
                 if (CASELevel == 0) //a considerable quantity of explosives and propellants just detonated inside your ship
                 {
-                    ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, explModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, vesselName, null, direction, false, part.mass);
+                    ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, explModelPath, explSoundPath, ExplosionSourceType.Missile, 0, part, vesselName, null, direction, false, part.mass*1000);
                     if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.ModuleCASE] CASE 0 explosion, tntMassEquivilent: " + ammoExplosionYield);
                 }
                 else if (CASELevel == 1) // the blast is reduced. Damage is severe, but (potentially) survivable
