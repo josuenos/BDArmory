@@ -22,12 +22,14 @@ namespace BDArmory.Core.Module
         public float Hitpoints;
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_ArmorThickness"),//Armor Thickness
-        UI_FloatRange(minValue = 0f, maxValue = 1500f, stepIncrement = 5f, scene = UI_Scene.All)]
+        UI_FloatRange(minValue = 0f, maxValue = 500f, stepIncrement = 5f, scene = UI_Scene.All)]
         public float Armor = 10f;
 
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "Armor Type"),//Ammunition Types
         UI_FloatRange(minValue = 1, maxValue = 999, stepIncrement = 1, scene = UI_Scene.All)]
         public float ArmorTypeNum = 1; //replace with prev/next buttons? //or a popup GUI box with a list of selectable types...
+
+        private float OldArmorType = 1;
 
         [KSPField(advancedTweakable = true, guiActive = false, guiActiveEditor = true, guiName = "Armor Mass")]//armor mass
         public float armorMass = 0f;
@@ -36,7 +38,7 @@ namespace BDArmory.Core.Module
         public float armorCost = 0f;
 
         [KSPField(isPersistant = true)]
-        public string SelectedArmorType; //presumably Aubranium can use this to filter allowed/banned types
+        public string SelectedArmorType = "None"; //presumably Aubranium can use this to filter allowed/banned types
 
         [KSPField(guiActive = true, guiActiveEditor = true, guiName = "Current Armor")]//Status
         public string guiArmorTypeString = "def";
@@ -220,6 +222,11 @@ namespace BDArmory.Core.Module
         public void Update()
         {
             RefreshHitPoints();
+            if (ArmorTypeNum != OldArmorType)
+            {
+                OldArmorType = ArmorTypeNum;
+                ArmorSetup(null, null);
+            }
         }
 
         private void RefreshHitPoints()
@@ -383,7 +390,11 @@ namespace BDArmory.Core.Module
         {
             float sizeAdjust; //getSize returns size of a rectangular prism; most parts are circular, some are conical; use sizeAdjust to compensate
             float armorVolume;
-            armorInfo = ArmorInfo.armors[ArmorInfo.armorNames[(int)ArmorTypeNum - 1]];
+			if ((ArmorTypeNum-1) > ArmorInfo.armorNames.Count) //in case of trying to load a craft using a mod armor type that isn't installed and having a armorTypeNum larger than the index size
+			{
+				ArmorTypeNum = 1; //reset to 'None'
+			}
+            armorInfo = ArmorInfo.armors[ArmorInfo.armorNames[(int)ArmorTypeNum - 1]]; //what does this return if armorname cannot be found (mod armor removed/not present in install?)
 
             //if (SelectedArmorType != ArmorInfo.armorNames[(int)ArmorTypeNum - 1]) //armor selection overridden by Editor widget
             //{
@@ -391,6 +402,7 @@ namespace BDArmory.Core.Module
             //    ArmorTypeNum = ArmorInfo.armors.FindIndex(t => t.name == SelectedArmorType); //adjust part's current armor setting to match
             //}
             guiArmorTypeString = armorInfo.name;
+            SelectedArmorType = armorInfo.name;
             Density = armorInfo.Density;
             Diffusivity = armorInfo.Diffusivity;
             Ductility = armorInfo.Ductility;
@@ -412,6 +424,8 @@ namespace BDArmory.Core.Module
                 sizeAdjust = 0.5f; //armor on one side, otherwise will have armor thickness on both sides of the panel, nonsensical + doiuble weight
             }
             SetMaxArmor();
+            armorVolume = 0; //reset these to deal with part symmetry value duplication;
+            armorMass = 0;
             armorVolume = ((Armor/1000) *  // thickness * armor mass
             ((((partSize.x * partSize.y) * 2) + ((partSize.x * partSize.z) * 2) + ((partSize.y * partSize.z) * 2)) * sizeAdjust)); //mass * surface area approximation of a cylinder, where H/W are unknown
             if (guiArmorTypeString != "None") //don't grab armor panels
@@ -434,27 +448,21 @@ namespace BDArmory.Core.Module
 
         void SetMaxArmor()
         {
-            if (guiArmorTypeString != "None") 
+            if (guiArmorTypeString != "None")
             {
                 if (maxSupportedArmor < 0)
                 {
                     if (part.IsAero())
                     {
                         maxSupportedArmor = 20;
-                    }
-                    else if (part.partName.Contains("Armor") || ArmorThickness > 0) //BDA Armor panels, etc.
-                    {
-                        maxSupportedArmor = 500; //could always be higher if you really want that 1x1x0.1m armor panel be able to mount 1500mm of armor...
-                        ArmorTypeNum = 2; //numtype 1 is armor type None, ensure armor panels start with armor
-                    }
+                    }                    
                     else
                     {
                         maxSupportedArmor = ((partSize.x / 20) * 1000); //~62mm for Size1, 125mm for S2, 185mm for S3
+                        maxSupportedArmor /= 5;
+                        maxSupportedArmor = Mathf.Round(maxSupportedArmor);
+                        maxSupportedArmor *= 5;
                     }
-                }
-                if (ArmorThickness != 0 && ArmorThickness > maxSupportedArmor)
-                {
-                    maxSupportedArmor = ArmorThickness;
                 }
                 UI_FloatRange armorFieldFlight = (UI_FloatRange)Fields["Armor"].uiControlFlight;
                 armorFieldFlight.minValue = 0f;
@@ -475,7 +483,15 @@ namespace BDArmory.Core.Module
                 armorFieldFlight.minValue = 0f;
                 armorFieldFlight.maxValue = 10;
             }
-
+            if (part.partName.ToLower().Contains("armor") || ArmorThickness > 0) //BDA Armor panels, etc.
+            {
+                maxSupportedArmor = 500; //could always be higher if you really want that 1x1x0.1m armor panel be able to mount 1500mm of armor...
+                ArmorTypeNum = 2; //numtype 1 is armor type None, ensure armor panels start with armor
+            }
+            if (ArmorThickness != 0 && ArmorThickness > maxSupportedArmor)
+            {
+                maxSupportedArmor = ArmorThickness;
+            }
         }
 
         private static Bounds CalcPartBounds(Part p, Transform t)

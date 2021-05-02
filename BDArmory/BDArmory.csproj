@@ -233,6 +233,7 @@
     <Compile Include="Targeting\TargetInfo.cs" />
     <Compile Include="Targeting\TargetSignatureData.cs" />
     <Compile Include="UI\BDAEditorAnalysisWindow.cs" />
+    <Compile Include="UI\BDAEditorArmorWindow.cs" />
     <Compile Include="UI\BDAEditorCategory.cs" />
     <Compile Include="UI\BDATargetManager.cs" />
     <Compile Include="UI\BDAWindowSettingsField.cs" />
