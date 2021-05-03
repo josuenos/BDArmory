@@ -58,7 +58,7 @@ namespace BDArmory.UI
         {
             if (current != null)
             {
-                Debug.Log("[BDArmory]: Tried to bind key but key binder is in use.");
+                Debug.Log("[BDArmory.BDKeyBinder]: Tried to bind key but key binder is in use.");
                 return;
             }
 

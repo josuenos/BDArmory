@@ -301,7 +301,8 @@ namespace BDArmory.Modules
                     while (vs.MoveNext())
                     {
                         if (vs.Current == null || vs.Current == vessel) continue;
-                        if (!vs.Current.LandedOrSplashed || vs.Current.FindPartModuleImplementing<IBDAIControl>()?.commandLeader?.vessel == vessel
+                        var ibdaiControl = vs.Current.FindPartModuleImplementing<IBDAIControl>();
+                        if (!vs.Current.LandedOrSplashed || (ibdaiControl != null && ibdaiControl.commandLeader != null && ibdaiControl.commandLeader.vessel == vessel)
                             || vs.Current.GetTotalMass() < AvoidMass)
                             continue;
                         dodgeVector = PredictCollisionWithVessel(vs.Current, 5f * predictMult, 0.5f);
@@ -322,7 +323,7 @@ namespace BDArmory.Modules
             }
 
             // if bypass target is no longer relevant, remove it
-            if (bypassTarget != null && ((bypassTarget != targetVessel && bypassTarget != commandLeader?.vessel)
+            if (bypassTarget != null && ((bypassTarget != targetVessel && bypassTarget != (commandLeader != null ? commandLeader.vessel : null))
                 || (VectorUtils.GetWorldSurfacePostion(bypassTargetPos, vessel.mainBody) - bypassTarget.CoM).sqrMagnitude > 500000))
             {
                 bypassTarget = null;
@@ -342,7 +343,7 @@ namespace BDArmory.Modules
                     float distance = vecToTarget.magnitude;
                     // lead the target a bit, where 1km/s is a ballpark estimate of the average bullet velocity
                     float shotSpeed = 1000f;
-                    if (weaponManager?.selectedWeapon is ModuleWeapon wep)
+                    if ((weaponManager != null ? weaponManager.selectedWeapon : null) is ModuleWeapon wep)
                         shotSpeed = wep.bulletVelocity;
                     vecToTarget = targetVessel.PredictPosition(distance / shotSpeed) - vessel.CoM;
 
@@ -388,19 +389,22 @@ namespace BDArmory.Modules
                             else
                             {
                                 targetVelocity = CruiseSpeed / 10 + (MaxSpeed - CruiseSpeed / 10) * (distance - MinEngagementRange) / (MaxEngagementRange - MinEngagementRange); //slow down if inside engagement range to extend shooting opportunities
-                                switch (weaponManager?.selectedWeapon?.GetWeaponClass())
+                                if (weaponManager != null && weaponManager.selectedWeapon != null)
                                 {
-                                    case WeaponClasses.Gun:
-                                    case WeaponClasses.Rocket:
-                                    case WeaponClasses.DefenseLaser:
-                                        var gun = (ModuleWeapon)weaponManager.selectedWeapon;
-                                        if ((gun.yawRange == 0 || gun.maxPitch == gun.minPitch) && gun.FiringSolutionVector != null)
-                                        {
-                                            aimingMode = true;
-                                            if (Vector3.Angle((Vector3)gun.FiringSolutionVector, vessel.transform.up) < 20)
-                                                targetDirection = (Vector3)gun.FiringSolutionVector;
-                                        }
-                                        break;                                   
+                                    switch (weaponManager.selectedWeapon.GetWeaponClass())
+                                    {
+                                        case WeaponClasses.Gun:
+                                        case WeaponClasses.Rocket:
+                                        case WeaponClasses.DefenseLaser:
+                                            var gun = (ModuleWeapon)weaponManager.selectedWeapon;
+                                            if ((gun.yawRange == 0 || gun.maxPitch == gun.minPitch) && gun.FiringSolutionVector != null)
+                                            {
+                                                aimingMode = true;
+                                                if (Vector3.Angle((Vector3)gun.FiringSolutionVector, vessel.transform.up) < 20)
+                                                    targetDirection = (Vector3)gun.FiringSolutionVector;
+                                            }
+                                            break;
+                                    }
                                 }
                             }
                             targetVelocity = Mathf.Clamp(targetVelocity, PoweredSteering ? CruiseSpeed / 5 : 0, MaxSpeed); // maintain a bit of speed if using powered steering
@@ -613,8 +617,8 @@ namespace BDArmory.Modules
 
         public override bool IsValidFixedWeaponTarget(Vessel target)
             => !BroadsideAttack &&
-            (((target?.Splashed ?? false) && (SurfaceType & AIUtils.VehicleMovementType.Water) != 0)
-            || ((target?.Landed ?? false) && (SurfaceType & AIUtils.VehicleMovementType.Land) != 0))
+            (((target != null ? target.Splashed : false) && (SurfaceType & AIUtils.VehicleMovementType.Water) != 0)
+            || ((target != null ? target.Landed : false) && (SurfaceType & AIUtils.VehicleMovementType.Land) != 0))
             ; //valid if can traverse the same medium and using bow fire
 
         /// <returns>null if no collision, dodge vector if one detected</returns>

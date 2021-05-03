@@ -47,7 +47,7 @@ namespace BDArmory.Core
             if (PerformanceEntries.Count == 0)
                 return;
 
-            Debug.Log("PerformanceLogger.OnDestroy");
+            Debug.Log("[BDArmory.PerformanceLogger]: OnDestroy");
 
             var sb = new StringBuilder();
             foreach (var performanceEntry in PerformanceEntries.OrderByDescending(x => x.Value.TotalTicks))

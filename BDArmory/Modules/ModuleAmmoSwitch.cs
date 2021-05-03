@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Text;
 using BDArmory.Misc;
 using UnityEngine;
@@ -73,28 +74,28 @@ namespace BDArmory.Modules
 
         public override void OnAwake()
         {
-            //Debug.Log("FS AWAKE "+initialized+" "+configLoaded+" "+resourceAmounts);
+            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: FS AWAKE "+initialized+" "+configLoaded+" "+resourceAmounts);
             if (configLoaded)
             {
                 initializeData();
             }
-            //Debug.Log("FS AWAKE DONE " + (configLoaded ? tankList.Count.ToString() : "NO CONFIG"));
+            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: FS AWAKE DONE " + (configLoaded ? tankList.Count.ToString() : "NO CONFIG"));
         }
 
         public override void OnLoad(ConfigNode node)
         {
             base.OnLoad(node);
-            //Debug.Log("FS LOAD " + initialized + " " + resourceAmounts+configLoaded);
+            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: FS LOAD " + initialized + " " + resourceAmounts+configLoaded);
             if (!configLoaded)
             {
                 initializeData();
             }
             if (basePartMass != part.mass)
             {
-                Debug.LogError("Error: BDAcAmmoSwitch Mass Discrepancy detected in part '" + part.name + "'.", part);
+                Debug.LogError("[BDArmory.ModuleAmmoSwitch]: Mass Discrepancy detected in part '" + part.name + "'.", part);
             }
             configLoaded = true;
-            //Debug.Log("FS LOAD DONE " + tankList.Count);
+            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: FS LOAD DONE " + tankList.Count);
         }
 
         private void initializeData()
@@ -178,7 +179,7 @@ namespace BDArmory.Modules
                 }
             }
 
-            //Debug.Log("refreshing UI");
+            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: refreshing UI");
 
             if (tweakableUI == null)
             {
@@ -190,7 +191,7 @@ namespace BDArmory.Modules
             }
             else
             {
-                Debug.Log("no UI to refresh");
+                Debug.Log("[BDArmory.ModuleAmmoSwitch]: no UI to refresh");
             }
         }
 
@@ -211,7 +212,7 @@ namespace BDArmory.Modules
                     {
                         if (tankList[tankCount].resources[resourceCount].name != "Structural")
                         {
-                            //Debug.Log("new node: " + tankList[i].resources[j].name);
+                            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: new node: " + tankList[i].resources[j].name);
                             ConfigNode newResourceNode = new ConfigNode("RESOURCE");
                             newResourceNode.AddValue("name", tankList[tankCount].resources[resourceCount].name);
                             newResourceNode.AddValue("maxAmount", tankList[tankCount].resources[resourceCount].maxAmount);
@@ -224,12 +225,12 @@ namespace BDArmory.Modules
                                 newResourceNode.AddValue("amount", tankList[tankCount].resources[resourceCount].amount);
                             }
 
-                            //Debug.Log("add node to part");
+                            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: add node to part");
                             currentPart.AddResource(newResourceNode);
                         }
                         else
                         {
-                            //Debug.Log("Skipping structural fuel type");
+                            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: Skipping structural fuel type");
                         }
                     }
                 }
@@ -290,7 +291,7 @@ namespace BDArmory.Modules
             {
                 initialResourceTankArray = resourceTankArray;
             }
-            //Debug.Log("FSDEBUGRES: " + resourceTankArray.Length+" "+resourceAmounts);
+            //Debug.Log("[BDArmory.ModuleAmmoSwitch]: FSDEBUGRES: " + resourceTankArray.Length+" "+resourceAmounts);
             for (int tankCount = 0; tankCount < resourceTankArray.Length; tankCount++)
             {
                 resourceList.Add(new List<double>());
@@ -309,9 +310,9 @@ namespace BDArmory.Modules
                         resourceList[tankCount].Add(double.Parse(resourceAmountArray[amountCount].Trim()));
                         initialResourceList[tankCount].Add(double.Parse(initialResourceAmountArray[amountCount].Trim()));
                     }
-                    catch
+                    catch (Exception e)
                     {
-                        Debug.Log("BDAcAmmoSwitch: error parsing resource amount " + tankCount + "/" + amountCount + ": '" + resourceTankArray[amountCount] + "': '" + resourceAmountArray[amountCount].Trim() + "'");
+                        Debug.Log("[BDArmory.ModuleAmmoSwitch]: error parsing resource amount " + tankCount + "/" + amountCount + ": '" + resourceTankArray[amountCount] + "': '" + resourceAmountArray[amountCount].Trim() + "'. Exception: " + e.Message);
                     }
                 }
             }

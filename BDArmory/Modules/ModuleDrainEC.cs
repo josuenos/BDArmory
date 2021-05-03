@@ -1,4 +1,5 @@
 ﻿using BDArmory.Control;
+using BDArmory.Core;
 using BDArmory.UI;
 using System.Collections;
 using System.Linq;
@@ -15,6 +16,7 @@ namespace BDArmory.Modules
         public bool softEMP = true; //can EMPdamage exceed EMPthreshold?
         private bool disabled = false; //prevent further EMP buildup while rebooting
         public bool bricked = false; //He's dead, jeb
+        private float rebootTimer = 15;
 
         private void EnableVessel()
         {
@@ -82,34 +84,57 @@ namespace BDArmory.Modules
             {
                 EMPDamage += incomingDamage; //only accumulate EMP damage if it's hard EMP or craft isn't disabled
                 incomingDamage = 0; //reset incoming damage amount
+                if (disabled && !softEMP)
+                {
+                    if (rebootTimer > 0)
+                    {
+                        rebootTimer += incomingDamage / 100; //if getting hit by new sources of hard EMP, add to reboot timer
+                    }
+                }
             }
             if (disabled)
             {
-                EMPDamage = Mathf.Clamp(EMPDamage - 5 * TimeWarp.fixedDeltaTime, 0, Mathf.Infinity); //speed EMP cooldown, if electrolaser'd takes about ~10 sec to reboot. may need to be reduced further
-            }                                                                                       //fatal if fast+low alt, but higher alt or good glide ratio is survivable
+                //EMPDamage = Mathf.Clamp(EMPDamage - 5 * TimeWarp.fixedDeltaTime, 0, Mathf.Infinity); //speed EMP cooldown, if electrolaser'd takes about ~10 sec to reboot. may need to be reduced further
+                //fatal if fast+low alt, but higher alt or good glide ratio is survivable
+                if (rebootTimer > 0)
+                {
+                    rebootTimer -= 1 * TimeWarp.fixedDeltaTime;
+                }
+                else
+                {
+                    EMPDamage = 0;
+                }
+            }
             else
             {
-                EMPDamage = Mathf.Clamp(EMPDamage - 1 * TimeWarp.fixedDeltaTime, 0, Mathf.Infinity);
+                EMPDamage = Mathf.Clamp(EMPDamage - 5 * TimeWarp.fixedDeltaTime, 0, Mathf.Infinity); //have EMP buildup dissipate over time
             }
             if (EMPDamage > EMPThreshold && !bricked && !disabled) //does the damage exceed the soft cap, but not the hard cap?
             {
                 disabled = true; //if so disable the craft
-                //Debug.Log("[EMP DEBUG]: vessel disabled"); // add a screenmassage the craft's been EMP'd?
+                var message = "Disabling " + vessel.vesselName + " for " + rebootTimer + "s due to EMP damage";
+                Debug.Log("[BDArmory.ModuleDrainEC]: " + message);
+                BDACompetitionMode.Instance.competitionStatus.Add(message);
                 DisableVessel();
             }
             if (EMPDamage > BrickThreshold && !bricked) //does the damage exceed the hard cap?
             {
                 bricked = true; //if so brick the craft
-                //Debug.Log("[EMP DEBUG]: vessel bricked");
+                var message = vessel.vesselName + " is bricked!";
+                Debug.Log("[BDArmory.ModuleDrainEC]: " + message);
+                BDACompetitionMode.Instance.competitionStatus.Add(message);
             }
             if (EMPDamage <= 0 && disabled && !bricked) //reset craft
             {
+                var message = "Rebooting " + vessel.vesselName;
+                Debug.Log("[BDArmory.ModuleDrainEC]: " + message);
+                BDACompetitionMode.Instance.competitionStatus.Add(message);
                 EnableVessel();
-                //Debug.Log("[EMP DEBUG]: vessel rebooted");
             }
         }
         private void DisableVessel()
         {
+            rebootTimer = BDArmorySettings.WEAPON_FX_DURATION;
             foreach (Part p in vessel.parts)
             {
                 var camera = p.FindModuleImplementing<ModuleTargetingCamera>();
@@ -196,8 +221,8 @@ namespace BDArmory.Modules
 
     }
 
-	internal class EMPShock : MonoBehaviour
-	{
+    internal class EMPShock : MonoBehaviour
+    {
         public void Start()
         {
             foreach (var pe in gameObject.GetComponentsInChildren<KSPParticleEmitter>())

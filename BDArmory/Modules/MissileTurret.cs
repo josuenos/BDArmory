@@ -464,7 +464,7 @@ namespace BDArmory.Modules
                     {
                         if (t.Current == null) continue;
                         if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                            Debug.Log("[BDArmory] : MissileTurret moving transform: " + t.Current.gameObject.name);
+                            Debug.Log("[BDArmory.MissileTurret] : MissileTurret moving transform: " + t.Current.gameObject.name);
                         t.Current.parent = mTf;
                     }
                     t.Dispose();
@@ -550,12 +550,12 @@ namespace BDArmory.Modules
             int index = IndexOfMissile(ml);
             if (index >= 0)
             {
-                Debug.Log("[BDArmory] : Firing missile index: " + index);
+                Debug.Log("[BDArmory.MissileTurret] : Firing missile index: " + index);
                 FireMissile(index);
             }
             else
             {
-                Debug.Log("[BDArmory] : Tried to fire a missile that doesn't exist or is not attached to the turret.");
+                Debug.Log("[BDArmory.MissileTurret] : Tried to fire a missile that doesn't exist or is not attached to the turret.");
             }
         }
 
@@ -592,7 +592,7 @@ namespace BDArmory.Modules
 
         void PrepMissileForFire(int index)
         {
-            Debug.Log("[BDArmory] : Prepping missile for turret fire.");
+            Debug.Log("[BDArmory.MissileTurret] : Prepping missile for turret fire.");
             missileTransforms[index].localPosition = Vector3.zero;
             missileTransforms[index].localRotation = Quaternion.identity;
             missileChildren[index].part.partTransform.position = missileReferenceTransforms[index].position;
@@ -611,7 +611,7 @@ namespace BDArmory.Modules
             }
             else
             {
-                Debug.Log("[BDArmory] : Tried to prep a missile for firing that doesn't exist or is not attached to the turret.");
+                Debug.Log("[BDArmory.MissileTurret] : Tried to prep a missile for firing that doesn't exist or is not attached to the turret.");
             }
         }
 

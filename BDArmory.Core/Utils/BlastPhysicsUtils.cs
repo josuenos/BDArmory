@@ -51,7 +51,7 @@ namespace BDArmory.Core.Utils
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
                 Debug.Log(
-                    "[BDArmory]: Blast Debug data: {" + part.name + "}, " +
+                    "[BDArmory.BlastPhysicsUtils]: Blast Debug data: {" + part.name + "}, " +
                     " clampedMinDistanceToHit: {" + clampedMinDistanceToHit + "}," +
                     " minPressureDistance: {" + minPressureDistance + "}," +
                     " minScaledDistance: {" + minScaledDistance + "}," +

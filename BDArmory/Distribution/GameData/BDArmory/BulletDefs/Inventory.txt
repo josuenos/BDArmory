@@ -52,7 +52,7 @@ M65ShellAmmo
 460Shells
 Type4Rocket
 ATRocket
-Hades122rocket
+Hades122Rocket
 
 ///////////////////////////////////
 Armor pack 1

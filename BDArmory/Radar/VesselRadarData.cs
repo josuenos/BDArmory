@@ -1188,7 +1188,7 @@ namespace BDArmory.Radar
 
         private void UnlinkVRD(VesselRadarData vrd)
         {
-            Debug.Log("[BDArmory]: Unlinking VRD: " + vrd.vessel.vesselName);
+            Debug.Log("[BDArmory.VesselRadarData]: Unlinking VRD: " + vrd.vessel.vesselName);
             externalVRDs.Remove(vrd);
 
             List<ModuleRadar> radarsToUnlink = new List<ModuleRadar>();
@@ -1208,7 +1208,7 @@ namespace BDArmory.Radar
             while (mr.MoveNext())
             {
                 if (mr.Current == null) continue;
-                Debug.Log("[BDArmory]:  - Unlinking radar: " + mr.Current.radarName);
+                Debug.Log("[BDArmory.VesselRadarData]:  - Unlinking radar: " + mr.Current.radarName);
                 UnlinkRadar(mr.Current);
             }
             mr.Dispose();
@@ -1320,7 +1320,7 @@ namespace BDArmory.Radar
                 yield return null;
             }
             LinkVRD(vrd);
-            Debug.Log("[BDArmory]: Radar data link recovered: Local - " + vessel.vesselName + ", External - " +
+            Debug.Log("[BDArmory.VesselRadarData]: Radar data link recovered: Local - " + vessel.vesselName + ", External - " +
                       vrd.vessel.vesselName);
         }
 

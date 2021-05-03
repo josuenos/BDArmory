@@ -132,7 +132,7 @@ namespace BDArmory.Misc
         {
             if (extraGUIRects == null)
             {
-                Debug.LogWarning("Trying to update a GUI rect for mouse position check, but Rect list is null.");
+                Debug.LogWarning("[BDArmory.Misc]: Trying to update a GUI rect for mouse position check, but Rect list is null.");
             }
 
             extraGUIRects[index] = rect;
@@ -357,7 +357,7 @@ namespace BDArmory.Misc
 
         public static void ForceDeadVessel(Vessel v)
         {
-            Debug.Log("[BDArmory] GM Killed Vessel " + v.GetDisplayName());
+            Debug.Log("[BDArmory.Misc]: GM Killed Vessel " + v.GetDisplayName());
             foreach (MissileFire missileFire in v.FindPartModulesImplementing<MissileFire>())
             {
                 PartExploderSystem.AddPartToExplode(missileFire.part);

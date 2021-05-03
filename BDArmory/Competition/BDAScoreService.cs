@@ -3,9 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 using BDArmory.Control;
 using BDArmory.Core;
 using BDArmory.UI;
@@ -110,7 +108,7 @@ namespace BDArmory.Competition
         {
             if (pendingSync && !Core.BDArmorySettings.REMOTE_LOGGING_ENABLED)
             {
-                Debug.Log("[BDAScoreService] Cancel due to disable");
+                Debug.Log("[BDArmory.BDAScoreService] Cancel due to disable");
                 pendingSync = false;
                 if (syncCoroutine != null)
                     StopCoroutine(syncCoroutine);
@@ -137,12 +135,12 @@ namespace BDArmory.Competition
             status = status == StatusType.Waiting ? StatusType.Stopped : StatusType.Cancelled;
             if (status == StatusType.Cancelled)
             {
-                Debug.Log("[BDAScoreService]: Cancelling the heat");
+                Debug.Log("[BDArmory.BDAScoreService]: Cancelling the heat");
                 // FIXME What else needs to be done to cancel a heat?
             }
             else
             {
-                Debug.Log("[BDAScoreService]: Stopping score service.");
+                Debug.Log("[BDArmory.BDAScoreService]: Stopping score service.");
             }
         }
 
@@ -150,12 +148,12 @@ namespace BDArmory.Competition
         {
             if (pendingSync)
             {
-                Debug.Log("[BDAScoreService] Sync in progress");
+                Debug.Log("[BDArmory.BDAScoreService] Sync in progress");
                 yield break;
             }
             pendingSync = true;
 
-            Debug.Log(string.Format("[BDAScoreService] Sync started {0}", hash));
+            Debug.Log(string.Format("[BDArmory.BDAScoreService] Sync started {0}", hash));
 
             status = StatusType.FetchingCompetition;
             // first, get competition metadata
@@ -178,7 +176,7 @@ namespace BDArmory.Competition
                 case 0:
                     status = StatusType.PendingPlayers;
                     // waiting for players; nothing to do
-                    Debug.Log(string.Format("[BDAScoreService] Waiting for players {0}", hash));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] Waiting for players {0}", hash));
                     break;
                 case 1:
                     status = StatusType.FindingNextHeat;
@@ -187,17 +185,17 @@ namespace BDArmory.Competition
                     break;
                 case 2:
                     status = StatusType.StalledNoPendingHeats;
-                    Debug.Log(string.Format("[BDAScoreService] Competition status 2 {0}", hash));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] Competition status 2 {0}", hash));
                     break;
             }
 
             pendingSync = false;
-            Debug.Log(string.Format("[BDAScoreService] Sync completed {0}", hash));
+            Debug.Log(string.Format("[BDArmory.BDAScoreService] Sync completed {0}", hash));
         }
 
         private IEnumerator FindNextHeat(string hash)
         {
-            Debug.Log(string.Format("[BDAScoreService] Find next heat for {0}", hash));
+            Debug.Log(string.Format("[BDArmory.BDAScoreService] Find next heat for {0}", hash));
 
             status = StatusType.FetchingHeat;
             // fetch heat metadata
@@ -208,12 +206,12 @@ namespace BDArmory.Competition
             if (model == null)
             {
                 status = StatusType.StalledNoPendingHeats;
-                Debug.Log(string.Format("[BDAScoreService] No inactive heat found {0}", hash));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] No inactive heat found {0}", hash));
                 yield return RetryFind(hash);
             }
             else
             {
-                Debug.Log(string.Format("[BDAScoreService] Found heat {1} in {0}", hash, model.order));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] Found heat {1} in {0}", hash, model.order));
                 yield return FetchAndExecuteHeat(hash, model);
             }
         }
@@ -281,7 +279,7 @@ namespace BDArmory.Competition
 
         private IEnumerator ExecuteHeat(string hash, HeatModel model)
         {
-            Debug.Log(string.Format("[BDAScoreService] Running heat {0}/{1}", hash, model.order));
+            Debug.Log(string.Format("[BDArmory.BDAScoreService] Running heat {0}/{1}", hash, model.order));
             Control.VesselSpawner spawner = Control.VesselSpawner.Instance;
 
             // orchestrate the match
@@ -304,33 +302,57 @@ namespace BDArmory.Competition
             rammedPartsOut.Clear();
 
             status = StatusType.SpawningVessels;
-            spawner.SpawnAllVesselsOnce(BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.x, BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.y, BDArmorySettings.VESSEL_SPAWN_ALTITUDE, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE, BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED, true, true, 0, null, null, hash);
+            var spawnConfig = new VesselSpawner.SpawnConfig(BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.x, BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.y, BDArmorySettings.VESSEL_SPAWN_ALTITUDE, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE, BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED, true, true, 0, null, null, hash);
+            if (BDArmorySettings.RUNWAY_PROJECT)
+            {
+                switch (BDArmorySettings.RUNWAY_PROJECT_ROUND)
+                {
+                    case 33:
+                        spawnConfig = new VesselSpawner.SpawnConfig(BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.x, BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.y, 10f, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE, BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED, true, true, 0, null, null, hash);
+                        break;
+                }
+            }
+            // spawner.SpawnAllVesselsOnce(BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.x, BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.y, BDArmorySettings.VESSEL_SPAWN_ALTITUDE, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR, BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE, BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED, true, true, 0, null, null, hash);
+            spawner.SpawnAllVesselsOnce(spawnConfig);
             while (spawner.vesselsSpawning)
                 yield return new WaitForFixedUpdate();
             if (!spawner.vesselSpawnSuccess)
             {
-                Debug.Log("[BDAScoreService] Vessel spawning failed.");
+                Debug.Log("[BDArmory.BDAScoreService] Vessel spawning failed.");
                 yield break;
             }
             yield return new WaitForFixedUpdate();
 
             status = StatusType.RunningHeat;
             // NOTE: runs in separate coroutine
-            BDACompetitionMode.Instance.StartCompetitionMode(BDArmorySettings.COMPETITION_DISTANCE);
+            if (BDArmorySettings.RUNWAY_PROJECT)
+            {
+                switch (BDArmorySettings.RUNWAY_PROJECT_ROUND)
+                {
+                    case 33:
+                        BDACompetitionMode.Instance.StartRapidDeployment(0);
+                        break;
+                    default:
+                        BDACompetitionMode.Instance.StartCompetitionMode(BDArmorySettings.COMPETITION_DISTANCE);
+                        break;
+                }
+            }
+            else
+                BDACompetitionMode.Instance.StartCompetitionMode(BDArmorySettings.COMPETITION_DISTANCE);
             yield return new WaitForFixedUpdate(); // Give the competition start a frame to get going.
 
             // start timer coroutine for the duration specified in settings UI
             var duration = Core.BDArmorySettings.COMPETITION_DURATION * 60d;
             var message = "Starting " + (duration > 0 ? "a " + duration.ToString("F0") + "s" : "an unlimited") + " duration competition.";
-            Debug.Log("[BDAScoreService]: " + message);
+            Debug.Log("[BDArmory.BDAScoreService]: " + message);
             BDACompetitionMode.Instance.competitionStatus.Add(message);
-            while (BDACompetitionMode.Instance.competitionStarting)
+            while (BDACompetitionMode.Instance.competitionStarting || BDACompetitionMode.Instance.sequencedCompetitionStarting)
                 yield return new WaitForFixedUpdate(); // Wait for the competition to actually start.
             if (!BDACompetitionMode.Instance.competitionIsActive)
             {
                 message = "Competition failed to start for heat " + hash + ".";
                 BDACompetitionMode.Instance.competitionStatus.Add(message);
-                Debug.Log("[BDAScoreService]: " + message);
+                Debug.Log("[BDArmory.BDAScoreService]: " + message);
                 yield break;
             }
             competitionStarted = true;
@@ -348,31 +370,30 @@ namespace BDArmory.Competition
         {
             List<RecordModel> results = new List<RecordModel>();
             var playerNames = activePlayers;
-            Debug.Log(string.Format("[BDAScoreService] Building records for {0} players", playerNames.Count));
+            Debug.Log(string.Format("[BDArmory.BDAScoreService] Building records for {0} players", playerNames.Count));
             foreach (string playerName in playerNames)
             {
-                var separatorIndex = playerName.IndexOf('_');
-                if (separatorIndex < 0)
+                if (!client.playerVessels.ContainsKey(playerName))
                 {
-                    Debug.Log(string.Format("[BDAScoreService] Unmatched player {0}", playerName));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] Unmatched player {0}", playerName));
                     Debug.Log("DEBUG players were " + string.Join(", ", client.players.Values));
                     continue;
                 }
 
-                var playerNamePart = playerName.Substring(0, separatorIndex);
+                var playerNamePart = client.playerVessels[playerName].Item1;
                 PlayerModel player = client.players.Values.FirstOrDefault(e => e.name == playerNamePart);
                 if (player == null)
                 {
-                    Debug.Log(string.Format("[BDAScoreService] Unmatched player {0}", playerNamePart));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] Unmatched player {0}", playerNamePart));
                     Debug.Log("DEBUG players were " + string.Join(", ", client.players.Values));
                     continue;
                 }
 
-                var vesselNamePart = playerName.Substring(separatorIndex + 1);
+                var vesselNamePart = client.playerVessels[playerName].Item2;
                 VesselModel vessel = client.vessels.Values.FirstOrDefault(e => e.player_id == player.id && e.name == vesselNamePart);
                 if (vessel == null)
                 {
-                    Debug.Log(string.Format("[BDAScoreService] Unmatched vessel for playerId {0}", player.id));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] Unmatched vessel for playerId {0}", player.id));
                     Debug.Log("DEBUG vessels were " + string.Join(", ", client.vessels.Values.Select(p => p.id)));
                     continue;
                 }
@@ -404,7 +425,7 @@ namespace BDArmory.Competition
                 }
                 results.Add(record);
             }
-            Debug.Log(string.Format("[BDAScoreService] Built records for {0} players", results.Count));
+            Debug.Log(string.Format("[BDArmory.BDAScoreService] Built records for {0} players", results.Count));
             return results;
         }
 
@@ -559,7 +580,7 @@ namespace BDArmory.Competition
         {
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log(string.Format("[BDAScoreService] TrackDamage by {0} on {1} for {2}hp", target, attacker, damage));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] TrackDamage by {0} on {1} for {2}hp", target, attacker, damage));
             }
             activePlayers.Add(attacker);
             activePlayers.Add(target);
@@ -585,7 +606,7 @@ namespace BDArmory.Competition
         {
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log(string.Format("[BDAScoreService] TrackMissileDamage by {0} on {1} for {2}hp", target, attacker, damage));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] TrackMissileDamage by {0} on {1} for {2}hp", target, attacker, damage));
             }
             activePlayers.Add(attacker);
             activePlayers.Add(target);
@@ -610,7 +631,7 @@ namespace BDArmory.Competition
         public void TrackMissileParts(string attacker, string target, int count)
         {
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log(string.Format("[BDAScoreService] TrackMissileParts by {0} on {1} for {2}parts", target, attacker, count));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] TrackMissileParts by {0} on {1} for {2}parts", target, attacker, count));
 
             double now = Planetarium.GetUniversalTime();
             activePlayers.Add(attacker);
@@ -640,7 +661,7 @@ namespace BDArmory.Competition
         public void TrackRammedParts(string attacker, string target, int count)
         {
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                Debug.Log(string.Format("[BDAScoreService] TrackRammedParts by {0} on {1} for {2}parts", target, attacker, count));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] TrackRammedParts by {0} on {1} for {2}parts", target, attacker, count));
 
             double now = Planetarium.GetUniversalTime();
             activePlayers.Add(attacker);
@@ -671,7 +692,7 @@ namespace BDArmory.Competition
         {
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log(string.Format("[BDAScoreService] TrackHit by {0} on {1} with {2} at {3}m", target, attacker, weaponName, hitDistance));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] TrackHit by {0} on {1} with {2} at {3}m", target, attacker, weaponName, hitDistance));
             }
             double now = Planetarium.GetUniversalTime();
             activePlayers.Add(attacker);
@@ -771,7 +792,7 @@ namespace BDArmory.Competition
         {
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log(string.Format("[BDAScoreService] TrackDeath for {0}", target));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] TrackDeath for {0}", target));
             }
             activePlayers.Add(target);
             IncrementDeath(target);
@@ -783,7 +804,7 @@ namespace BDArmory.Competition
             {
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
                 {
-                    Debug.Log(string.Format("[BDAScoreService] IncrementDeaths for {0}", target));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] IncrementDeaths for {0}", target));
                 }
                 ++deaths[target];
             }
@@ -791,7 +812,7 @@ namespace BDArmory.Competition
             {
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
                 {
-                    Debug.Log(string.Format("[BDAScoreService] FirstDeath for {0}", target));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] FirstDeath for {0}", target));
                 }
                 deaths.Add(target, 1);
             }
@@ -804,7 +825,7 @@ namespace BDArmory.Competition
         {
             if (BDArmorySettings.DRAW_DEBUG_LABELS)
             {
-                Debug.Log(string.Format("[BDAScoreService] TrackKill {0} by {1}", target, attacker));
+                Debug.Log(string.Format("[BDArmory.BDAScoreService] TrackKill {0} by {1}", target, attacker));
             }
             activePlayers.Add(attacker);
             activePlayers.Add(target);
@@ -822,7 +843,7 @@ namespace BDArmory.Competition
                 {
                     if (BDArmorySettings.DRAW_DEBUG_LABELS)
                     {
-                        Debug.Log(string.Format("[BDAScoreService] IncrementKills for {0} on {1}", attacker, target));
+                        Debug.Log(string.Format("[BDArmory.BDAScoreService] IncrementKills for {0} on {1}", attacker, target));
                     }
                     ++killsOnTarget[attacker][target];
                 }
@@ -830,7 +851,7 @@ namespace BDArmory.Competition
                 {
                     if (BDArmorySettings.DRAW_DEBUG_LABELS)
                     {
-                        Debug.Log(string.Format("[BDAScoreService] Kill for {0} on {1}", attacker, target));
+                        Debug.Log(string.Format("[BDArmory.BDAScoreService] Kill for {0} on {1}", attacker, target));
                     }
                     killsOnTarget[attacker].Add(target, 1);
                 }
@@ -839,7 +860,7 @@ namespace BDArmory.Competition
             {
                 if (BDArmorySettings.DRAW_DEBUG_LABELS)
                 {
-                    Debug.Log(string.Format("[BDAScoreService] FirstKill for {0} on {1}", attacker, target));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] FirstKill for {0} on {1}", attacker, target));
                 }
                 var newKills = new Dictionary<string, int>();
                 newKills.Add(target, 1);
@@ -870,7 +891,7 @@ namespace BDArmory.Competition
                 wrapper.items = JsonUtility.FromJson<T[]>(json);
                 if (wrapper == null || wrapper.items == null)
                 {
-                    Debug.Log(string.Format("[BDAScoreService] Failed to decode {0}", json));
+                    Debug.Log(string.Format("[BDArmory.BDAScoreService] Failed to decode {0}", json));
                     return new List<T>();
                 }
                 else

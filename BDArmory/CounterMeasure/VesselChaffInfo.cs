@@ -20,7 +20,7 @@ namespace BDArmory.CounterMeasure
             vessel = GetComponent<Vessel>();
             if (!vessel)
             {
-                Debug.Log("[BDArmory]: VesselChaffInfo was added to an object with no vessel component");
+                Debug.Log("[BDArmory.VesselChaffInfo]: VesselChaffInfo was added to an object with no vessel component");
                 Destroy(this);
                 return;
             }

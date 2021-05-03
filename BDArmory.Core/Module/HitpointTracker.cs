@@ -37,6 +37,10 @@ namespace BDArmory.Core.Module
 
         #endregion KSP Fields
 
+        #region Heart Bleed
+        private double nextHeartBleedTime = 0;
+        #endregion Heart Bleed
+
         private readonly float hitpointMultiplier = BDArmorySettings.HITPOINT_MULTIPLIER;
 
         private float previousHitpoints;
@@ -72,12 +76,12 @@ namespace BDArmory.Core.Module
                             try
                             {
                                 maxHitPoints = float.Parse(maxHPString);
-                                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitPointTracker]: setting maxHitPoints of " + part + " on " + part.vessel.vesselName + " to " + maxHitPoints);
+                                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.HitPointTracker]: setting maxHitPoints of " + part + " on " + part.vessel.vesselName + " to " + maxHitPoints);
                                 _updateHitpoints = true;
                             }
                             catch (Exception e)
                             {
-                                Debug.LogError("[HitPointTracker]: Failed to parse maxHitPoints configNode: " + e.Message);
+                                Debug.LogError("[BDArmory.HitPointTracker]: Failed to parse maxHitPoints configNode: " + e.Message);
                             }
                         }
                         else // Use the stock default value.
@@ -126,7 +130,7 @@ namespace BDArmory.Core.Module
             }
             else
             {
-                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: OnStart part is null");
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.HitpointTracker]: OnStart part is null");
             }
         }
 
@@ -159,11 +163,18 @@ namespace BDArmory.Core.Module
         public override void OnUpdate()
         {
             RefreshHitPoints();
+            if (BDArmorySettings.HEART_BLEED_ENABLED && ShouldHeartBleed())
+            {
+                HeartBleed();
+            }
         }
 
-        public void Update()
+        void Update()
         {
-            RefreshHitPoints();
+            if (HighLogic.LoadedSceneIsEditor)
+            {
+                RefreshHitPoints();
+            }
         }
 
         private void RefreshHitPoints()
@@ -174,6 +185,37 @@ namespace BDArmory.Core.Module
                 _updateHitpoints = false;
                 _forceUpdateHitpointsUI = false;
             }
+        }
+
+        private bool ShouldHeartBleed()
+        {
+            // wait until "now" exceeds the "next tick" value
+            double dTime = Planetarium.GetUniversalTime();
+            if (dTime < nextHeartBleedTime)
+            {
+                //Debug.Log(string.Format("[HitpointTracker] TimeSkip ShouldHeartBleed for {0} on {1}", part.name, part.vessel.vesselName));
+                return false;
+            }
+
+            // assign next tick time
+            double interval = BDArmorySettings.HEART_BLEED_INTERVAL;
+            nextHeartBleedTime = dTime + interval;
+
+            return true;
+        }
+
+        private void HeartBleed()
+        {
+            float rate = BDArmorySettings.HEART_BLEED_RATE;
+            float deduction = Hitpoints * rate;
+            if (Hitpoints - deduction < BDArmorySettings.HEART_BLEED_THRESHOLD)
+            {
+                // can't die from heart bleed
+                return;
+            }
+            // deduct hp base on the rate
+            //Debug.Log(string.Format("[HitpointTracker] Heart bleed {0} on {1} by {2:#.##} ({3:#.##}%)", part.name, part.vessel.vesselName, deduction, rate*100.0));
+            AddDamage(deduction);
         }
 
         #region Hitpoints Functions
@@ -191,17 +233,17 @@ namespace BDArmory.Core.Module
 
                 var density = (part.mass * 1000f) / structuralVolume;
                 density = Mathf.Clamp(density, 1000, 10000);
-                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: Hitpoint Calc" + part.name + " | structuralVolume : " + structuralVolume);
-                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: Hitpoint Calc" + part.name + " | Density : " + density);
+                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.HitpointTracker]: Hitpoint Calc" + part.name + " | structuralVolume : " + structuralVolume);
+                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.HitpointTracker]: Hitpoint Calc" + part.name + " | Density : " + density);
 
                 var structuralMass = density * structuralVolume;
-                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[HitpointTracker]: Hitpoint Calc" + part.name + " | structuralMass : " + structuralMass);
+                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.HitpointTracker]: Hitpoint Calc" + part.name + " | structuralMass : " + structuralMass);
                 //3. final calculations
                 hitpoints = structuralMass * hitpointMultiplier * 0.333f;
 
                 if (hitpoints > 10 * part.mass * 1000f || hitpoints < 0.1f * part.mass * 1000f)
                 {
-                    if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log($"[HitpointTracker]: Clamping hitpoints for part {part.name}");
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log($"[BDArmory.HitpointTracker]: Clamping hitpoints for part {part.name}");
                     hitpoints = hitpointMultiplier * part.mass * 333f;
                 }
 

@@ -8,7 +8,7 @@ namespace BDArmory.Core
     {
         public override void OnAwake()
         {
-            Debug.Log("[BDArmory]: Modifying Buildings");
+            Debug.Log("[BDArmory.BuildingDamage]: Modifying Buildings");
 
             foreach (KeyValuePair<string, ProtoDestructible> bldg in protoDestructibles)
             {

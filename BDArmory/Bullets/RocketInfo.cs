@@ -14,6 +14,10 @@ namespace BDArmory.Bullets
         public float thrustTime { get; private set; }
         public bool shaped { get; private set; }
         public bool flak { get; private set; }
+        public bool EMP { get; private set; }
+        public bool choker { get; private set; }
+        public bool gravitic { get; private set; }
+        public bool impulse { get; private set; }
         public bool explosive { get; private set; }
         public float tntMass { get; private set; }
         public int subProjectileCount { get; private set; }
@@ -25,7 +29,7 @@ namespace BDArmory.Bullets
         public static RocketInfo defaultRocket;
 
         public RocketInfo(string name, float rocketMass, float caliber, float thrust, float thrustTime,
-                          bool shaped, bool flak, bool explosive, float tntMass, int subProjectileCount, float thrustDeviation, string rocketModelPath)
+                         bool shaped, bool flak, bool EMP, bool choker, bool gravitic, bool impulse, bool explosive, float tntMass, int subProjectileCount, float thrustDeviation, string rocketModelPath)
         {
             this.name = name;
             this.rocketMass = rocketMass;
@@ -34,6 +38,10 @@ namespace BDArmory.Bullets
             this.thrustTime = thrustTime;
             this.shaped = shaped;
             this.flak = flak;
+            this.EMP = EMP;
+            this.choker = choker;
+            this.gravitic = gravitic;
+            this.impulse = impulse;
             this.explosive = explosive;
             this.tntMass = tntMass;
             this.subProjectileCount = subProjectileCount;
@@ -56,7 +64,7 @@ namespace BDArmory.Bullets
                     if (nodes[i].parent.name != "BD_Rockets") continue; // Ignore other config files.
                     node = nodes[i].config;
                     if (!node.HasValue("name") || (string)ParseField(nodes[i].config, "name", typeof(string)) != "def") continue; // Ignore other configs.
-                    Debug.Log("[BDArmory]: Parsing default rocket definition from " + nodes[i].parent.name);
+                    Debug.Log("[BDArmory.RocketInfo]: Parsing default rocket definition from " + nodes[i].parent.name);
                     defaultRocket = new RocketInfo(
                         "def",
                         (float)ParseField(node, "rocketMass", typeof(float)),
@@ -65,6 +73,10 @@ namespace BDArmory.Bullets
                         (float)ParseField(node, "thrustTime", typeof(float)),
                         (bool)ParseField(node, "shaped", typeof(bool)),
                         (bool)ParseField(node, "flak", typeof(bool)),
+                        (bool)ParseField(node, "EMP", typeof(bool)),
+                        (bool)ParseField(node, "choker", typeof(bool)),
+                        (bool)ParseField(node, "gravitic", typeof(bool)),
+                        (bool)ParseField(node, "impulse", typeof(bool)),
                         (bool)ParseField(node, "explosive", typeof(bool)),
                         (float)ParseField(node, "tntMass", typeof(float)),
                         (int)ParseField(node, "subProjectileCount", typeof(int)),
@@ -88,10 +100,10 @@ namespace BDArmory.Bullets
                     if (rocketNames.Contains(name_)) // Avoid duplicates.
                     {
                         if (nodes[i].parent.name != "BD_Rockets" || name_ != "def") // Don't report the default bullet definition as a duplicate.
-                            Debug.LogError("[BDArmory]: Rocket definition " + name_ + " from " + nodes[i].parent.name + " already exists, skipping.");
+                            Debug.LogError("[BDArmory.RocketInfo]: Rocket definition " + name_ + " from " + nodes[i].parent.name + " already exists, skipping.");
                         continue;
                     }
-                    Debug.Log("[BDArmory]: Parsing definition of rocket " + name_ + " from " + nodes[i].parent.name);
+                    Debug.Log("[BDArmory.RocketInfo]: Parsing definition of rocket " + name_ + " from " + nodes[i].parent.name);
                     rockets.Add(
                         new RocketInfo(
                             name_,
@@ -101,6 +113,10 @@ namespace BDArmory.Bullets
                             (float)ParseField(node, "thrustTime", typeof(float)),
                             (bool)ParseField(node, "shaped", typeof(bool)),
                             (bool)ParseField(node, "flak", typeof(bool)),
+                            (bool)ParseField(node, "EMP", typeof(bool)),
+                            (bool)ParseField(node, "choker", typeof(bool)),
+                            (bool)ParseField(node, "gravitic", typeof(bool)),
+                            (bool)ParseField(node, "impulse", typeof(bool)),
                             (bool)ParseField(node, "explosive", typeof(bool)),
                             (float)ParseField(node, "tntMass", typeof(float)),
                             (int)ParseField(node, "subProjectileCount", typeof(int)),
@@ -112,7 +128,7 @@ namespace BDArmory.Bullets
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError("[BDArmory]: Error Loading Rocket Config '" + name_ + "' | " + e.ToString());
+                    Debug.LogError("[BDArmory.RocketInfo]: Error Loading Rocket Config '" + name_ + "' | " + e.ToString());
                 }
             }
         }
@@ -146,7 +162,7 @@ namespace BDArmory.Bullets
                 {
                     // Give a warning about the missing or invalid value, then use the default value using reflection to find the field.
                     var defaultValue = typeof(RocketInfo).GetProperty(field, BindingFlags.Public | BindingFlags.Instance).GetValue(defaultRocket);
-                    Debug.LogError("[BDArmory]: Using default value of " + defaultValue.ToString() + " for " + field + " | " + e.ToString());
+                    Debug.LogError("[BDArmory.RocketInfo]: Using default value of " + defaultValue.ToString() + " for " + field + " | " + e.ToString());
                     return defaultValue;
                 }
                 else

@@ -24,7 +24,7 @@ namespace BDArmory.Modules
 
         bool extending;
         double startedExtendingAt = 0;
-        // string extendingReason = "";
+        public string extendingReason = "";
 
         bool requestedExtend;
         Vector3 requestedExtendTpos;
@@ -37,16 +37,21 @@ namespace BDArmory.Modules
         public void StopExtending()
         {
             extending = false;
-            // extendingReason = "";
+            extendingReason = "";
             startedExtendingAt = 0;
-            // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("DEBUG Stop extending due to request");
+            if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDModulePilotAI]: " + vessel.vesselName + " stopped extending due to request");
         }
 
-        public void RequestExtend(Vector3 tPosition)
+        public void RequestExtend(Vector3 tPosition, Vessel target = null)
         {
             requestedExtend = true;
             requestedExtendTpos = tPosition;
+            extendingReason = "Request";
+            if (target != null)
+                extendTarget = target;
         }
+
+        public Vessel extendTarget = null;
 
         public override bool CanEngage()
         {
@@ -231,17 +236,22 @@ namespace BDArmory.Modules
             UI_FloatRange(minValue = 10f, maxValue = 200f, stepIncrement = 1.0f, scene = UI_Scene.All)]
         public float idleSpeed = 120f;
 
-        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_SteerLimiter", advancedTweakable = true, //Steer Limiter
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_LowSpeedSteerLimiter", advancedTweakable = true, // Low-Speed Steer Limiter
             groupName = "pilotAI_ControlLimits", groupDisplayName = "#LOC_BDArmory_PilotAI_ControlLimits", groupStartCollapsed = true),
             UI_FloatRange(minValue = .1f, maxValue = 1f, stepIncrement = .05f, scene = UI_Scene.All)]
         public float maxSteer = 1;
 
-        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_SASteerLimiter", advancedTweakable = true, //Speed Adjusted Steer Limiter
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_LowSpeedLimiterSpeed", advancedTweakable = true, // Low-Speed Limiter Switch Speed 
             groupName = "pilotAI_ControlLimits", groupDisplayName = "#LOC_BDArmory_PilotAI_ControlLimits", groupStartCollapsed = true),
-            UI_FloatRange(minValue = .1f, maxValue = 2f, stepIncrement = .05f, scene = UI_Scene.All)]
+            UI_FloatRange(minValue = 10f, maxValue = 500f, stepIncrement = 1.0f, scene = UI_Scene.All)]
+        public float lowSpeedSwitch = 100f;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_HighSpeedSteerLimiter", advancedTweakable = true, // High-Speed Steer Limiter
+            groupName = "pilotAI_ControlLimits", groupDisplayName = "#LOC_BDArmory_PilotAI_ControlLimits", groupStartCollapsed = true),
+            UI_FloatRange(minValue = .1f, maxValue = 1f, stepIncrement = .05f, scene = UI_Scene.All)]
         public float maxSteerAtMaxSpeed = 1;
 
-        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_LimiterSpeed", advancedTweakable = true, //Adjusted Limiter Speed
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_HighSpeedLimiterSpeed", advancedTweakable = true, // High-Speed Limiter Switch Speed 
             groupName = "pilotAI_ControlLimits", groupDisplayName = "#LOC_BDArmory_PilotAI_ControlLimits", groupStartCollapsed = true),
             UI_FloatRange(minValue = 10f, maxValue = 500f, stepIncrement = 1.0f, scene = UI_Scene.All)]
         public float cornerSpeed = 200f;
@@ -405,7 +415,7 @@ namespace BDArmory.Modules
             var vesselName = HighLogic.LoadedSceneIsFlight ? vessel.GetDisplayName() : EditorLogic.fetch.ship.shipName;
             if (storedSettings == null || !storedSettings.ContainsKey(vesselName) || storedSettings[vesselName] == null || storedSettings[vesselName].Count == 0)
             {
-                Debug.Log("[BDModulePilotAI]: No stored settings found for vessel " + vesselName + ".");
+                Debug.Log("[BDArmory.BDModulePilotAI]: No stored settings found for vessel " + vesselName + ".");
                 return;
             }
             foreach (var setting in storedSettings[vesselName])
@@ -536,6 +546,7 @@ namespace BDArmory.Modules
 
         float finalMaxSteer = 1;
 
+        string lastStatus = "Free";
         #endregion
 
         #region RMB info in editor
@@ -696,7 +707,6 @@ namespace BDArmory.Modules
             customDynamicAxisField.guiActive = dynamicDamping;
             customDynamicAxisField.guiActiveEditor = dynamicDamping;
         }
-
         protected override void Start()
         {
             base.Start();
@@ -823,7 +833,7 @@ namespace BDArmory.Modules
         // This is triggered every Time.fixedDeltaTime.
         protected override void AutoPilot(FlightCtrlState s)
         {
-            finalMaxSteer = maxSteer;
+            finalMaxSteer = 1f; // Reset finalMaxSteer, is adjusted in subsequent methods
 
             if (terrainAlertCoolDown > 0)
                 terrainAlertCoolDown -= Time.fixedDeltaTime;
@@ -860,13 +870,13 @@ namespace BDArmory.Modules
             if (gainAltInhibited && (!belowMinAltitude || !(currentStatus == "Engaging" || currentStatus == "Evading" || currentStatus.StartsWith("Gain Alt"))))
             { // Allow switching between "Engaging", "Evading" and "Gain Alt." while below minimum altitude without disabling the gain altitude inhibitor.
                 gainAltInhibited = false;
-                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDModulePilotAI]: " + vessel.vesselName + " is no longer inhibiting gain alt");
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDModulePilotAI]: " + vessel.vesselName + " is no longer inhibiting gain alt");
             }
 
             if (!gainAltInhibited && belowMinAltitude && (currentStatus == "Engaging" || currentStatus == "Evading"))
             { // Vessel went below minimum altitude while "Engaging" or "Evading", enable the gain altitude inhibitor.
                 gainAltInhibited = true;
-                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDModulePilotAI]: " + vessel.vesselName + " was " + currentStatus + " and went below min altitude, inhibiting gain alt.");
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDModulePilotAI]: " + vessel.vesselName + " was " + currentStatus + " and went below min altitude, inhibiting gain alt.");
             }
 
             if (vessel.srfSpeed < minSpeed)
@@ -903,11 +913,20 @@ namespace BDArmory.Modules
                 terrainAlertCoolDown = 1.0f; // 1s cool down after avoiding terrain or gaining altitude. (Only used for delaying "orbitting" for now.)
                 belowMinAltitude = false;
             }
+
+            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+            {
+                if (lastStatus != currentStatus && !(lastStatus.StartsWith("Gain Alt.") && currentStatus.StartsWith("Gain Alt.")) && !(lastStatus.StartsWith("Terrain") && currentStatus.StartsWith("Terrain")))
+                {
+                    Debug.Log("[BDArmory.BDModulePilotAI]: Status of " + vessel.vesselName + " changed from " + lastStatus + " to " + currentStatus);
+                }
+                lastStatus = currentStatus;
+            }
         }
 
         void UpdateAI(FlightCtrlState s)
         {
-            currentStatus = "Free";
+            SetStatus("Free");
 
             if (requestedExtend)
             {
@@ -920,10 +939,11 @@ namespace BDArmory.Modules
             // Calculate threat rating from any threats
             float minimumEvasionTime = minEvasionTime;
             threatRating = evasionThreshold + 1f; // Don't evade by default
-            if (weaponManager && (weaponManager.missileIsIncoming || weaponManager.isChaffing || weaponManager.isFlaring))
+            if (weaponManager && (weaponManager.ThreatClosingTime(weaponManager.incomingMissileVessel) <= weaponManager.cmThreshold))
             {
                 threatRating = 0f; // Allow entering evasion code if we're under missile fire
-                minimumEvasionTime = minEvasionTime * 2f + 1f; // Longer minimum evasion time for missiles, so we don't turn into them
+                minimumEvasionTime = 0f; //  Trying to evade missile threats when they don't exist will result in NREs
+                StopExtending(); // Don't keep trying to extend if under fire from missiles
             }
             else if (weaponManager.underFire && !ramming) // If we're ramming, ignore gunfire.
             {
@@ -931,8 +951,7 @@ namespace BDArmory.Modules
                     threatRating = weaponManager.incomingMissDistance;
             }
 
-            debugString.Append($"Threat Rating: {threatRating}");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"Threat Rating: {threatRating}");
 
             // If we're currently evading or a threat is significant and we're not ramming.
             if ((evasiveTimer < minimumEvasionTime && evasiveTimer != 0) || threatRating < evasionThreshold)
@@ -943,7 +962,7 @@ namespace BDArmory.Modules
 
                     if (weaponManager)
                     {
-                        if (weaponManager.rwr?.rwrEnabled ?? false) //use rwr to check missile threat direction
+                        if (weaponManager.rwr != null ? weaponManager.rwr.rwrEnabled : false) //use rwr to check missile threat direction
                         {
                             Vector3 missileThreat = Vector3.zero;
                             bool missileThreatDetected = false;
@@ -995,8 +1014,9 @@ namespace BDArmory.Modules
                         //dangerous if low altitude and target is far below you - don't dive into ground!
                         if (!extending) startedExtendingAt = Planetarium.GetUniversalTime();
                         extending = true;
-                        // extendingReason = "Too steeply below";
+                        extendingReason = "Too steeply below";
                         lastTargetPosition = targetVessel.vesselTransform.position;
+                        extendTarget = targetVessel;
                     }
 
                     if (Vector3.Angle(targetVessel.vesselTransform.position - vesselTransform.position, vesselTransform.up) > 35) // If target is outside of 35° cone ahead of us then keep flying straight.
@@ -1008,8 +1028,7 @@ namespace BDArmory.Modules
                         turningTimer = 0;
                     }
 
-                    debugString.Append($"turningTimer: {turningTimer}");
-                    debugString.Append(Environment.NewLine);
+                    debugString.AppendLine($"turningTimer: {turningTimer}");
 
                     float targetForwardDot = Vector3.Dot(targetVesselRelPos.normalized, vesselTransform.up);
                     float targetVelFrac = (float)(targetVessel.srfSpeed / vessel.srfSpeed);      //this is the ratio of the target vessel's velocity to this vessel's srfSpeed in the forward direction; this allows smart decisions about when to break off the attack
@@ -1018,15 +1037,16 @@ namespace BDArmory.Modules
                     {
                         if (!extending) startedExtendingAt = Planetarium.GetUniversalTime();
                         extending = true;
-                        // extendingReason = "Can't turn fast enough";
+                        extendingReason = "Can't turn fast enough";
                         lastTargetPosition = targetVessel.vesselTransform.position - vessel.Velocity();       //we'll set our last target pos based on the enemy vessel and where we were 1 seconds ago
+                        extendTarget = targetVessel;
                         weaponManager.ForceScan();
                     }
                     if (canExtend && turningTimer > 15)
                     {
                         //extend if turning circles for too long
-                        RequestExtend(targetVessel.vesselTransform.position);
-                        // extendingReason = "Turning too long";
+                        RequestExtend(targetVessel.vesselTransform.position, targetVessel);
+                        extendingReason = "Turning too long";
                         turningTimer = 0;
                         weaponManager.ForceScan();
                     }
@@ -1044,8 +1064,9 @@ namespace BDArmory.Modules
                     {
                         if (!extending) startedExtendingAt = Planetarium.GetUniversalTime();
                         extending = true;
-                        // extendingReason = "Surface target";
+                        extendingReason = "Surface target";
                         lastTargetPosition = targetVessel.transform.position;
+                        extendTarget = targetVessel;
                         weaponManager.ForceScan();
                     }
                 }
@@ -1055,9 +1076,8 @@ namespace BDArmory.Modules
                     if (weaponManager.HasWeaponsAndAmmo() || !RamTarget(s, targetVessel)) // If we're out of ammo, see if we can ram someone, otherwise, behave as normal.
                     {
                         ramming = false;
-                        currentStatus = "Engaging";
-                        debugString.Append($"Flying to target");
-                        debugString.Append(Environment.NewLine);
+                        SetStatus("Engaging");
+                        debugString.AppendLine($"Flying to target " + targetVessel.vesselName);
                         FlyToTargetVessel(s, targetVessel);
                     }
                 }
@@ -1067,7 +1087,7 @@ namespace BDArmory.Modules
                 evasiveTimer = 0;
                 if (!extending && !(terrainAlertCoolDown > 0))
                 {
-                    currentStatus = "Orbiting";
+                    SetStatus("Orbiting");
                     FlyOrbit(s, assignedPositionGeo, 2000, idleSpeed, ClockwiseOrbit);
                 }
             }
@@ -1075,16 +1095,15 @@ namespace BDArmory.Modules
             if (extending)
             {
                 evasiveTimer = 0;
-                currentStatus = "Extending";
-                debugString.Append($"Extending");
-                debugString.Append(Environment.NewLine);
+                SetStatus("Extending");
+                debugString.AppendLine($"Extending");
                 FlyExtend(s, lastTargetPosition);
             }
         }
 
         bool PredictCollisionWithVessel(Vessel v, float maxTime, out Vector3 badDirection)
         {
-            if (vessel == null || v == null || v == weaponManager?.incomingMissileVessel
+            if (vessel == null || v == null || v == (weaponManager != null ? weaponManager.incomingMissileVessel : null)
                 || v.rootPart.FindModuleImplementing<MissileBase>() != null) //evasive will handle avoiding missiles
             {
                 badDirection = Vector3.zero;
@@ -1121,7 +1140,7 @@ namespace BDArmory.Modules
             // Let's try to ram someone!
             if (!ramming)
                 ramming = true;
-            currentStatus = "Ramming speed!";
+            SetStatus("Ramming speed!");
 
             // Ease in velocity from 16s to 8s, ease in acceleration from 8s to 2s using the logistic function to give smooth adjustments to target point.
             float easeAccel = Mathf.Clamp01(1.1f / (1f + Mathf.Exp((timeToCPA - 5f))) - 0.05f);
@@ -1166,8 +1185,7 @@ namespace BDArmory.Modules
 
                         if (missile.TargetingMode == MissileBase.TargetingModes.Heat && !weaponManager.heatTarget.exists)
                         {
-                            debugString.Append($"Attempting heat lock");
-                            debugString.Append(Environment.NewLine);
+                            debugString.AppendLine($"Attempting heat lock");
                             target += v.srf_velocity.normalized * 10;
                         }
                         else
@@ -1208,8 +1226,7 @@ namespace BDArmory.Modules
                         Vector3 leadOffset = weapon.GetLeadOffset();
 
                         float targetAngVel = Vector3.Angle(v.transform.position - vessel.transform.position, v.transform.position + (vessel.Velocity()) - vessel.transform.position);
-                        debugString.Append($"targetAngVel: {targetAngVel}");
-                        debugString.Append(Environment.NewLine);
+                        debugString.AppendLine($"targetAngVel: {targetAngVel}");
                         float magnifier = Mathf.Clamp(targetAngVel, 1f, 2f);
                         magnifier += ((magnifier - 1f) * Mathf.Sin(Time.time * 0.75f));
                         target -= magnifier * leadOffset;
@@ -1288,8 +1305,7 @@ namespace BDArmory.Modules
             if ((targetDot < 0 && vessel.srfSpeed > finalMaxSpeed)
                 && distanceToTarget < 300 && vessel.srfSpeed < v.srfSpeed * 1.25f && Vector3.Dot(vessel.Velocity(), v.Velocity()) > 0) //distance is less than 800m
             {
-                debugString.Append($"Enemy on tail. Braking!");
-                debugString.Append(Environment.NewLine);
+                debugString.AppendLine($"Enemy on tail. Braking!");
                 AdjustThrottle(minSpeed, true);
             }
             if (missile != null
@@ -1297,8 +1313,8 @@ namespace BDArmory.Modules
                 && distanceToTarget < MissileLaunchParams.GetDynamicLaunchParams(missile, v.Velocity(), v.transform.position).minLaunchRange
                 && vessel.srfSpeed > idleSpeed)
             {
-                RequestExtend(lastTargetPosition); // Get far enough away to use the missile.
-                // extendingReason = "Missile";
+                RequestExtend(targetVessel.transform.position, targetVessel); // Get far enough away to use the missile.
+                extendingReason = "Too close for missile";
             }
 
             if (regainEnergy && angleToTarget > 30f)
@@ -1316,8 +1332,7 @@ namespace BDArmory.Modules
 
         void RegainEnergy(FlightCtrlState s, Vector3 direction, float throttleOverride = -1f)
         {
-            debugString.Append($"Regaining energy");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"Regaining energy");
 
             steerMode = SteerModes.Aiming;
             Vector3 planarDirection = Vector3.ProjectOnPlane(direction, upDirection);
@@ -1340,12 +1355,10 @@ namespace BDArmory.Modules
             float possibleAccel = speedController.GetPossibleAccel();
             float speed = (float)vessel.srfSpeed;
 
-            debugString.Append($"possibleAccel: {possibleAccel}");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"possibleAccel: {possibleAccel}");
 
             float limiter = ((speed - minSpeed) / 2 / minSpeed) + possibleAccel / 15f; // FIXME The calculation for possibleAccel needs further investigation.
-            debugString.Append($"unclamped limiter: { limiter}");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"unclamped limiter: { limiter}");
 
             return Mathf.Clamp01(limiter);
         }
@@ -1401,8 +1414,7 @@ namespace BDArmory.Modules
             float velAngleToTarget = Mathf.Clamp(Vector3.Angle(targetPosition - vesselTransform.position, vessel.Velocity()), 0, 90);
             float speedReductionFactor = 1.25f;
             float finalSpeed = Mathf.Min(speedController.targetSpeed, Mathf.Clamp(maxSpeed - (speedReductionFactor * velAngleToTarget), idleSpeed, maxSpeed));
-            debugString.Append($"Final Target Speed: {finalSpeed}");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"Final Target Speed: {finalSpeed}");
 
             if (!overrideThrottle)
             {
@@ -1445,23 +1457,18 @@ namespace BDArmory.Modules
             //    var projectPlane = Vector3.RotateTowards(upDirection, horizonUp, attitude * Mathf.PI / 180f, 0f);
             //    targetDirection = Vector3.ProjectOnPlane(targetDirection, projectPlane);
             //}
-            //debugString.Append($"Attitude: " + attitude);
-            //debugString.Append(Environment.NewLine);
+            //debugString.AppendLine($"Attitude: " + attitude);
 
             pitchError = VectorUtils.SignedAngle(Vector3.up, Vector3.ProjectOnPlane(targetDirection, Vector3.right), Vector3.back);
             yawError = VectorUtils.SignedAngle(Vector3.up, Vector3.ProjectOnPlane(targetDirectionYaw, Vector3.forward), Vector3.right);
 
-            if (vessel.srfSpeed > cornerSpeed)
-            {
-                finalMaxSteer *= 1 - (((float)vessel.srfSpeed - cornerSpeed) / (maxSpeed - cornerSpeed) * (1f - maxSteerAtMaxSpeed)); // linear approximation to set max control input when above corner speed
-                if (finalMaxSteer < 0.1f)
-                {
-                    finalMaxSteer = 0.1f; // added just in case to ensure some input is retained no matter what happens
-                }
-            }
-            //test
-            debugString.Append($"finalMaxSteer: {finalMaxSteer}");
-            debugString.Append(Environment.NewLine);
+            // User-set steer limits
+            if (maxSteer > maxSteerAtMaxSpeed)
+                finalMaxSteer *= Mathf.Clamp((maxSteerAtMaxSpeed - maxSteer) / (cornerSpeed - lowSpeedSwitch + 0.001f) * ((float)vessel.srfSpeed - lowSpeedSwitch) + maxSteer, maxSteerAtMaxSpeed, maxSteer); // Linearly varies between two limits, clamped at limit values
+            else
+                finalMaxSteer *= Mathf.Clamp((maxSteerAtMaxSpeed - maxSteer) / (cornerSpeed - lowSpeedSwitch + 0.001f) * ((float)vessel.srfSpeed - lowSpeedSwitch) + maxSteer, maxSteer, maxSteerAtMaxSpeed); // Linearly varies between two limits, clamped at limit values
+            finalMaxSteer = Mathf.Max(finalMaxSteer, 0.1f); // added just in case to ensure some input is retained no matter what happens
+            debugString.AppendLine($"finalMaxSteer: {finalMaxSteer}");
 
             //roll
             Vector3 currentRoll = -vesselTransform.forward;
@@ -1515,8 +1522,7 @@ namespace BDArmory.Modules
                 rollTarget = Vector3.RotateTowards(horizonNormal, rollTarget, maxBank / 180 * Mathf.PI, 0.0f);
 
             bankAngle = Vector3.SignedAngle(horizonNormal, rollTarget, vesselTransform.up);
-            // debugString.Append($"Bank Angle: " + bankAngle);
-            // debugString.Append(Environment.NewLine);
+            // debugString.AppendLine($"Bank Angle: " + bankAngle);
 
             //v/q
             float dynamicAdjustment = Mathf.Clamp(16 * (float)(vessel.srfSpeed / vessel.dynamicPressurekPa), 0, 1.2f);
@@ -1563,9 +1569,9 @@ namespace BDArmory.Modules
                 if (weaponManager.TargetOverride)
                 {
                     extending = false;
-                    // extendingReason = "";
+                    extendingReason = "";
                     startedExtendingAt = 0;
-                    // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("DEBUG Stop extending due to target override");
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDModulePilotAI]: " + vessel.vesselName + " stopped extending due to target override");
                 }
 
                 float extendDistance = Mathf.Clamp(weaponManager.guardRange - 1800, 500, 4000) * extendMult; // General extending distance.
@@ -1582,7 +1588,7 @@ namespace BDArmory.Modules
                     extendDistance = 300 * extendMult; // The effect of this is generally to extend for only 1 frame.
                     desiredMinAltitude = minAltitude;
                 }
-                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("DEBUG " + vessel.vesselName + " extending for " + (Planetarium.GetUniversalTime() - startedExtendingAt) + "s due to \"" + extendingReason + "\" for distance " + extendDistance + ", expected time " + (extendDistance / vessel.srfSpeed) + "s");
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDModulePilotAI]: " + vessel.vesselName + " is extending for " + (Planetarium.GetUniversalTime() - startedExtendingAt) + "s due to \"" + extendingReason + "\" for distance " + extendDistance + ", expected time " + (extendDistance / vessel.srfSpeed) + "s");
 
                 Vector3 srfVector = Vector3.ProjectOnPlane(vessel.transform.position - tPosition, upDirection);
                 float srfDist = srfVector.magnitude;
@@ -1605,17 +1611,17 @@ namespace BDArmory.Modules
                 else // We're far enough away, stop extending.
                 {
                     extending = false;
-                    // extendingReason = "";
+                    extendingReason = "";
                     startedExtendingAt = 0;
-                    // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("DEBUG Stop extending due to gone far enough (" + srfDist + " of " + extendDistance + ")");
+                    if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDModulePilotAI]: "+vessel.vesselName+" stopped extending due to gone far enough (" + srfDist + " of " + extendDistance + ")");
                 }
             }
             else // No weapon manager.
             {
                 extending = false;
-                // extendingReason = "";
+                extendingReason = "";
                 startedExtendingAt = 0;
-                // if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("DEBUG Stop extending due to no weapon manager");
+                if (BDArmorySettings.DRAW_DEBUG_LABELS) Debug.Log("[BDArmory.BDModulePilotAI]: "+vessel.vesselName+" stopped extending due to no weapon manager");
             }
         }
 
@@ -1629,8 +1635,7 @@ namespace BDArmory.Modules
 
             finalMaxSteer = GetSteerLimiterForSpeedAndPower();
 
-            debugString.Append($"Flying orbit");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"Flying orbit");
             Vector3 flightCenter = GetTerrainSurfacePosition(VectorUtils.GetWorldSurfacePostion(centerGPS, vessel.mainBody)) + (defaultAltitude * upDirection);
 
             Vector3 myVectorFromCenter = Vector3.ProjectOnPlane(vessel.transform.position - flightCenter, upDirection);
@@ -1650,7 +1655,7 @@ namespace BDArmory.Modules
 
             if (command != PilotCommands.Free && (vessel.transform.position - flightCenter).sqrMagnitude < radius * radius * 1.5f)
             {
-                Debug.Log("[BDModulePilotAI]: AI Pilot reached command destination.");
+                Debug.Log("[BDArmory.BDModulePilotAI]: AI Pilot reached command destination.");
                 command = PilotCommands.Free;
             }
 
@@ -1677,11 +1682,9 @@ namespace BDArmory.Modules
             if (vessel == null) return;
             if (weaponManager == null) return;
 
-            currentStatus = "Evading";
-            debugString.Append($"Evasive");
-            debugString.Append(Environment.NewLine);
-            debugString.Append($"Threat Distance: {weaponManager.incomingMissileDistance}");
-            debugString.Append(Environment.NewLine);
+            SetStatus("Evading");
+            debugString.AppendLine($"Evasive");
+            debugString.AppendLine($"Threat Distance: {weaponManager.incomingMissileDistance}");
 
             bool hasABEngines = (speedController.multiModeEngines.Count > 0);
 
@@ -1694,33 +1697,18 @@ namespace BDArmory.Modules
                     useAB = vessel.srfSpeed < minSpeed;
                     useBrakes = false;
                     float targetSpeed = minSpeed;
+                    if (weaponManager.isChaffing)
+                        targetSpeed = maxSpeed;
                     AdjustThrottle(targetSpeed, false, useAB);
                 }
 
-                if ((weaponManager.isChaffing || weaponManager.isFlaring) && (weaponManager.incomingMissileDistance > 2000))
+                if ((weaponManager.isChaffing || weaponManager.isFlaring) && weaponManager.incomingMissileVessel != null) // Missile evasion
                 {
-                    debugString.Append($"Breaking from missile threat!");
-                    debugString.Append(Environment.NewLine);
-
-                    Vector3 axis = -Vector3.Cross(vesselTransform.up, threatRelativePosition);
-                    Vector3 breakDirection = Quaternion.AngleAxis(90, axis) * threatRelativePosition;
-                    //Vector3 breakTarget = vesselTransform.position + breakDirection;
-
-                    if (hasABEngines)
-                        RegainEnergy(s, breakDirection);
-                    else
-                        RegainEnergy(s, breakDirection, 0.66f);
-                    return;
-                }
-                else if ((weaponManager.incomingMissileVessel) && (weaponManager.incomingMissileDistance <= 2000))
-                {
-                    float mSqrDist = Vector3.SqrMagnitude(weaponManager.incomingMissileVessel.transform.position - vesselTransform.position);
-                    if (mSqrDist < 810000) //900m
+                    if ((weaponManager.ThreatClosingTime(weaponManager.incomingMissileVessel) <= 1.5f) && (!weaponManager.isChaffing)) // Missile is about to impact, pull a hard turn
                     {
-                        debugString.Append($"Missile about to impact! pull away!");
-                        debugString.Append(Environment.NewLine);
+                        debugString.AppendLine($"Missile about to impact! pull away!");
 
-                        AdjustThrottle(maxSpeed, false, false);
+                        AdjustThrottle(maxSpeed, false, !weaponManager.isFlaring);
 
                         Vector3 cross = Vector3.Cross(weaponManager.incomingMissileVessel.transform.position - vesselTransform.position, vessel.Velocity()).normalized;
                         if (Vector3.Dot(cross, -vesselTransform.forward) < 0)
@@ -1728,6 +1716,38 @@ namespace BDArmory.Modules
                             cross = -cross;
                         }
                         FlyToPosition(s, vesselTransform.position + (50 * vessel.Velocity() / vessel.srfSpeed) + (100 * cross));
+                        return;
+                    }
+                    else // Fly at 90 deg to missile to put max distance between ourselves and dispensed flares/chaff
+                    {
+                        debugString.AppendLine($"Breaking from missile threat!");
+
+                        // Break off at 90 deg to missile
+                        Vector3 threatDirection = weaponManager.incomingMissileVessel.transform.position - vesselTransform.position;
+                        threatDirection = Vector3.ProjectOnPlane(threatDirection, upDirection);
+                        float sign = Vector3.SignedAngle(threatDirection, Vector3.ProjectOnPlane(vessel.Velocity(), upDirection), upDirection);
+                        Vector3 breakDirection = Vector3.ProjectOnPlane(Vector3.Cross(Mathf.Sign(sign) * upDirection, threatDirection), upDirection);
+
+                        // Dive to gain energy and hopefully lead missile into ground
+                        float angle = (Mathf.Clamp((float)vessel.radarAltitude - minAltitude, 0, 1500) / 1500) * 90;
+                        angle = Mathf.Clamp(angle, 0, 75) * Mathf.Deg2Rad;
+                        Vector3 targetDirection = Vector3.RotateTowards(breakDirection, -upDirection, angle, 0);
+                        targetDirection = Vector3.RotateTowards(vessel.Velocity(), targetDirection, 15f * Mathf.Deg2Rad, 0).normalized;
+
+                        steerMode = SteerModes.Aiming;
+
+                        if (weaponManager.isFlaring)
+                            if (!hasABEngines)
+                                AdjustThrottle(maxSpeed, false, useAB, 0.66f);
+                            else
+                                AdjustThrottle(maxSpeed, false, useAB);
+                        else
+                        {
+                            useAB = true;
+                            AdjustThrottle(maxSpeed, false, useAB);
+                        }
+
+                        FlyToPosition(s, vesselTransform.position + (targetDirection * 100), true);
                         return;
                     }
                 }
@@ -1742,7 +1762,7 @@ namespace BDArmory.Modules
                     if (threatDirectionFactor > 0.9f)     //within 28 degrees in front
                     { // This adds +-500/(threat distance) to the left or right relative to the breakTarget vector, regardless of the size of breakTarget
                         breakTarget += 500f / threatRelativePosition.magnitude * Vector3.Cross(threatRelativePosition.normalized, Mathf.Sign(Mathf.Sin((float)vessel.missionTime / 2)) * vessel.upAxis);
-                        debugString.Append($" from directly ahead!");
+                        debugString.AppendLine($" from directly ahead!");
                     }
                     else if (threatDirectionFactor < -0.9) //within ~28 degrees behind
                     {
@@ -1752,10 +1772,10 @@ namespace BDArmory.Modules
                             breakTarget = vesselTransform.position + vesselTransform.up * 1500 - 500 * vessel.upAxis;
                             breakTarget += Mathf.Sin((float)vessel.missionTime / 2) * vesselTransform.right * 1000 - Mathf.Cos((float)vessel.missionTime / 2) * vesselTransform.forward * 1000;
                             if (threatDistanceSqr > 800 * 800)
-                                debugString.Append($" from behind afar; engaging barrel roll");
+                                debugString.AppendLine($" from behind afar; engaging barrel roll");
                             else
                             {
-                                debugString.Append($" from behind moderate distance; engaging aggressvie barrel roll and braking");
+                                debugString.AppendLine($" from behind moderate distance; engaging aggressvie barrel roll and braking");
                                 steerMode = SteerModes.Aiming;
                                 AdjustThrottle(minSpeed, true, false);
                             }
@@ -1768,7 +1788,7 @@ namespace BDArmory.Modules
                             else
                                 breakTarget += -Math.Sign(Mathf.Sin((float)vessel.missionTime * 2)) * vesselTransform.right * 150;
 
-                            debugString.Append($" from directly behind and close; breaking hard");
+                            debugString.AppendLine($" from directly behind and close; breaking hard");
                             steerMode = SteerModes.Aiming;
                             AdjustThrottle(minSpeed, true, false); // Brake to slow down and turn faster while breaking target
                         }
@@ -1781,12 +1801,13 @@ namespace BDArmory.Modules
                             breakTarget += Mathf.Sin((float)vessel.missionTime * 2) * vesselTransform.right * 100;
 
                             steerMode = SteerModes.Aiming;
+                            debugString.AppendLine($" from near side; turning towards attacker");
                         }
                         else // More than 400m to the side.
                         { // This sets breakTarget to be 1500m ahead, then adds a 1000m offset at 90° to ahead.
                             breakTarget = vesselTransform.position + vesselTransform.up * 1500;
                             breakTarget += Mathf.Sin((float)vessel.missionTime / 2) * vesselTransform.right * 1000 - Mathf.Cos((float)vessel.missionTime / 2) * vesselTransform.forward * 1000;
-                            debugString.Append($" from far side; engaging barrel roll");
+                            debugString.AppendLine($" from far side; engaging barrel roll");
                         }
                     }
 
@@ -1813,7 +1834,7 @@ namespace BDArmory.Modules
             target +=
                 (Quaternion.AngleAxis(angleOff, upDirection) * Vector3.ProjectOnPlane(vesselTransform.up * 500, upDirection));
             //+ (Mathf.Sin (Time.time/3) * upDirection * minAltitude/3);
-
+            debugString.AppendLine($"Evading unknown attacker");
             FlyToPosition(s, target);
         }
 
@@ -1836,18 +1857,17 @@ namespace BDArmory.Modules
 
         void TakeOff(FlightCtrlState s)
         {
-            debugString.Append($"Taking off/Gaining altitude");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"Taking off/Gaining altitude");
 
             if (vessel.LandedOrSplashed && vessel.srfSpeed < takeOffSpeed)
             {
-                currentStatus = initialTakeOff ? "Taking off" : vessel.Splashed ? "Splashed" : "Landed";
+                SetStatus(initialTakeOff ? "Taking off" : vessel.Splashed ? "Splashed" : "Landed");
                 if (vessel.Splashed)
                 { vessel.ActionGroups.SetGroup(KSPActionGroup.Gear, false); }
                 assignedPositionWorld = vessel.transform.position;
                 return;
             }
-            currentStatus = "Gain Alt. (" + (int)minAltitude + "m)";
+            SetStatus("Gain Alt. (" + (int)minAltitude + "m)");
 
             steerMode = SteerModes.Aiming;
 
@@ -2028,7 +2048,7 @@ namespace BDArmory.Modules
                 FlyToPosition(s, vessel.transform.position + terrainAlertCorrectionDirection * 100);
 
                 // Update status and book keeping.
-                currentStatus = "Terrain (" + (int)terrainAlertDistance + "m)";
+                SetStatus("Terrain (" + (int)terrainAlertDistance + "m)");
                 terrainAlertCoolDown = 0.5f; // 0.5s cool down after avoiding terrain or gaining altitude. (Only used for delaying "orbitting" for now.)
                 return true;
             }
@@ -2049,9 +2069,8 @@ namespace BDArmory.Modules
             if (collisionDetectionTimer > 0)
             {
                 //fly avoid
-                currentStatus = "AvoidCollision";
-                debugString.Append($"Avoiding Collision");
-                debugString.Append(Environment.NewLine);
+                SetStatus("AvoidCollision");
+                debugString.AppendLine($"Avoiding Collision");
                 collisionDetectionTimer += Time.fixedDeltaTime;
 
                 Vector3 target = vesselTransform.position + collisionAvoidDirection;
@@ -2071,7 +2090,8 @@ namespace BDArmory.Modules
                         if (vs.Current == null) continue;
                         if (vs.Current == vessel || vs.Current.Landed || !(Vector3.Dot(vs.Current.transform.position - vesselTransform.position, vesselTransform.up) > 0)) continue;
                         if (!PredictCollisionWithVessel(vs.Current, vesselCollisionAvoidancePeriod + vesselCollisionAvoidanceTickerFreq * Time.fixedDeltaTime, out collisionAvoidDirection)) continue;
-                        if (vs.Current.FindPartModuleImplementing<IBDAIControl>()?.commandLeader?.vessel == vessel) continue;
+                        var ibdaiControl = vs.Current.FindPartModuleImplementing<IBDAIControl>();
+                        if (ibdaiControl != null && ibdaiControl.commandLeader != null && ibdaiControl.commandLeader.vessel == vessel) continue;
                         vesselCollision = true;
                         break; // Early exit on first detected vessel collision. Chances of multiple vessel collisions are low.
                     }
@@ -2092,8 +2112,7 @@ namespace BDArmory.Modules
         {
             if (Vector3.Dot(direction, upDirection) < 0)
             {
-                debugString.Append($"climb limit angle: unlimited");
-                debugString.Append(Environment.NewLine);
+                debugString.AppendLine($"climb limit angle: unlimited");
                 return direction; //only use this if climbing
             }
 
@@ -2101,8 +2120,7 @@ namespace BDArmory.Modules
 
             float angle = Mathf.Clamp((float)vessel.srfSpeed * 0.13f, 5, 90);
 
-            debugString.Append($"climb limit angle: {angle}");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"climb limit angle: {angle}");
             return Vector3.RotateTowards(planarDirection, direction, angle * Mathf.Deg2Rad, 0);
         }
 
@@ -2246,8 +2264,7 @@ namespace BDArmory.Modules
                 float deltaCosAoANorm = curCosAoA - lastCosAoA;
                 deltaCosAoANorm /= cosAoADiff;
 
-                debugString.Append($"Updating Neg Gs");
-                debugString.Append(Environment.NewLine);
+                debugString.AppendLine($"Updating Neg Gs");
                 negPitchDynPresLimitIntegrator -= 0.01f * Mathf.Clamp01(aoALimScalar + pitchInputScalar) * cosAoAOffset * (float)vessel.dynamicPressurekPa;
                 negPitchDynPresLimitIntegrator -= 0.005f * deltaCosAoANorm * (float)vessel.dynamicPressurekPa;
                 if (cosAoAOffset < 0)
@@ -2274,8 +2291,7 @@ namespace BDArmory.Modules
                 float deltaCosAoANorm = curCosAoA - lastCosAoA;
                 deltaCosAoANorm /= cosAoADiff;
 
-                debugString.Append($"Updating Pos Gs");
-                debugString.Append(Environment.NewLine);
+                debugString.AppendLine($"Updating Pos Gs");
                 posPitchDynPresLimitIntegrator -= 0.01f * Mathf.Clamp01(aoALimScalar + pitchInputScalar) * cosAoAOffset * (float)vessel.dynamicPressurekPa;
                 posPitchDynPresLimitIntegrator -= 0.005f * deltaCosAoANorm * (float)vessel.dynamicPressurekPa;
                 if (cosAoAOffset > 0)
@@ -2301,8 +2317,7 @@ namespace BDArmory.Modules
                 }
 
                 s.pitch = negLim;
-                debugString.Append($"Limiting Neg Gs");
-                debugString.Append(Environment.NewLine);
+                debugString.AppendLine($"Limiting Neg Gs");
             }
             posLim = posPitchDynPresLimitIntegrator * invVesselDynPreskPa + posPitchDynPresLimit;
             if (posLim < s.pitch)
@@ -2321,17 +2336,14 @@ namespace BDArmory.Modules
                 }
 
                 s.pitch = posLim;
-                debugString.Append($"Limiting Pos Gs");
-                debugString.Append(Environment.NewLine);
+                debugString.AppendLine($"Limiting Pos Gs");
             }
 
             lastPitchInput = s.pitch;
             lastCosAoA = curCosAoA;
 
-            debugString.Append($"Neg Pitch Lim: {negLim}");
-            debugString.Append(Environment.NewLine);
-            debugString.Append($"Pos Pitch Lim: {posLim}");
-            debugString.Append(Environment.NewLine);
+            debugString.AppendLine($"Neg Pitch Lim: {negLim}");
+            debugString.AppendLine($"Pos Pitch Lim: {posLim}");
         }
 
         void CalculateAccelerationAndTurningCircle()
@@ -2412,8 +2424,7 @@ namespace BDArmory.Modules
             if (pointRadarAlt < minAlt)
             {
                 float adjustment = (minAlt - pointRadarAlt);
-                debugString.Append($"Target position is below minAlt. Adjusting by {adjustment}");
-                debugString.Append(Environment.NewLine);
+                debugString.AppendLine($"Target position is below minAlt. Adjusting by {adjustment}");
                 return targetPosition + (adjustment * upDirection);
             }
             else
@@ -2548,12 +2559,12 @@ namespace BDArmory.Modules
 
             if (command == PilotCommands.Follow)
             {
-                currentStatus = "Follow";
+                SetStatus("Follow");
                 UpdateFollowCommand(s);
             }
             else if (command == PilotCommands.FlyTo)
             {
-                currentStatus = "Fly To";
+                SetStatus("Fly To");
                 FlyOrbit(s, assignedPositionGeo, 2500, idleSpeed, ClockwiseOrbit);
             }
             else if (command == PilotCommands.Attack)
@@ -2570,7 +2581,7 @@ namespace BDArmory.Modules
                 }
                 else
                 {
-                    currentStatus = "Attack";
+                    SetStatus("Attack");
                     FlyOrbit(s, assignedPositionGeo, 4500, maxSpeed, ClockwiseOrbit);
                 }
             }

@@ -211,8 +211,7 @@ namespace BDArmory.Modules
             if (weaponManager == null) return;
 
             float sqrDist = (part.transform.position - source).sqrMagnitude;
-            if (sqrDist < Mathf.Pow(BDArmorySettings.MAX_ENGAGEMENT_RANGE, 2) && sqrDist > Mathf.Pow(100, 2) &&
-                Vector3.Angle(direction, part.transform.position - source) < 15)
+            if (sqrDist < BDArmorySettings.MAX_ENGAGEMENT_RANGE * BDArmorySettings.MAX_ENGAGEMENT_RANGE && sqrDist > 10000f && Vector3.Angle(direction, part.transform.position - source) < 15f)
             {
                 StartCoroutine(
                     LaunchWarningRoutine(new TargetSignatureData(Vector3.zero,
@@ -285,7 +284,7 @@ namespace BDArmory.Modules
                     pingsData[openIndex] = new TargetSignatureData(Vector3.zero,
                         RadarUtils.WorldToRadar(source, referenceTransform, RwrDisplayRect, rwrDisplayRange), Vector3.zero,
                         true, (float)type);    // HACK! Evil misuse of signalstrength for the threat type!
-                    pingWorldPositions[openIndex] = source;
+                    pingWorldPositions[openIndex] = source; //FIXME source is improperly defined
                     StartCoroutine(PingLifeRoutine(openIndex, persistTime));
 
                     PlayWarningSound(type, (source - vessel.transform.position).sqrMagnitude);

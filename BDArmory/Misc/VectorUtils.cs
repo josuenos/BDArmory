@@ -27,7 +27,7 @@ namespace BDArmory.Misc
             float finalAngle = sign * angle;
             return finalAngle;
         }
-        
+
         /// <summary>
         /// Convert an angle to be between -180 and 180.
         /// </summary>
@@ -119,8 +119,9 @@ namespace BDArmory.Misc
             {
                 return Mathf.Sqrt(-2 * Mathf.Log(UnityEngine.Random.value)) * Mathf.Cos(Mathf.PI * UnityEngine.Random.value);
             }
-            catch (Exception)
+            catch (Exception e)
             { // I have no idea what exception Mathf.Log raises when it gets a zero
+                Debug.LogWarning("[BDArmory.VectorUtils]: Exception thrown in Gaussian: " + e.Message + "\n" + e.StackTrace);
                 return 0;
             }
         }
@@ -139,8 +140,9 @@ namespace BDArmory.Misc
             {
                 return Mathf.Sqrt(-2 * Mathf.Log(UnityEngine.Random.value));
             }
-            catch (Exception)
+            catch (Exception e)
             { // I have no idea what exception Mathf.Log raises when it gets a zero
+                Debug.LogWarning("[BDArmory.VectorUtils]: Exception thrown in Rayleigh: " + e.Message + "\n" + e.StackTrace);
                 return 0;
             }
         }
@@ -155,7 +157,6 @@ namespace BDArmory.Misc
         {
             if (!body)
             {
-                //Debug.Log ("BahaTurret.VectorUtils.WorldPositionToGeoCoords body is null");
                 return Vector3d.zero;
             }
 
