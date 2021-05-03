@@ -3192,43 +3192,6 @@ namespace BDArmory.Modules
                 }
             }
 
-            //============LOW PRIORITY MISSILES=========
-            if (targetMissiles)
-            {
-                //try to engage least engaged hostile missiles first
-                potentialTarget = BDATargetManager.GetMissileTarget(this);
-                if (potentialTarget)
-                {
-                    targetsTried.Add(potentialTarget);
-                    SetTarget(potentialTarget);
-                    if (SmartPickWeapon_EngagementEnvelope(potentialTarget))
-                    {
-                        if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                        {
-                            Debug.Log("[BDArmory.MissileFire]:" + vessel.vesselName + " is engaging the least engaged missile (" + potentialTarget.Vessel.vesselName + ") with " + selectedWeapon.GetShortName());
-                        }
-                        return;
-                    }
-                }
-
-                //then try to engage closest hostile missile
-                potentialTarget = BDATargetManager.GetClosestMissileTarget(this);
-                if (potentialTarget)
-                {
-                    targetsTried.Add(potentialTarget);
-                    SetTarget(potentialTarget);
-                    if (SmartPickWeapon_EngagementEnvelope(potentialTarget))
-                    {
-                        if (BDArmorySettings.DRAW_DEBUG_LABELS)
-                        {
-                            Debug.Log("[BDArmory.MissileFire]:" + vessel.vesselName + " is engaging the closest hostile missile (" + potentialTarget.Vessel.vesselName + ") with " + selectedWeapon.GetShortName());
-                        }
-                        return;
-                    }
-                }
-            }
-            //==========END LOW PRIORITY MISSILES=============
-
             //============VESSEL THREATS============
             // select target based on competition style
             if (BDArmorySettings.DEFAULT_FFA_TARGETING)
@@ -3301,6 +3264,43 @@ namespace BDArmory.Modules
                 }
             }
             //============END VESSEL THREATS============
+
+            //============LOW PRIORITY MISSILES=========
+            if (targetMissiles)
+            {
+                //try to engage least engaged hostile missiles first
+                potentialTarget = BDATargetManager.GetMissileTarget(this);
+                if (potentialTarget)
+                {
+                    targetsTried.Add(potentialTarget);
+                    SetTarget(potentialTarget);
+                    if (SmartPickWeapon_EngagementEnvelope(potentialTarget))
+                    {
+                        if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                        {
+                            Debug.Log("[BDArmory.MissileFire]:" + vessel.vesselName + " is engaging the least engaged missile (" + potentialTarget.Vessel.vesselName + ") with " + selectedWeapon.GetShortName());
+                        }
+                        return;
+                    }
+                }
+
+                //then try to engage closest hostile missile
+                potentialTarget = BDATargetManager.GetClosestMissileTarget(this);
+                if (potentialTarget)
+                {
+                    targetsTried.Add(potentialTarget);
+                    SetTarget(potentialTarget);
+                    if (SmartPickWeapon_EngagementEnvelope(potentialTarget))
+                    {
+                        if (BDArmorySettings.DRAW_DEBUG_LABELS)
+                        {
+                            Debug.Log("[BDArmory.MissileFire]:" + vessel.vesselName + " is engaging the closest hostile missile (" + potentialTarget.Vessel.vesselName + ") with " + selectedWeapon.GetShortName());
+                        }
+                        return;
+                    }
+                }
+            }
+            //==========END LOW PRIORITY MISSILES=============
 
             //if nothing works, get all remaining targets and try weapons against them
             using (List<TargetInfo>.Enumerator finalTargets = BDATargetManager.GetAllTargetsExcluding(targetsTried, this).GetEnumerator())

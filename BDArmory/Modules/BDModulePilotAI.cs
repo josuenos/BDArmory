@@ -306,6 +306,21 @@ namespace BDArmory.Modules
             UI_FloatRange(minValue = 0f, maxValue = 2f, stepIncrement = .1f, scene = UI_Scene.All)]
         public float extendMult = 1f;
 
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_ExtendTargetVel", advancedTweakable = true, //Extend Target Velocity Factor
+            groupName = "pilotAI_EvadeExtend", groupDisplayName = "#LOC_BDArmory_PilotAI_EvadeExtend", groupStartCollapsed = true),
+            UI_FloatRange(minValue = 0f, maxValue = 2f, stepIncrement = .1f, scene = UI_Scene.All)]
+        public float extendTargetVel = 0.8f;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_ExtendTargetAngle", advancedTweakable = true, //Extend Target Angle
+            groupName = "pilotAI_EvadeExtend", groupDisplayName = "#LOC_BDArmory_PilotAI_EvadeExtend", groupStartCollapsed = true),
+            UI_FloatRange(minValue = 0f, maxValue = 180f, stepIncrement = 1f, scene = UI_Scene.All)]
+        public float extendTargetAngle = 78f;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_ExtendTargetDist", advancedTweakable = true, //Extend Target Distance
+            groupName = "pilotAI_EvadeExtend", groupDisplayName = "#LOC_BDArmory_PilotAI_EvadeExtend", groupStartCollapsed = true),
+            UI_FloatRange(minValue = 0f, maxValue = 5000f, stepIncrement = 25f, scene = UI_Scene.All)]
+        public float extendTargetDist = 400f;
+
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_ExtendToggle", advancedTweakable = true,//Extend Toggle
             groupName = "pilotAI_EvadeExtend", groupDisplayName = "#LOC_BDArmory_PilotAI_EvadeExtend", groupStartCollapsed = true),
             UI_Toggle(enabledText = "#LOC_BDArmory_Enabled", disabledText = "#LOC_BDArmory_Disabled", scene = UI_Scene.All),]
@@ -943,7 +958,6 @@ namespace BDArmory.Modules
             {
                 threatRating = 0f; // Allow entering evasion code if we're under missile fire
                 minimumEvasionTime = 0f; //  Trying to evade missile threats when they don't exist will result in NREs
-                StopExtending(); // Don't keep trying to extend if under fire from missiles
             }
             else if (weaponManager.underFire && !ramming) // If we're ramming, ignore gunfire.
             {
@@ -984,6 +998,8 @@ namespace BDArmory.Modules
                             if (missileThreatDetected)
                             {
                                 threatRelativePosition = missileThreat - vesselTransform.position;
+                                if (extending)
+                                    StopExtending(); // Don't keep trying to extend if under fire from missiles
                             }
                         }
 
@@ -1030,10 +1046,11 @@ namespace BDArmory.Modules
 
                     debugString.AppendLine($"turningTimer: {turningTimer}");
 
-                    float targetForwardDot = Vector3.Dot(targetVesselRelPos.normalized, vesselTransform.up);
+                    float targetForwardDot = Vector3.Dot(targetVesselRelPos.normalized, vesselTransform.up); // Cosine of angle between us and target (1 if target is in front of us , -1 if target is behind us)
                     float targetVelFrac = (float)(targetVessel.srfSpeed / vessel.srfSpeed);      //this is the ratio of the target vessel's velocity to this vessel's srfSpeed in the forward direction; this allows smart decisions about when to break off the attack
 
-                    if (canExtend && targetVelFrac < 0.8f && targetForwardDot < 0.2f && targetVesselRelPos.magnitude < 400) // Target is outside of ~78° cone ahead, closer than 400m and slower than us, so we won't be able to turn to attack it now.
+                    float extendTargetDot = Mathf.Cos(extendTargetAngle * Mathf.Deg2Rad);
+                    if (canExtend && targetVelFrac < extendTargetVel && targetForwardDot < extendTargetDot && targetVesselRelPos.magnitude < extendTargetDist) // Default values: Target is outside of ~78° cone ahead, closer than 400m and slower than us, so we won't be able to turn to attack it now.
                     {
                         if (!extending) startedExtendingAt = Planetarium.GetUniversalTime();
                         extending = true;
