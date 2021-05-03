@@ -27,7 +27,7 @@ namespace BDArmory.Misc
             float finalAngle = sign * angle;
             return finalAngle;
         }
-        
+
         /// <summary>
         /// Convert an angle to be between -180 and 180.
         /// </summary>

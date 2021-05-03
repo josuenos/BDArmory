@@ -112,18 +112,24 @@ namespace BDArmory.Modules
             if (EMPDamage > EMPThreshold && !bricked && !disabled) //does the damage exceed the soft cap, but not the hard cap?
             {
                 disabled = true; //if so disable the craft
-                //Debug.Log("[BDArmory.ModuleDrainEC]: vessel disabled"); // add a screenmassage the craft's been EMP'd?
+                var message = "Disabling " + vessel.vesselName + " for " + rebootTimer + "s due to EMP damage";
+                Debug.Log("[BDArmory.ModuleDrainEC]: " + message);
+                BDACompetitionMode.Instance.competitionStatus.Add(message);
                 DisableVessel();
             }
             if (EMPDamage > BrickThreshold && !bricked) //does the damage exceed the hard cap?
             {
                 bricked = true; //if so brick the craft
-                //Debug.Log("[BDArmory.ModuleDrainEC]: vessel bricked");
+                var message = vessel.vesselName + " is bricked!";
+                Debug.Log("[BDArmory.ModuleDrainEC]: " + message);
+                BDACompetitionMode.Instance.competitionStatus.Add(message);
             }
             if (EMPDamage <= 0 && disabled && !bricked) //reset craft
             {
+                var message = "Rebooting " + vessel.vesselName;
+                Debug.Log("[BDArmory.ModuleDrainEC]: " + message);
+                BDACompetitionMode.Instance.competitionStatus.Add(message);
                 EnableVessel();
-                //Debug.Log("[BDArmory.ModuleDrainEC]: vessel rebooted");
             }
         }
         private void DisableVessel()

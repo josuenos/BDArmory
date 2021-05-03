@@ -60,6 +60,7 @@ namespace BDArmory.UI
         private bool _teamsAssigned = false;
         private bool _autoPilotEnabled = false;
         private bool _guardModeEnabled = false;
+        private bool _vesselTraceEnabled = false;
 
         // Vessel spawning
         // private bool _vesselsSpawned = false;
@@ -186,6 +187,23 @@ namespace BDArmory.UI
             }
         }
 
+        void FixedUpdate()
+        {
+            if (_vesselTraceEnabled)
+            {
+                if (!FloatingOrigin.Offset.IsZero() || !Krakensbane.GetFrameVelocity().IsZero())
+                    floatingOriginCorrection += FloatingOrigin.OffsetNonKrakensbane;
+                var survivingVessels = weaponManagers.SelectMany(tm => tm.Value).Where(wm => wm != null).Select(wm => wm.vessel).ToList();
+                foreach (var vessel in survivingVessels)
+                {
+                    if (vessel == null) continue;
+                    if (!vesselTraces.ContainsKey(vessel.vesselName)) vesselTraces[vessel.vesselName] = new List<Tuple<float, Vector3, Quaternion>>();
+                    vesselTraces[vessel.vesselName].Add(new Tuple<float, Vector3, Quaternion>(Time.time, referenceRotationCorrection * (vessel.transform.position + floatingOriginCorrection), referenceRotationCorrection * vessel.transform.rotation));
+                }
+                if (survivingVessels.Count == 0) _vesselTraceEnabled = false;
+            }
+        }
+
         private void Hotkeys()
         {
             if (BDInputUtils.GetKeyDown(BDInputSettingsFields.VS_SWITCH_NEXT))
@@ -286,8 +304,8 @@ namespace BDArmory.UI
 
         private void WindowVesselSwitcher(int id)
         {
-            int numButtons = 10;
-            GUI.DragWindow(new Rect(4f * _buttonHeight + _margin, 0f, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - numButtons * _buttonHeight - 3f * _margin, _titleHeight));
+            int numButtons = 11;
+            GUI.DragWindow(new Rect(5f * _buttonHeight + _margin, 0f, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - numButtons * _buttonHeight - 3f * _margin, _titleHeight));
 
             if (GUI.Button(new Rect(0f * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "><", BDArmorySetup.BDGuiSkin.button)) // Don't get so small that the buttons get hidden.
             {
@@ -312,6 +330,11 @@ namespace BDArmory.UI
             {
                 BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE = !BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE;
                 BDArmorySetup.SaveConfig();
+            }
+            if (GUI.Button(new Rect(4f * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "tr", _vesselTraceEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            {
+                if (_vesselTraceEnabled) StopVesselTracing();
+                else StartVesselTracing();
             }
 
             if (GUI.Button(new Rect(BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 6 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "M", BDACompetitionMode.Instance.killerGMenabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
@@ -1087,5 +1110,58 @@ namespace BDArmory.UI
             retTex.Apply();
             return retTex;
         }
+
+        #region Vessel Tracing
+        Vector3d floatingOriginCorrection = Vector3d.zero;
+        Quaternion referenceRotationCorrection = Quaternion.identity;
+        Dictionary<string, List<Tuple<float, Vector3, Quaternion>>> vesselTraces = new Dictionary<string, List<Tuple<float, Vector3, Quaternion>>>();
+
+        public void StartVesselTracing()
+        {
+            if (_vesselTraceEnabled) return;
+            _vesselTraceEnabled = true;
+            Debug.Log("[BDArmory.LoadedVesselSwitcher]: Starting vessel tracing.");
+            vesselTraces.Clear();
+
+            // Set the reference Up and Rotation based on the current FloatingOrigin.
+            var geoCoords = FlightGlobals.currentMainBody.GetLatitudeAndLongitude(Vector3.zero);
+            var altitude = FlightGlobals.getAltitudeAtPos(Vector3.zero);
+            var localUp = -FlightGlobals.getGeeForceAtPosition(Vector3.zero).normalized;
+            var q1 = Quaternion.FromToRotation(Vector3.up, localUp);
+            var q2 = Quaternion.AngleAxis(Vector3.SignedAngle(q1 * Vector3.forward, Vector3.up, localUp), localUp);
+            var referenceRotation = q2 * q1; // Plane tangential to the surface and aligned with north,
+            referenceRotationCorrection = Quaternion.Inverse(referenceRotation);
+            floatingOriginCorrection = altitude * localUp;
+
+            // Record starting points
+            var survivingVessels = weaponManagers.SelectMany(tm => tm.Value).Where(wm => wm != null).Select(wm => wm.vessel).ToList();
+            foreach (var vessel in survivingVessels)
+            {
+                if (vessel == null) continue;
+                vesselTraces[vessel.vesselName] = new List<Tuple<float, Vector3, Quaternion>>();
+                vesselTraces[vessel.vesselName].Add(new Tuple<float, Vector3, Quaternion>(Time.time, new Vector3((float)geoCoords.x, (float)geoCoords.y, altitude), referenceRotation));
+            }
+        }
+        public void StopVesselTracing()
+        {
+            if (!_vesselTraceEnabled) return;
+            _vesselTraceEnabled = false;
+            Debug.Log("[BDArmory.LoadedVesselSwitcher]: Stopping vessel tracing.");
+            var folder = Environment.CurrentDirectory + "/GameData/BDArmory/Logs/VesselTraces";
+            if (!Directory.Exists(folder))
+                Directory.CreateDirectory(folder);
+            foreach (var vesselName in vesselTraces.Keys)
+            {
+                var traceFile = Path.Combine(folder, vesselName + "-" + vesselTraces[vesselName][0].Item1.ToString("0.000") + ".json");
+                Debug.Log("[BDArmory.LoadedVesselSwitcher]: Dumping trace for " + vesselName + " to " + traceFile);
+                List<string> strings = new List<string>();
+                strings.Add("[");
+                strings.Add(string.Join(",\n", vesselTraces[vesselName].Select(entry => "  { \"time\": " + entry.Item1.ToString("0.000") + ", \"position\": [" + entry.Item2.x.ToString("0.0") + ", " + entry.Item2.y.ToString("0.0") + ", " + entry.Item2.z.ToString("0.0") + "], \"rotation\": [" + entry.Item3.x.ToString("0.000") + ", " + entry.Item3.y.ToString("0.000") + ", " + entry.Item3.z.ToString("0.000") + ", " + entry.Item3.w.ToString("0.000") + "] }")));
+                strings.Add("]");
+                File.WriteAllLines(traceFile, strings);
+            }
+            vesselTraces.Clear();
+        }
+        #endregion
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Collections.Generic;
 using UniLinq;
 using UnityEngine;
@@ -86,12 +87,20 @@ namespace BDArmory.Control
             foreach (var spawnLocation in VesselSpawner.spawnLocations)
                 spawnLocations.AddValue("LOCATION", spawnLocation.ToString());
 
-            fileNode.Save(VesselSpawner.spawnLocationsCfg);
+            if (!Directory.GetParent(VesselSpawner.spawnLocationsCfg).Exists)
+            { Directory.GetParent(VesselSpawner.spawnLocationsCfg).Create(); }
+            var success = fileNode.Save(VesselSpawner.spawnLocationsCfg);
+            if (success && File.Exists(VesselSpawner.oldSpawnLocationsCfg)) // Remove the old settings if it exists and the new settings were saved.
+            { File.Delete(VesselSpawner.oldSpawnLocationsCfg); }
         }
 
         public static void Load()
         {
             ConfigNode fileNode = ConfigNode.Load(VesselSpawner.spawnLocationsCfg);
+            if (fileNode == null)
+            {
+                fileNode = ConfigNode.Load(VesselSpawner.oldSpawnLocationsCfg); // Try the old location.
+            }
             VesselSpawner.spawnLocations = new List<SpawnLocation>();
             if (fileNode != null)
             {

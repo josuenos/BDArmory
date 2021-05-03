@@ -1248,20 +1248,7 @@ namespace BDArmory.Radar
                                     {
                                         if (missileBase.SourceVessel == myWpnManager.vessel) continue; // ignore missiles we've fired
 
-                                        Vector3 vectorFromMissile = myWpnManager.vessel.CoM - missileBase.part.transform.position;
-                                        Vector3 relV = missileBase.vessel.Velocity() - myWpnManager.vessel.Velocity();
-                                        bool approaching = Vector3.Dot(relV, vectorFromMissile) > 0;
-                                        bool withinRadarFOV = (missileBase.TargetingMode == MissileBase.TargetingModes.Radar || missileBase.TargetingModeTerminal == MissileBase.TargetingModes.Radar) ?
-                                            (Vector3.Angle(missileBase.GetForwardTransform(), vectorFromMissile) <= Mathf.Clamp(missileBase.lockedSensorFOV, 1f, 90f)/2f) : false;
-                                        var missileBlastRadiusSqr = missileBase.GetBlastRadius();
-                                        missileBlastRadiusSqr *= missileBlastRadiusSqr;
-
-                                        if (missileBase.HasFired && missileBase.TimeIndex > 1f && approaching &&
-                                            (
-                                                (missileBase.TargetPosition - (myWpnManager.vessel.CoM + (myWpnManager.vessel.Velocity() * Time.fixedDeltaTime))).sqrMagnitude < missileBlastRadiusSqr || // Target position is within blast radius of missile.
-                                                myWpnManager.vessel.PredictClosestApproachSqrSeparation(missileBase.vessel, 2f) < missileBlastRadiusSqr || // Closest approach is within blast radius of missile. 
-                                                withinRadarFOV // We are within radar FOV of missile boresight.
-                                            ))
+                                        if (MissileIsThreat(missileBase, myWpnManager))
                                         {
                                             results.incomingMissiles.Add(new IncomingMissile
                                             {
@@ -1324,6 +1311,55 @@ namespace BDArmory.Radar
             }
 
             return results;
+        }
+
+        public static bool MissileIsThreat(MissileBase missile, MissileFire mf, bool threatToMeOnly = true)
+        {
+            if (threatToMeOnly)
+            {
+                Vector3 vectorFromMissile = mf.vessel.CoM - missile.part.transform.position;
+                Vector3 relV = missile.vessel.Velocity() - mf.vessel.Velocity();
+                bool approaching = Vector3.Dot(relV, vectorFromMissile) > 0;
+                bool withinRadarFOV = (missile.TargetingMode == MissileBase.TargetingModes.Radar || missile.TargetingModeTerminal == MissileBase.TargetingModes.Radar) ?
+                    (Vector3.Angle(missile.GetForwardTransform(), vectorFromMissile) <= Mathf.Clamp(missile.lockedSensorFOV, 40f, 90f) / 2f) : false;
+                var missileBlastRadiusSqr = 1.5f * missile.GetBlastRadius();
+                missileBlastRadiusSqr *= missileBlastRadiusSqr;
+
+                return (missile.HasFired && missile.TimeIndex > 1f && approaching &&
+                            (
+                                (missile.TargetPosition - (mf.vessel.CoM + (mf.vessel.Velocity() * Time.fixedDeltaTime))).sqrMagnitude < missileBlastRadiusSqr || // Target position is within blast radius of missile.
+                                mf.vessel.PredictClosestApproachSqrSeparation(missile.vessel, 2f) < missileBlastRadiusSqr || // Closest approach is within blast radius of missile. 
+                                withinRadarFOV // We are within radar FOV of missile boresight.
+                            ));
+            }
+            else
+            {
+                using (var friendly = FlightGlobals.Vessels.GetEnumerator())
+                    while (friendly.MoveNext())
+                    {
+                        if (friendly.Current == null)
+                            continue;
+                        var wms = friendly.Current.FindPartModuleImplementing<MissileFire>();
+                        if (wms == null || wms.Team != mf.Team)
+                            continue;
+
+                        Vector3 vectorFromMissile = wms.vessel.CoM - missile.part.transform.position;
+                        Vector3 relV = missile.vessel.Velocity() - wms.vessel.Velocity();
+                        bool approaching = Vector3.Dot(relV, vectorFromMissile) > 0;
+                        bool withinRadarFOV = (missile.TargetingMode == MissileBase.TargetingModes.Radar || missile.TargetingModeTerminal == MissileBase.TargetingModes.Radar) ?
+                            (Vector3.Angle(missile.GetForwardTransform(), vectorFromMissile) <= Mathf.Clamp(missile.lockedSensorFOV, 40f, 90f) / 2f) : false;
+                        var missileBlastRadiusSqr = 1.5f * missile.GetBlastRadius();
+                        missileBlastRadiusSqr *= missileBlastRadiusSqr;
+
+                        return (missile.HasFired && missile.TimeIndex > 1f && approaching &&
+                                    (
+                                        (missile.TargetPosition - (wms.vessel.CoM + (wms.vessel.Velocity() * Time.fixedDeltaTime))).sqrMagnitude < missileBlastRadiusSqr || // Target position is within blast radius of missile.
+                                        wms.vessel.PredictClosestApproachSqrSeparation(missile.vessel, 2f) < missileBlastRadiusSqr || // Closest approach is within blast radius of missile. 
+                                        withinRadarFOV // We are within radar FOV of missile boresight.
+                                    ));
+                    }
+            }
+            return false;
         }
 
         private static float MissDistance(ModuleWeapon threatWeapon, Vessel self) // Returns how far away bullets from enemy are from craft in meters

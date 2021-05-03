@@ -193,7 +193,7 @@ namespace BDArmory.Modules
                                     RaycastHit hit;
                                     if (Physics.Raycast(LoSRay, out hit, distToG0.magnitude, 9076737))
                                     {
-                                        if (hit.collider.gameObject != FlightGlobals.currentMainBody.gameObject)
+                                        if (FlightGlobals.currentMainBody == null || hit.collider.gameObject != FlightGlobals.currentMainBody.gameObject)
                                         {
                                             KerbalEVA eva = hit.collider.gameObject.GetComponentUpwards<KerbalEVA>();
                                             Part p = eva ? eva.part : hit.collider.gameObject.GetComponentInParent<Part>();
@@ -330,7 +330,7 @@ namespace BDArmory.Modules
         }
         void OnDestroy()
         {
-            if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_AMMOBINS && BDArmorySettings.BD_VOLATILE_AMMO && HighLogic.LoadedSceneIsFlight && !VesselSpawner.Instance.vesselsSpawning)
+            if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_AMMOBINS && BDArmorySettings.BD_VOLATILE_AMMO && HighLogic.LoadedSceneIsFlight && !(VesselSpawner.Instance != null && VesselSpawner.Instance.vesselsSpawning))
             {
                 DetonateIfPossible();
             }

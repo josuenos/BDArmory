@@ -123,6 +123,10 @@ for round in sorted(roundDir for roundDir in tournamentDir.iterdir() if roundDir
 							tournamentData[round.name][heat.name]['result'] = {'result': result_type, 'teams': {team['team']: ', '.join(team['members']) for team in teams}}
 					else:  # Mutual Annihilation
 						tournamentData[round.name][heat.name]['result'] = {'result': result_type}
+				elif field.startswith('DEADTEAMS:'):
+					dead_teams = json.loads(field.split(':', 1)[1])
+					if len(dead_teams) > 0:
+						tournamentData[round.name][heat.name]['result'].update({'dead teams': {team['team']: ', '.join(team['members']) for team in dead_teams}})
 				# Ignore Tag mode for now.
 
 if not args.no_files:
@@ -133,6 +137,7 @@ if not args.no_files:
 craftNames = sorted(list(set(craft for round in tournamentData.values() for heat in round.values() for craft in heat['craft'].keys())))
 teamWins = Counter([team for round in tournamentData.values() for heat in round.values() if heat['result']['result'] == "Win" for team in heat['result']['teams']])
 teamDraws = Counter([team for round in tournamentData.values() for heat in round.values() if heat['result']['result'] == "Draw" for team in heat['result']['teams']])
+teamDeaths = Counter([team for round in tournamentData.values() for heat in round.values() for team in heat['result']['dead teams']])
 teams = {team: members for round in tournamentData.values() for heat in round.values() if 'teams' in heat['result'] for team, members in heat['result']['teams'].items()}
 summary = {
 	'craft': {
@@ -169,7 +174,8 @@ summary = {
 	},
 	'team results': {
 		'wins': teamWins,
-		'draws': teamDraws
+		'draws': teamDraws,
+		'deaths': teamDeaths
 	},
 	'teams': teams
 }
@@ -261,9 +267,9 @@ if len(summary['craft']) > 0:
 		default_team_names = [chr(k) for k in range(ord('A'), ord('A') + len(summary['craft']))]
 		if len(teamNames) > 0 and not all(name in default_team_names for name in teamNames):  # Don't do teams if they're assigned as 'A', 'B', ... as they won't be consistent between rounds.
 			name_length = max([len(team) for team in teamNames])
-			strings.append(f"\nTeam{' '*(name_length-4)}\tWins\tDraws\tVessels")
+			strings.append(f"\nTeam{' '*(name_length-4)}\tWins\tDraws\tDeaths\tVessels")
 			for team in teamNames:
-				strings.append(f"{team}{' '*(name_length-len(team))}\t{teamWins[team]}\t{teamDraws[team]}\t{summary['teams'][team]}")
+				strings.append(f"{team}{' '*(name_length-len(team))}\t{teamWins[team]}\t{teamDraws[team]}\t{teamDeaths[team]}\t{summary['teams'][team]}")
 		for string in strings:
 			print(string)
 else:

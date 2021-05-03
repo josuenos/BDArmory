@@ -1,4 +1,48 @@
-﻿v1.4.4.2
+﻿FIXES
+	- Store the armed/IFF state in the craft files instead of just the GUI strings.
+
+v1.4.5.0
+FIXES
+	- Fix the floating origin corrections to the vessel traces and apply the corrective rotations to the coordinates such that the local coordinates are (east, up, north) and the identity rotation is a craft pointing nose up with the underside pointing north. Include a simple python script to plot the traces.
+	- Re-enable the extending debugging (when debug labels are on).
+	- Fix the smoothing of the target acceleration and velocity for long-range targets to be applied dynamically so as to not affect short range targets and to reset when switching targets.
+IMPROVEMENTS
+	- Update the in-flight Guard Menu to match the settings in the weapon manager in the SPH.
+	- Dynamically adjust (max) gun range based on the guns that are actually on a vessel.
+	- Add log and competition status messages about disabling a vessel due to EMP damage.
+	- Upgrade the numerical integrator for bullets and ballistic trajectory simulations to use the 2nd order symplectic leapfrog method (this vastly improves the accuracy and speed of the trajectory simulations). Allows for ballistic aiming out to at least 50km.
+	- Include dead teams information in the results.
+	- Re-worked steer limiter. Steer limits are now based on two control points, defined by four variables
+		- Low Speed Control Point: Steer limit and Speed
+		- High Speed Control Point: Steer limit and Speed
+		- Below the low speed control point speed, the limit will be equal to the low speed steer limit.
+		- Above the high speed control point speed, the speed will be equal to the high speed control point limit.
+		- Between the two control points, the steer limit will vary linearly based on the craft's current speed.
+	- Add toggle for whether competition status messages are displayed.
+	- Change clearance check minimum drop time to greater than or equal to 0.1s instead of greater than 0.3s
+	- Add 1.5 safety factor to blast radius determination for missile evasion
+	- Clamp the minimum radar missile FOV used for missile evasion to 40 degrees, results in fewer instances of craft turning back towards a missile at inopportune times.
+
+v1.4.4.4
+FIXES
+	- Fix missiles firing without exhaust and heat-seeking missiles firing without a target.
+		- Regenerate exhaust prefab object pools when they're detected to contain nulls due to scene changes or reloads.
+		- Trigger missile exhaust prefab detachment on part.OnJustAboutToDie and OnDestroy as well.
+	- Add KeyNotFound and NRE checks in CheckForMissingParts.
+	- Add in SetupAudio fix in some other places for audioSource. Add check for broken animations and give error instead of exception.
+	- Remove ramming debugging toggle and just use the regular debug labels toggle instead. Adjust the debug statements in DebrisDelayedCleanUp.
+	- Don't update RCS if we've just fired a missile or are trying to fire a missile.
+	- Correctly calculate turret gimbal limits check, taking into account bullet drop.
+	- Add generic rocket resource for rocket ammo boxes (fixes rocket launchers not being able to use rocket ammo boxes)
+IMPROVEMENTS
+	- Add option to trace vessel paths and orientations. Traces are logged in GameData/BDArmory/Logs/VesselTraces/<VesselName>-<StartTime>.json
+
+v1.4.4.3
+FIXES
+	- The improved aiming code is now fixed (properly accounts for movement of the aiming vessel). Planet curvature is not yet taken into account.
+	- Re-initialise the missile audio sources if they're null (fixes failure-to-fire issue).
+
+v1.4.4.2
 FIXES
 	- Revert the improved gun aiming code as it's not working properly for non-stationary targets.
 	- Fix potential NRE in DetachExhaustPrefab.

@@ -37,6 +37,10 @@ namespace BDArmory.Core.Module
 
         #endregion KSP Fields
 
+        #region Heart Bleed
+        private double nextHeartBleedTime = 0;
+        #endregion Heart Bleed
+
         private readonly float hitpointMultiplier = BDArmorySettings.HITPOINT_MULTIPLIER;
 
         private float previousHitpoints;
@@ -159,11 +163,18 @@ namespace BDArmory.Core.Module
         public override void OnUpdate()
         {
             RefreshHitPoints();
+            if (BDArmorySettings.HEART_BLEED_ENABLED && ShouldHeartBleed())
+            {
+                HeartBleed();
+            }
         }
 
-        public void Update()
+        void Update()
         {
-            RefreshHitPoints();
+            if (HighLogic.LoadedSceneIsEditor)
+            {
+                RefreshHitPoints();
+            }
         }
 
         private void RefreshHitPoints()
@@ -174,6 +185,37 @@ namespace BDArmory.Core.Module
                 _updateHitpoints = false;
                 _forceUpdateHitpointsUI = false;
             }
+        }
+
+        private bool ShouldHeartBleed()
+        {
+            // wait until "now" exceeds the "next tick" value
+            double dTime = Planetarium.GetUniversalTime();
+            if (dTime < nextHeartBleedTime)
+            {
+                //Debug.Log(string.Format("[HitpointTracker] TimeSkip ShouldHeartBleed for {0} on {1}", part.name, part.vessel.vesselName));
+                return false;
+            }
+
+            // assign next tick time
+            double interval = BDArmorySettings.HEART_BLEED_INTERVAL;
+            nextHeartBleedTime = dTime + interval;
+
+            return true;
+        }
+
+        private void HeartBleed()
+        {
+            float rate = BDArmorySettings.HEART_BLEED_RATE;
+            float deduction = Hitpoints * rate;
+            if (Hitpoints - deduction < BDArmorySettings.HEART_BLEED_THRESHOLD)
+            {
+                // can't die from heart bleed
+                return;
+            }
+            // deduct hp base on the rate
+            //Debug.Log(string.Format("[HitpointTracker] Heart bleed {0} on {1} by {2:#.##} ({3:#.##}%)", part.name, part.vessel.vesselName, deduction, rate*100.0));
+            AddDamage(deduction);
         }
 
         #region Hitpoints Functions

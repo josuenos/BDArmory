@@ -28,7 +28,7 @@ namespace BDArmory.Modules
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_DetonateAtMinimumDistance"), UI_Toggle(disabledText = "#LOC_BDArmory_false", enabledText = "#LOC_BDArmory_true", scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)] // Detonate At Minumum Distance
         public bool detonateAtMinimumDistance = false;
 
-        [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "#LOC_BDArmory_Status")]//Status
+        [KSPField(guiActive = false, guiActiveEditor = false, guiName = "#LOC_BDArmory_Status")]//Status
         public string guiStatusString = "ARMED";
 
         //PartWindow buttons
@@ -48,7 +48,7 @@ namespace BDArmory.Modules
             }
         }
 
-        [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "Targeting Logic")]//Status
+        [KSPField(guiActive = false, guiActiveEditor = false, guiName = "Targeting Logic")]//Status
         public string guiIFFString = "Ignore Allies";
 
         //PartWindow buttons
@@ -113,7 +113,8 @@ namespace BDArmory.Modules
             Detonate();
         }
 
-        public bool Armed { get; set; } = true;
+        [KSPField(isPersistant = true)]
+        public bool Armed = true;
         public bool Shaped { get; set; } = false;
         public bool isMissile = true;
 
@@ -176,6 +177,26 @@ namespace BDArmory.Modules
                 Fields["guiStatusString"].guiActive = true;
                 Fields["guiIFFString"].guiActiveEditor = true;
                 Fields["guiIFFString"].guiActive = true;
+                if (Armed)
+                {
+                    guiStatusString = "ARMED";
+                    Events["Toggle"].guiName = Localizer.Format("Disarm Warhead");
+                }
+                else
+                {
+                    guiStatusString = "Safe";
+                    Events["Toggle"].guiName = Localizer.Format("Arm Warhead");
+                }
+                if (IFF_On)
+                {
+                    guiIFFString = "Ignore Allies";
+                    Events["ToggleIFF"].guiName = Localizer.Format("Disable IFF");
+                }
+                else
+                {
+                    guiIFFString = "Indescriminate";
+                    Events["ToggleIFF"].guiName = Localizer.Format("Enable IFF");
+                }
                 if (manualOverride)
                 {
                     Fields["detonationRange"].guiActiveEditor = true;
