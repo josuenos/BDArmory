@@ -1,6 +1,7 @@
 ﻿using System.Collections;
-using BDArmory.Misc;
 using UnityEngine;
+
+using BDArmory.Utils;
 
 namespace BDArmory.CounterMeasure
 {
@@ -37,6 +38,11 @@ namespace BDArmory.CounterMeasure
             }
 
             StartCoroutine(LifeRoutine());
+        }
+
+        void OnDisable()
+        {
+            body = null;
         }
 
         IEnumerator LifeRoutine()

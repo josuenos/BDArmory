@@ -1,0 +1,35 @@
+Kerbal Space Program/GameData/BDArmory/Logs$ ../parse_tournament_log_files_v1.13.7.py -q * && python3 ../score_weights.py *
+{'deaths': -0.78, 'kills': 2.97, 'assists': 0.74, 'hit': 0.06, 'dmg': 2.96, 'dmgIn': 0.65, 'Mdmg': 0.02, 'MdmgIn': 0.01, 'ram': 0.06} Tournament 41-rapid-fire-tank-turrents
+{'deaths': -0.77, 'kills': 1.49, 'assists': 1.8, 'hit': 0.51, 'dmg': 2.2, 'dmgIn': 0.45, 'Rstr': 0.04, 'Rhit': 0.04, 'Rdmg': 0.13, 'RdmgIn': 0.01, 'ram': 0.46} Tournament 42-large-planes
+{'deaths': -0.7, 'kills': 1.77, 'assists': 1.21, 'hit': 0.16, 'dmg': 0.94, 'dmgIn': 0.25, 'ram': 0.33} Tournament 43-rocket-engines
+{'deaths': -0.78, 'kills': 2.74, 'assists': 0.89, 'hit': 0.47, 'dmg': 1.33, 'dmgIn': 0.31, 'ram': 0.65} Tournament 47-replicas
+{'deaths': -0.81, 'kills': 2.79, 'assists': 1.02, 'hit': 0.5, 'dmg': 1.54, 'dmgIn': 0.33, 'ram': 0.62} Tournament 47-replicas-Doc-testing
+{'deaths': -0.79, 'kills': 3.26, 'assists': 0.76, 'hit': 0.44, 'dmg': 1.13, 'dmgIn': 0.21, 'ram': 0.55} Tournament 47-replicas-EzBro-testing
+{'deaths': -0.65, 'kills': 1.27, 'assists': 0.75, 'Rstr': 0.4, 'Rhit': 0.22, 'Rdmg': 1.27, 'RdmgIn': 0.34, 'Mstr': 0.04, 'Mhit': 0.02, 'Mdmg': 0.12, 'MdmgIn': 0.07, 'ram': 0.01} Tournament 66594635-rockets-4-planes
+{'deaths': -0.77, 'kills': 2.55, 'assists': 0.62, 'hit': 0.12, 'dmg': 0.29, 'dmgIn': 0.05, 'Rdmg': 0.01, 'Mstr': 0.22, 'Mhit': 0.14, 'Mdmg': 0.82, 'MdmgIn': 0.3, 'ram': 0.3} Tournament 66606544-missiles++
+{'deaths': -0.73, 'kills': 2.53, 'assists': 0.79, 'hit': 0.13, 'dmg': 0.32, 'dmgIn': 0.07, 'Rdmg': 0.01, 'Mstr': 0.28, 'Mhit': 0.17, 'Mdmg': 0.94, 'MdmgIn': 0.2, 'ram': 0.21} Tournament 66611739-missiles++
+{'deaths': -0.72, 'kills': 1.83, 'assists': 0.76, 'Mstr': 0.3, 'Mhit': 0.18, 'Mdmg': 1.03, 'MdmgIn': 0.26, 'ram': 0.88} Tournament 66642576-missiles
+{'deaths': -0.8, 'kills': 1.09, 'assists': 1.98, 'hit': 0.17, 'dmg': 0.29, 'dmgIn': 0.03, 'ram': 0.21} Tournament 66651588-micro-planes
+{'deaths': -0.9, 'kills': 0.71, 'assists': 0.66, 'ram': 2.66} Tournament 66667819-ramming
+{'deaths': -0.62, 'kills': 2.88, 'assists': 0.72, 'hit': 0.34, 'dmg': 0.71, 'dmgIn': 0.09, 'Mstr': 0.03, 'Mhit': 0.01, 'Mdmg': 0.16, 'MdmgIn': 0.04, 'ram': 0.11} Tournament 66681234-mix-5-planes
+{'deaths': -0.72, 'kills': 2.38, 'assists': 0.64, 'hit': 0.27, 'dmg': 0.54, 'dmgIn': 0.09, 'RdmgIn': 0.01, 'Mstr': 0.05, 'Mhit': 0.03, 'Mdmg': 0.23, 'MdmgIn': 0.07, 'ram': 0.2} Tournament 66687119-mix-12-planes
+{'deaths': -0.73, 'kills': 1.32, 'assists': 1.09, 'Mstr': 0.3, 'Mhit': 0.2, 'Mdmg': 1.05, 'MdmgIn': 0.27, 'ram': 0.7} Tournament 66698855-missiles
+{'deaths': -0.69, 'kills': 1.12, 'assists': 1.01, 'Rstr': 0.42, 'Rhit': 0.23, 'Rdmg': 1.3, 'RdmgIn': 0.35, 'Mstr': 0.03, 'Mhit': 0.01, 'Mdmg': 0.08, 'MdmgIn': 0.03, 'ram': 0.23} Tournament 66733324-rockets-8-planes
+
+Average kda / hd: 1.114
+2.93 / 3.76 = 0.7793 : Tournament 41-rapid-fire-tank-turrents
+2.52 / 3.84 = 0.6562 : Tournament 42-large-planes
+2.28 / 1.68 =  1.357 : Tournament 43-rocket-engines
+2.85 / 2.76 =  1.033 : Tournament 47-replicas
+   3 / 2.99 =  1.003 : Tournament 47-replicas-Doc-testing
+3.23 / 2.33 =  1.386 : Tournament 47-replicas-EzBro-testing
+1.37 / 2.49 = 0.5502 : Tournament 66594635-rockets-4-planes
+ 2.4 / 2.25 =  1.067 : Tournament 66606544-missiles++
+2.59 / 2.33 =  1.112 : Tournament 66611739-missiles++
+1.87 / 2.65 = 0.7057 : Tournament 66642576-missiles
+2.27 /  0.7 =  3.243 : Tournament 66651588-micro-planes
+0.47 / 2.66 = 0.1767 : Tournament 66667819-ramming
+2.98 / 1.49 =      2 : Tournament 66681234-mix-5-planes (smallish)
+ 2.3 / 1.49 =  1.544 : Tournament 66687119-mix-12-planes (smallish)
+1.68 / 2.52 = 0.6667 : Tournament 66698855-missiles
+1.44 / 2.68 = 0.5373 : Tournament 66733324-rockets-8-planes

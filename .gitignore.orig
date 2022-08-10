@@ -98,24 +98,7 @@ Icon
 /.vs/BDArmory_JRODRIGV/v15
 /.vs/slnx.sqlite
 /BahaTurret/bin/Release
-/BDArmory.Core/obj/Debug/BDArmory.Core.csproj.FileListAbsolute.txt
-/BDArmory/bin/Debug
-/BDArmory.Core/obj
+/BDArmory/bin
 /BDArmory.Multiplayer/obj
-<<<<<<< HEAD
-BahaTurret/BDArmory.sln.DotSettings.user
-BDArmory.Core/bin/Debug/UnityEngine.dll
-BDArmory.Core/bin/Debug/KSPAssets.dll
-BDArmory.Core/bin/Debug/BDArmory.Core.dll
-BDArmory.Core/bin/Debug/Assembly-CSharp.dll
-BDArmory.Core/bin/Debug/UnityEngine.UI.dll
-BahaTurret/BDArmory.csproj.user
-=======
-BDArmory.Core/bin/Debug/Assembly-CSharp.dll
-BDArmory.Core/bin/Debug/BDArmory.Core.dll
-BDArmory.Core/bin/Debug/KSPAssets.dll
-BDArmory.Core/bin/Debug/UnityEngine.dll
 BahaTurret/BDArmory.sln.DotSettings.user
 BahaTurret/BDArmory.csproj.user
-BDArmory.Core/bin/Debug/UnityEngine.UI.dll
->>>>>>> 311105e5c29cb0a842f90aa18021dbbdf54390a8

@@ -1,7 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using BDArmory.Modules;
 using UnityEngine;
+
+using BDArmory.Modules;
+using BDArmory.Utils;
 
 namespace BDArmory.CounterMeasure
 {
@@ -179,16 +181,15 @@ namespace BDArmory.CounterMeasure
             jammers.RemoveAll(j => j == null);
             jammers.RemoveAll(j => j.vessel != vessel);
 
-            List<ModuleECMJammer>.Enumerator jam = vessel.FindPartModulesImplementing<ModuleECMJammer>().GetEnumerator();
-            while (jam.MoveNext())
-            {
-                if (jam.Current == null) continue;
-                if (jam.Current.jammerEnabled)
+            using (var jam = VesselModuleRegistry.GetModules<ModuleECMJammer>(vessel).GetEnumerator())
+                while (jam.MoveNext())
                 {
-                    AddJammer(jam.Current);
+                    if (jam.Current == null) continue;
+                    if (jam.Current.jammerEnabled)
+                    {
+                        AddJammer(jam.Current);
+                    }
                 }
-            }
-            jam.Dispose();
             UpdateJammerStrength();
         }
     }

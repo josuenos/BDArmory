@@ -3,8 +3,8 @@
 // This will only be live in debug builds
 using System;
 using UnityEngine;
-using BDArmory.Core;
-using BDArmory.Misc;
+
+using BDArmory.Settings;
 
 namespace BDArmory.UI
 {
@@ -21,7 +21,7 @@ namespace BDArmory.UI
 
         void OnGUI()
         {
-            if (BDArmorySettings.DRAW_DEBUG_LABELS)
+            if (BDArmorySettings.DEBUG_TELEMETRY)
             {
                 var frameVelocity = Krakensbane.GetFrameVelocityV3f();
                 //var rFrameVelocity = FlightGlobals.currentMainBody.getRFrmVel(Vector3d.zero);

@@ -1,6 +1,8 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 
+using BDArmory.Utils;
+
 namespace BDArmory.Control
 {
     public class BDAirspeedControl : MonoBehaviour //: PartModule
@@ -8,9 +10,11 @@ namespace BDArmory.Control
         //[KSPField(isPersistant = false, guiActive = true, guiActiveEditor = false, guiName = "TargetSpeed"),
         //	UI_FloatRange(minValue = 1f, maxValue = 420f, stepIncrement = 1f, scene = UI_Scene.All)]
         public float targetSpeed = 0;
-
+        public float throttleOverride = -1f;
         public bool useBrakes = true;
         public bool allowAfterburner = true;
+        public bool forceAfterburner = false;
+        public float afterburnerPriority = 50f;
 
         //[KSPField(isPersistant = false, guiActive = true, guiActiveEditor = false, guiName = "ThrottleFactor"),
         //	UI_FloatRange(minValue = 1f, maxValue = 20f, stepIncrement = .5f, scene = UI_Scene.All)]
@@ -20,10 +24,12 @@ namespace BDArmory.Control
 
         bool controlEnabled;
 
+        private float smoothedAccel = 0; // smoothed acceleration, prevents super fast toggling of afterburner
+
         //[KSPField(guiActive = true, guiName = "Thrust")]
         public float debugThrust;
 
-        List<MultiModeEngine> multiModeEngines;
+        public List<MultiModeEngine> multiModeEngines;
 
         //[KSPEvent(guiActive = true, guiActiveEditor = false, guiName = "ToggleAC")]
         public void Toggle()
@@ -75,11 +81,16 @@ namespace BDArmory.Control
             float gravAccel = GravAccel();
             float requestEngineAccel = accel - gravAccel;
 
-            possibleAccel = gravAccel;
+            possibleAccel = 0; //gravAccel;
 
             float dragAccel = 0;
             float engineAccel = MaxEngineAccel(requestEngineAccel, out dragAccel);
 
+            if (throttleOverride >= 0)
+            {
+                s.mainThrottle = throttleOverride;
+                return;
+            }
             if (engineAccel == 0)
             {
                 s.mainThrottle = accel > 0 ? 1 : 0;
@@ -112,36 +123,38 @@ namespace BDArmory.Control
             float finalThrust = 0;
             multiModeEngines.Clear();
 
-            List<ModuleEngines>.Enumerator engines = vessel.FindPartModulesImplementing<ModuleEngines>().GetEnumerator();
-            while (engines.MoveNext())
-            {
-                if (engines.Current == null) continue;
-                if (!engines.Current.EngineIgnited) continue;
-
-                MultiModeEngine mme = engines.Current.part.FindModuleImplementing<MultiModeEngine>();
-                if (IsAfterBurnerEngine(mme))
+            using (var engines = VesselModuleRegistry.GetModules<ModuleEngines>(vessel).GetEnumerator())
+                while (engines.MoveNext())
                 {
-                    multiModeEngines.Add(mme);
-                    mme.autoSwitch = false;
-                }
+                    if (engines.Current == null) continue;
+                    if (!engines.Current.EngineIgnited) continue;
 
-                if (mme && mme.mode != engines.Current.engineID) continue;
-                float engineThrust = engines.Current.maxThrust;
-                if (engines.Current.atmChangeFlow)
-                {
-                    engineThrust *= engines.Current.flowMultiplier;
-                }
-                maxThrust += engineThrust * (engines.Current.thrustPercentage / 100f);
+                    MultiModeEngine mme = engines.Current.part.FindModuleImplementing<MultiModeEngine>();
+                    if (IsAfterBurnerEngine(mme))
+                    {
+                        multiModeEngines.Add(mme);
+                        mme.autoSwitch = false;
+                    }
 
-                finalThrust += engines.Current.finalThrust;
-            }
-            engines.Dispose();
+                    if (mme && mme.mode != engines.Current.engineID) continue;
+                    float engineThrust = engines.Current.maxThrust;
+                    if (engines.Current.atmChangeFlow)
+                    {
+                        engineThrust *= engines.Current.flowMultiplier;
+                    }
+                    maxThrust += Mathf.Max(0f, engineThrust * (engines.Current.thrustPercentage / 100f)); // Don't include negative thrust percentage drives (Danny2462 drives) as they don't contribute to the thrust.
+
+                    finalThrust += engines.Current.finalThrust;
+                }
 
             debugThrust = maxThrust;
 
             float vesselMass = vessel.GetTotalMass();
 
-            float accel = maxThrust / vesselMass;
+            float accel = maxThrust / vesselMass; // This assumes that all thrust is in the same direction.
+
+            float alpha = 0.05f; // Approx 25 frame (0.5s) lag (similar to 50 frames moving average, but with more weight on recent values and much faster to calculate).
+            smoothedAccel = smoothedAccel * (1f - alpha) + alpha * accel;
 
             //estimate drag
             float estimatedCurrentAccel = finalThrust / vesselMass - GravAccel();
@@ -150,29 +163,30 @@ namespace BDArmory.Control
             float accelError = (actualCurrentAccel - estimatedCurrentAccel); // /2 -- why divide by 2 here?
             dragAccel = accelError;
 
-            possibleAccel += accel;
+            possibleAccel += accel; // This assumes that the acceleration from engines is in the same direction as the original possibleAccel.
+            forceAfterburner = forceAfterburner || (afterburnerPriority == 100f);
+            allowAfterburner = allowAfterburner && (afterburnerPriority != 0f);
 
             //use multimode afterburner for extra accel if lacking
-            List<MultiModeEngine>.Enumerator mmes = multiModeEngines.GetEnumerator();
-            while (mmes.MoveNext())
-            {
-                if (mmes.Current == null) continue;
-                if (allowAfterburner && accel < requestAccel * 0.2f)
+            using (List<MultiModeEngine>.Enumerator mmes = multiModeEngines.GetEnumerator())
+                while (mmes.MoveNext())
                 {
-                    if (mmes.Current.runningPrimary)
+                    if (mmes.Current == null) continue;
+                    if (allowAfterburner && (forceAfterburner || smoothedAccel < requestAccel * (1.5f / (Mathf.Exp(100f / 27f) - 1f) * (Mathf.Exp(Mathf.Clamp(afterburnerPriority, 0f, 100f) / 27f) - 1f))))
                     {
-                        mmes.Current.Events["ModeEvent"].Invoke();
+                        if (mmes.Current.runningPrimary)
+                        {
+                            mmes.Current.Events["ModeEvent"].Invoke();
+                        }
+                    }
+                    else if (!allowAfterburner || (!forceAfterburner && smoothedAccel > requestAccel * (1f + 0.5f / (Mathf.Exp(50f / 25f) - 1f) * (Mathf.Exp(Mathf.Clamp(afterburnerPriority, 0f, 100f) / 25f) - 1f))))
+                    {
+                        if (!mmes.Current.runningPrimary)
+                        {
+                            mmes.Current.Events["ModeEvent"].Invoke();
+                        }
                     }
                 }
-                else if (!allowAfterburner || accel > requestAccel * 1.5f)
-                {
-                    if (!mmes.Current.runningPrimary)
-                    {
-                        mmes.Current.Events["ModeEvent"].Invoke();
-                    }
-                }
-            }
-            mmes.Dispose();
             return accel;
         }
 
@@ -182,17 +196,15 @@ namespace BDArmory.Control
             {
                 return false;
             }
-            if (!engine)
-            {
-                return false;
-            }
             return engine.primaryEngineID == "Dry" && engine.secondaryEngineID == "Wet";
+            //presumably there's a reason this is looking specifically for MMEs with "Wet" and "Dry" as the IDs instead of !String.IsNullOrEmpty(engine.primaryEngineID). To permit only properly configured Jets?
+
         }
 
         float GravAccel()
         {
             Vector3 geeVector = FlightGlobals.getGeeForceAtPosition(vessel.CoM);
-            float gravAccel = geeVector.magnitude * Mathf.Cos(Mathf.Deg2Rad * Vector3.Angle(-geeVector, vessel.velocityD));
+            float gravAccel = geeVector.magnitude * Mathf.Cos(Mathf.Deg2Rad * Vector3.Angle(-geeVector, vessel.velocityD)); // -g.v/|v| ???
             return gravAccel;
         }
 
@@ -245,6 +257,55 @@ namespace BDArmory.Control
                 zeroPoint = (zeroPoint + lastThrottle * zeroMult) * (1 - zeroMult);
                 if (preventNegativeZeroPoint && zeroPoint < 0) zeroPoint = 0;
                 s.wheelThrottle = lastThrottle;
+                vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, throttle < -5f);
+            }
+        }
+    }
+
+    public class BDVTOLSpeedControl : MonoBehaviour
+    {
+        public float targetAltitude;
+        public Vessel vessel;
+        public bool preventNegativeZeroPoint = false;
+
+        private float altIntegral;
+        public float zeroPoint { get; private set; }
+
+        private const float Kp = 0.5f;
+        private const float Kd = 0.55f;
+        private const float Ki = 0.03f;
+
+
+        public void Activate()
+        {
+            vessel.OnFlyByWire -= AltitudeControl;
+            vessel.OnFlyByWire += AltitudeControl;
+            altIntegral = 0;
+        }
+
+        public void Deactivate()
+        {
+            vessel.OnFlyByWire -= AltitudeControl;
+        }
+
+        void AltitudeControl(FlightCtrlState s)
+        {
+
+            if (targetAltitude == 0)
+            {
+                vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, true);
+                s.mainThrottle = 0;
+            }
+            else
+            {
+                float altError = (targetAltitude - (float)vessel.radarAltitude);
+                float altP = Kp * (targetAltitude - (float)vessel.radarAltitude);
+                float altD = Kd * (float)vessel.verticalSpeed;
+                altIntegral = Ki * Mathf.Clamp(altIntegral + altError * Time.deltaTime, -1f, 1f);
+                
+                float throttle = altP + altIntegral - altD;
+                s.mainThrottle = Mathf.Clamp01(throttle);
+
                 vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, throttle < -5f);
             }
         }

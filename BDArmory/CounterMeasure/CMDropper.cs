@@ -2,11 +2,12 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
-using BDArmory.Core;
-using BDArmory.Misc;
-using BDArmory.UI;
 using UniLinq;
 using UnityEngine;
+
+using BDArmory.Settings;
+using BDArmory.UI;
+using BDArmory.Utils;
 
 namespace BDArmory.CounterMeasure
 {
@@ -26,7 +27,7 @@ namespace BDArmory.CounterMeasure
         public CountermeasureTypes cmType = CountermeasureTypes.Flare;
         [KSPField] public string countermeasureType = "flare";
 
-        [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "Eject Velocity"),
+        [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_EjectVelocity"),//Eject Velocity
         UI_FloatRange(controlEnabled = true, scene = UI_Scene.Editor, minValue = 1f, maxValue = 200f, stepIncrement = 1f)]
         public float ejectVelocity = 30;
 
@@ -50,7 +51,7 @@ namespace BDArmory.CounterMeasure
             DropCM();
         }
 
-        [KSPEvent(guiActive = true, guiName = "Fire Countermeasure", active = true)]
+        [KSPEvent(guiActive = true, guiName = "#LOC_BDArmory_FireCountermeasure", active = true)]//Fire Countermeasure
         public void DropCM()
         {
             switch (cmType)
@@ -130,25 +131,23 @@ namespace BDArmory.CounterMeasure
         void FireParticleEffects()
         {
             if (!effectsTransform) return;
-            IEnumerator<KSPParticleEmitter> pe = effectsTransform.gameObject.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator();
-            while (pe.MoveNext())
-            {
-                if (pe.Current == null) continue;
-                EffectBehaviour.AddParticleEmitter(pe.Current);
-                pe.Current.Emit();
-            }
-            pe.Dispose();
+            using (IEnumerator<KSPParticleEmitter> pe = effectsTransform.gameObject.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator())
+                while (pe.MoveNext())
+                {
+                    if (pe.Current == null) continue;
+                    EffectBehaviour.AddParticleEmitter(pe.Current);
+                    pe.Current.Emit();
+                }
         }
 
         PartResource GetCMResource()
         {
-            IEnumerator<PartResource> res = part.Resources.GetEnumerator();
-            while (res.MoveNext())
-            {
-                if (res.Current == null) continue;
-                if (res.Current.resourceName == resourceName) return res.Current;
-            }
-            res.Dispose();
+            using (IEnumerator<PartResource> res = part.Resources.GetEnumerator())
+                while (res.MoveNext())
+                {
+                    if (res.Current == null) continue;
+                    if (res.Current.resourceName == resourceName) return res.Current;
+                }
             return null;
         }
 
@@ -284,15 +283,14 @@ namespace BDArmory.CounterMeasure
             smokeCMObject.SetActive(true);
             smokeCMObject.transform.position = ejectTransform.position + (10 * ejectTransform.forward);
             float longestLife = 0;
-            IEnumerator<KSPParticleEmitter> emitter = smokeCMObject.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator();
-            while (emitter.MoveNext())
-            {
-                if (emitter.Current == null) continue;
-                EffectBehaviour.AddParticleEmitter(emitter.Current);
-                emitter.Current.Emit();
-                if (emitter.Current.maxEnergy > longestLife) longestLife = emitter.Current.maxEnergy;
-            }
-            emitter.Dispose();
+            using (IEnumerator<KSPParticleEmitter> emitter = smokeCMObject.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator())
+                while (emitter.MoveNext())
+                {
+                    if (emitter.Current == null) continue;
+                    EffectBehaviour.AddParticleEmitter(emitter.Current);
+                    emitter.Current.Emit();
+                    if (emitter.Current.maxEnergy > longestLife) longestLife = emitter.Current.maxEnergy;
+                }
 
             audioSource.PlayOneShot(smokePoofSound);
             yield return new WaitForSeconds(longestLife);
@@ -301,7 +299,7 @@ namespace BDArmory.CounterMeasure
 
         void SetupFlarePool()
         {
-            GameObject cm = (GameObject)Instantiate(GameDatabase.Instance.GetModel("BDArmory/Models/CMFlare/model"));
+            GameObject cm = GameDatabase.Instance.GetModel("BDArmory/Models/CMFlare/model");
             cm.SetActive(false);
             cm.AddComponent<CMFlare>();
             flarePool = ObjectPool.CreateObjectPool(cm, 10, true, true);
@@ -309,20 +307,17 @@ namespace BDArmory.CounterMeasure
 
         void SetupSmokePool()
         {
-            GameObject cm =
-                (GameObject)Instantiate(GameDatabase.Instance.GetModel("BDArmory/Models/CMSmoke/cmSmokeModel"));
+            GameObject cm = GameDatabase.Instance.GetModel("BDArmory/Models/CMSmoke/cmSmokeModel");
             cm.SetActive(false);
             cm.AddComponent<CMSmoke>();
-
             smokePool = ObjectPool.CreateObjectPool(cm, 10, true, true);
         }
 
         void SetupChaffPool()
         {
-            GameObject cm = (GameObject)Instantiate(GameDatabase.Instance.GetModel("BDArmory/Models/CMChaff/model"));
+            GameObject cm = GameDatabase.Instance.GetModel("BDArmory/Models/CMChaff/model");
             cm.SetActive(false);
             cm.AddComponent<CMChaff>();
-
             chaffPool = ObjectPool.CreateObjectPool(cm, 10, true, true);
         }
 

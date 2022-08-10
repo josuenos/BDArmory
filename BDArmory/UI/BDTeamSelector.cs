@@ -1,7 +1,10 @@
 ﻿using System.Collections;
-using BDArmory.Misc;
-using BDArmory.Modules;
 using UnityEngine;
+using KSP.Localization;
+
+using BDArmory.Competition;
+using BDArmory.Control;
+using BDArmory.Utils;
 
 namespace BDArmory.UI
 {
@@ -45,7 +48,7 @@ namespace BDArmory.UI
 
             // New team button
             Rect newTeamButtonRect = new Rect(width - margin - newTeanButtonWidth, height, newTeanButtonWidth, buttonHeight);
-            if (GUI.Button(newTeamButtonRect, "New", BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(newTeamButtonRect, Localizer.Format("#LOC_BDArmory_Generic_New"), BDArmorySetup.BDGuiSkin.button))//"New"
             {
                 if (!string.IsNullOrEmpty(newTeamName.Trim()))
                 {
@@ -75,12 +78,20 @@ namespace BDArmory.UI
                     Rect buttonRect = new Rect(margin, height, width - 2 * margin, buttonHeight);
                     GUIStyle buttonStyle = (teams.Current == targetWeaponManager.Team) ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button;
 
-                    if (GUI.Button(buttonRect, teams.Current.Name, buttonStyle))
+                    if (GUI.Button(buttonRect, teams.Current.Name + (teams.Current.Neutral ? (teams.Current.Name != "Neutral" ? "(Neutral)" : "") : ""), buttonStyle))
                     {
-                        targetWeaponManager.SetTeam(teams.Current);
-                        open = false;
+                        switch (Event.current.button)
+                        {
+                            case 1: // right click
+                                if (teams.Current.Name != "Neutral" && teams.Current.Name != "A" && teams.Current.Name != "B")
+                                teams.Current.Neutral = !teams.Current.Neutral;
+                                break;
+                            default:
+                                targetWeaponManager.SetTeam(teams.Current);
+                                open = false;
+                                break;
+                        }
                     }
-
                     height += buttonHeight;
                 }
 
@@ -88,7 +99,7 @@ namespace BDArmory.UI
                 GUI.EndScrollView();
 
             // Buttons
-            if (Event.current.type == EventType.keyUp)
+            if (Event.current.type == EventType.KeyUp)
             {
                 if ((Event.current.keyCode == KeyCode.Return || Event.current.keyCode == KeyCode.KeypadEnter) && !string.IsNullOrEmpty(newTeamName.Trim()))
                 {
@@ -102,8 +113,8 @@ namespace BDArmory.UI
             }
 
             height += margin;
-            BDGUIUtils.RepositionWindow(ref window);
-            BDGUIUtils.UseMouseEventInRect(window);
+            GUIUtils.RepositionWindow(ref window);
+            GUIUtils.UseMouseEventInRect(window);
         }
 
         protected virtual void OnGUI()
@@ -125,11 +136,11 @@ namespace BDArmory.UI
                         width,
                         scrollable ? Screen.height / 2 + buttonHeight + buttonGap + 2 * margin : height);
                     window = GUI.Window(10591029, clientRect, TeamSelectorWindow, "", BDArmorySetup.BDGuiSkin.window);
-                    Misc.Misc.UpdateGUIRect(window, guiCheckIndex);
+                    GUIUtils.UpdateGUIRect(window, guiCheckIndex);
                 }
                 else
                 {
-                    Misc.Misc.UpdateGUIRect(new Rect(), guiCheckIndex);
+                    GUIUtils.UpdateGUIRect(new Rect(), guiCheckIndex);
                 }
             }
         }
@@ -157,7 +168,7 @@ namespace BDArmory.UI
                 yield return null;
 
             ready = true;
-            guiCheckIndex = Misc.Misc.RegisterGUIRect(new Rect());
+            guiCheckIndex = GUIUtils.RegisterGUIRect(new Rect());
         }
     }
 }

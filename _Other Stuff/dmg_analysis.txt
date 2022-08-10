@@ -1,0 +1,76 @@
+To destroy a 13400HP Pollux SRB at 100% damage multiplier.
+              Old:                 New:                  expl:hits
+4x browning:  ~270 hits in 5.5s    ~500 hits in 16s      1:1 vs 1:1
+3x browning:  ~270 hits in 10.9s   ~500 hits in 20s      1:1 vs 1:1
+1x browning:  ~120 hits in 13s     ~240 hits in 30s      1:1 (old) vs 1:1 (new)
+
+4x vulcan:    ~600 hits in 4.7s    ~225 hits in 1.0s     1:6 vs 1:1
+2x vulcan:    ~310 hits in 3.9s    ~240 hits in 1.5s     1:3 vs 1:1
+1x vulcan:    ~260 hits in 9s      ~360 hits in 13s      3:5 vs 1:1
+
+2x gau:       ~125 hits in 1.0s    ~60 hits in 0.5s      1:4 vs 1:1
+1x gau:       ~90 hits in 5s       ~110 hits in 5s       3:5 vs 1:1
+
+
+with vulcan and gau at 30%
+3x browning:  490 in 19.1s
+4x browning:  498 in 14s
+1x gau:       145 in 9.0s (2 cool-downs)
+2x vulcan:    404 in 4.8s (1 cool-down)
+4x vulcan:    408 in 1.2s
+2x gau:       147 in 1.2s
+
+at 10% damage, new dlls
+3x browning:  4869 hits in 231s
+4x browning:  4974 hits in 173s
+1x gau:       1428 hits in 107s
+2x vulcan:    3966 hits in 93s
+3x vulcan:    4005 hits in 55s
+2x gau:       1434 hits in 54s
+4x vulcan:    3999 hits in 42s
+
+expected values if using 25% for 20mm and 35% for 30mm
+3x browning:  231s
+4x browning:  173s
+2x vulcan: 112s
+1x gau:     92s
+3x vulcan:  66s
+4x vulcan:  50s
+2x gau:     46s
+
+at 10% damage, old dlls with original tnt amounts
+3x browning:  2708 hits in 124s
+4x browning:  2711 hits in 91s
+2x vulcan:    3152 hits in 66s
+3x vulcan:    4044 hits in 58s
+4x vulcan:    4248 hits in 45s
+1x gau:       559 hits in 42s
+2x gau:       988 hits in 36s
+
+at 10% damage, old dlls with 25%, 35%
+3x browning:  2710 hits in 123s
+4x browning:  2689 hits in 121s
+2x vulcan:    4228 hits in 131s
+1x gau:       961 hits in 68s
+3x vulcan:    5766 hits in 82s
+4x vulcan:    5540 hits in 58s
+2x gau:       1483 hits in 50s
+
+new DLLs, with 10% (0.00625), 35.4% (0.0900) and 1.125 EXP_DMG_MOD_BALLISTIC
+3x browning:  2703 hits in 124s
+4x browning:  2710 hits in 92s
+2x vulcan:    3116 hits in 66s
+3x vulcan:    3120 hits in 43s
+4x vulcan:    3116 hits in 31s
+1x gau:       731 hits in 52s
+2x gau:       728 hits in 26s
+
+new DLLs, with 10% (0.00625), 35.4% (0.0900) and 0.65 EXP_DMG_MOD_BALLISTIC
+3x browning:  4142 hits in 249s (124s)
+4x browning:  4141 hits in 169s  (91s)
+2x vulcan:    4744 hits in 100s  (66s)
+3x vulcan:    4713 hits in  66s  (58s)
+4x vulcan:    4712 hits in  49s  (45s)
+1x gau:       1131 hits in  83s  (42s)
+2x gau:       1140 hits in  40s  (36s)
+

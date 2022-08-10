@@ -46,7 +46,7 @@ namespace BDArmory.Control
 
         string currentStatus { get; }
 
-        void ReleaseCommand();
+        void ReleaseCommand(bool resetAssignedPosition = true, bool storeCommand = true);
 
         void CommandFollow(ModuleWingCommander leader, int followerIndex);
 
@@ -58,6 +58,8 @@ namespace BDArmory.Control
 
         void CommandTakeOff();
 
+        void CommandFollowWaypoints();
+
         Vector3d commandGPS { get; }
         PilotCommands currentCommand { get; }
         ModuleWingCommander commandLeader { get; }
@@ -65,5 +67,5 @@ namespace BDArmory.Control
         #endregion WingCommander
     }
 
-    public enum PilotCommands { Free, Attack, Follow, FlyTo }
+    public enum PilotCommands { Free, Attack, Follow, FlyTo, Waypoints }
 }

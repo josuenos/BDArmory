@@ -1,8 +1,9 @@
 ﻿using System;
-using BDArmory.Core.Extension;
-using BDArmory.Misc;
-using BDArmory.Modules;
 using UnityEngine;
+
+using BDArmory.Extensions;
+using BDArmory.Utils;
+using BDArmory.Weapons.Missiles;
 
 namespace BDArmory.Guidances
 {
@@ -29,23 +30,19 @@ namespace BDArmory.Guidances
         Hold
     }
 
-    public class CruiseGuidance
+    public class CruiseGuidance : IGuidance
     {
         private readonly MissileBase _missile;
-        private double _originalDistance;
+
 
         private float _pitchAngle;
-        private Vector3 _startPoint;
         private double _futureAltitude;
         private double _futureSpeed;
         private double _horizontalAcceleration;
 
         private float _lastDataRead;
         private double _lastHorizontalSpeed;
-        private double _lastPitchTimeDecision;
         private double _lastSpeedDelta;
-        private double _lastThrottleTimeDecision;
-        private float _lastTimeDecision = 0;
         private double _lastVerticalSpeed;
 
         private double _verticalAcceleration;
@@ -63,7 +60,7 @@ namespace BDArmory.Guidances
 
         public GuidanceState GuidanceState { get; set; }
 
-        public Vector3 CalculateCruiseGuidance(Vector3 targetPosition)
+        public Vector3 GetDirection(MissileBase missile, Vector3 targetPosition, Vector3 targetVelocity)
         {
             //set up
             if (_missile.TimeIndex < 1)
@@ -75,30 +72,15 @@ namespace BDArmory.Guidances
                 Vector3.ProjectOnPlane(targetPosition - _missile.vessel.CoM, upDirection).normalized;
 
             // Ascending
-            _missile.debugString.Append("State=" + GuidanceState);
-            _missile.debugString.Append(Environment.NewLine);
-
+            _missile.debugString.AppendLine("State=" + GuidanceState);
             var missileAltitude = GetCurrentAltitude(_missile.vessel);
-            _missile.debugString.Append("Altitude=" + missileAltitude);
-            _missile.debugString.Append(Environment.NewLine);
-
-            _missile.debugString.Append("Apoapsis=" + _missile.vessel.orbit.ApA);
-            _missile.debugString.Append(Environment.NewLine);
-
-            _missile.debugString.Append("Future Altitude=" + _futureAltitude);
-            _missile.debugString.Append(Environment.NewLine);
-
-            _missile.debugString.Append("Pitch angle=" + _pitchAngle);
-            _missile.debugString.Append(Environment.NewLine);
-
-            _missile.debugString.Append("Pitch decision=" + PitchDecision);
-            _missile.debugString.Append(Environment.NewLine);
-
-            _missile.debugString.Append("lastVerticalSpeed=" + _lastVerticalSpeed);
-            _missile.debugString.Append(Environment.NewLine);
-
-            _missile.debugString.Append("verticalAcceleration=" + _verticalAcceleration);
-            _missile.debugString.Append(Environment.NewLine);
+            _missile.debugString.AppendLine("Altitude=" + missileAltitude);
+            _missile.debugString.AppendLine("Apoapsis=" + _missile.vessel.orbit.ApA);
+            _missile.debugString.AppendLine("Future Altitude=" + _futureAltitude);
+            _missile.debugString.AppendLine("Pitch angle=" + _pitchAngle);
+            _missile.debugString.AppendLine("Pitch decision=" + PitchDecision);
+            _missile.debugString.AppendLine("lastVerticalSpeed=" + _lastVerticalSpeed);
+            _missile.debugString.AppendLine("verticalAcceleration=" + _verticalAcceleration);
 
             GetTelemetryData();
 
@@ -139,7 +121,7 @@ namespace BDArmory.Guidances
                         if (_missile.vessel.InVacuum())
                             return _missile.vessel.CoM + _missile.vessel.Velocity() * 10;
 
-                    return MissileGuidance.GetAirToGroundTarget(targetPosition, _missile.vessel, 1.85f);
+                    return MissileGuidance.GetAirToGroundTarget(targetPosition, targetVelocity, _missile.vessel, 1.85f);
             }
 
             return _missile.vessel.CoM + _missile.vessel.Velocity() * 10;
@@ -225,7 +207,7 @@ namespace BDArmory.Guidances
         //    var terrainRay = new Ray(position, tRayDirection);
         //    RaycastHit rayHit;
 
-        //    if (Physics.Raycast(terrainRay, out rayHit, 30000, (1 << 15) | (1 << 17)))
+        //    if (Physics.Raycast(terrainRay, out rayHit, 30000, (int)(LayerMasks.Scenery | LayerMasks.EVA))) // Why EVA?
         //    {
         //        var detectedAlt =
         //            Vector3.Project(rayHit.point - position, upDirection).magnitude;
@@ -239,7 +221,7 @@ namespace BDArmory.Guidances
         {
             var terrainRay = new Ray(this._missile.vessel.CoM, this._missile.vessel.Velocity());
             RaycastHit hit;
-            return Physics.Raycast(terrainRay, out hit, (float)(this._missile.vessel.srfSpeed * predictionTime), (1 << 15) | (1 << 17));
+            return Physics.Raycast(terrainRay, out hit, (float)(this._missile.vessel.srfSpeed * predictionTime), (int)(LayerMasks.Scenery | LayerMasks.EVA)); // Why EVA?
         }
 
         private void MakeDecisionAboutThrottle(MissileBase missile)

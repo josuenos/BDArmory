@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
-using BDArmory.FX;
-using BDArmory.Misc;
-using BDArmory.UI;
 using UniLinq;
 using UnityEngine;
+
+using BDArmory.FX;
+using BDArmory.Settings;
+using BDArmory.UI;
+using BDArmory.Utils;
 
 namespace BDArmory.CounterMeasure
 {
     public class CMFlare : MonoBehaviour
     {
-        List<KSPParticleEmitter> pEmitters; // = new List<KSPParticleEmitter>();
-        List<BDAGaplessParticleEmitter> gaplessEmitters; // = new List<BDAGaplessParticleEmitter>();
+        List<KSPParticleEmitter> pEmitters;
 
         Light[] lights;
         float startTime;
@@ -32,55 +33,56 @@ namespace BDArmory.CounterMeasure
         {
             // OLD:
             //thermal = BDArmorySetup.FLARE_THERMAL*UnityEngine.Random.Range(0.45f, 1.25f);
-            // NEW: generate flare within spectrum of emitting vessel's heat signature
-            thermal = BDATargetManager.GetVesselHeatSignature(sourceVessel) * UnityEngine.Random.Range(0.65f, 1.75f);
+            // NEW (1.9.1 and before): generate flare within spectrum of emitting vessel's heat signature
+            //thermal = BDATargetManager.GetVesselHeatSignature(sourceVessel) * UnityEngine.Random.Range(0.65f, 1.75f);
+
+            // NEW NEW: Dynamic min/max based on engine heat, with larger multiplier for colder engines, and smaller for naturally hot engines
+            // since range of values are too small for smaller heat values, and flares tend to decay to even colder values, rendering them useless
+
+            /* Alternate flare gen code, adjusts curve towards high end up to 5000K heat engines. Polynomial versions available.
+
+            thermal = BDATargetManager.GetVesselHeatSignature(sourceVessel);
+            //float thermalMinMult = Mathf.Clamp(-0.166f * (float)Math.Log(thermal) + 1.9376f, 0.5f, 0.82f);
+            //float thermalMaxMult = Mathf.Clamp(0.3534f * (float)Math.Log(thermal) - 1.0251f, 1.35f, 2.0f);
+
+            thermal *= UnityEngine.Random.Range(thermalMinMult, thermalMaxMult);
+
+            if (BDArmorySettings.DEBUG_LABELS)
+                Debug.Log("[BDArmory.CMFlare]: New flare generated from " + sourceVessel.GetDisplayName() + ":" + BDATargetManager.GetVesselHeatSignature(sourceVessel).ToString("0.0") + ", heat: " + thermal.ToString("0.0") + " mult: " + thermalMinMult + "-" + thermalMaxMult);
+            */
+
+            // NEW (1.10 and later): generate flare within spectrum of emitting vessel's heat signature, but narrow range for low heats
+
+            thermal = BDATargetManager.GetVesselHeatSignature(sourceVessel, Vector3.zero); //if enabling heatSig occlusion in IR missiles the thermal value of flares will have to be adjusted to compensate.
+            //Then again, these are being ejected in a range of temps, which should cover potential differences in heatreturn from a target based on occlusion. Have vector3.Zero replaced with missile position to sim occlusion level missile owuld see and set flare temps accordingly?
+            // float minMult = Mathf.Clamp(-0.265f * Mathf.Log(sourceHeat) + 2.3f, 0.65f, 0.8f);
+            float thermalMinMult = Mathf.Clamp(((0.00093f * thermal * thermal - 1.4457f * thermal + 1141.95f) / 1000f), 0.65f, 0.8f); // Equivalent to above, but uses polynomial for speed
+            thermal *= UnityEngine.Random.Range(thermalMinMult, Mathf.Max(BDArmorySettings.FLARE_FACTOR, 0f) - thermalMinMult + 0.8f);
+
+            if (BDArmorySettings.DEBUG_OTHER)
+                Debug.Log("[BDArmory.CMFlare]: New flare generated from " + sourceVessel.GetDisplayName() + ":" + BDATargetManager.GetVesselHeatSignature(sourceVessel, Vector3.zero).ToString("0.0") + ", heat: " + thermal.ToString("0.0"));
         }
 
         void OnEnable()
         {
             startThermal = thermal;
-            minThermal = startThermal * 0.3f;
-
-            if (gaplessEmitters == null || pEmitters == null)
+            minThermal = startThermal * 0.34f; // 0.3 is original value, but doesn't work well for Tigers, 0.4f gives decent performance for Tigers, 0.65 decay gives best flare performance overall based on some monte carlo analysis
+            if (pEmitters == null)
             {
-                gaplessEmitters = new List<BDAGaplessParticleEmitter>();
-
                 pEmitters = new List<KSPParticleEmitter>();
 
-                IEnumerator<KSPParticleEmitter> pe = gameObject.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator();
-                while (pe.MoveNext())
-                {
-                    if (pe.Current == null) continue;
-                    if (pe.Current.useWorldSpace)
+                using (var pe = gameObject.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator())
+                    while (pe.MoveNext())
                     {
-                        BDAGaplessParticleEmitter gpe = pe.Current.gameObject.AddComponent<BDAGaplessParticleEmitter>();
-                        gaplessEmitters.Add(gpe);
-                        gpe.emit = true;
+                        if (pe.Current == null) continue;
+                        {
+                            EffectBehaviour.AddParticleEmitter(pe.Current);
+                            pEmitters.Add(pe.Current);
+                        }
                     }
-                    else
-                    {
-                        EffectBehaviour.AddParticleEmitter(pe.Current);
-                        pEmitters.Add(pe.Current);
-                        pe.Current.emit = true;
-                    }
-                }
-                pe.Dispose();
             }
-            List<BDAGaplessParticleEmitter>.Enumerator gEmitter = gaplessEmitters.GetEnumerator();
-            while (gEmitter.MoveNext())
-            {
-                if (gEmitter.Current == null) continue;
-                gEmitter.Current.emit = true;
-            }
-            gEmitter.Dispose();
 
-            List<KSPParticleEmitter>.Enumerator pEmitter = pEmitters.GetEnumerator();
-            while (pEmitter.MoveNext())
-            {
-                if (pEmitter.Current == null) continue;
-                pEmitter.Current.emit = true;
-            }
-            pEmitter.Dispose();
+            EnableEmitters();
 
             BDArmorySetup.numberOfParticleEmitters++;
 
@@ -89,13 +91,12 @@ namespace BDArmory.CounterMeasure
                 lights = gameObject.GetComponentsInChildren<Light>();
             }
 
-            IEnumerator<Light> lgt = lights.AsEnumerable().GetEnumerator();
-            while (lgt.MoveNext())
-            {
-                if (lgt.Current == null) continue;
-                lgt.Current.enabled = true;
-            }
-            lgt.Dispose();
+            using (IEnumerator<Light> lgt = lights.AsEnumerable().GetEnumerator())
+                while (lgt.MoveNext())
+                {
+                    if (lgt.Current == null) continue;
+                    lgt.Current.enabled = true;
+                }
             startTime = Time.time;
 
             //ksp force applier
@@ -104,6 +105,8 @@ namespace BDArmory.CounterMeasure
             BDArmorySetup.Flares.Add(this);
 
             upDirection = VectorUtils.GetUpDirection(transform.position);
+
+            this.transform.localScale = Vector3.one;
         }
 
         void FixedUpdate()
@@ -129,33 +132,31 @@ namespace BDArmory.CounterMeasure
             Vector3 downForce = (Mathf.Clamp(velocity.magnitude, 0.1f, 150) / 150) * 20 * -upDirection;
 
             //turbulence
-            List<BDAGaplessParticleEmitter>.Enumerator gEmitter = gaplessEmitters.GetEnumerator();
-            while (gEmitter.MoveNext())
-            {
-                if (gEmitter.Current == null) continue;
-                if (!gEmitter.Current.pEmitter) continue;
-                try
+            using (List<KSPParticleEmitter>.Enumerator pEmitter = pEmitters.GetEnumerator())
+                while (pEmitter.MoveNext())
                 {
-                    gEmitter.Current.pEmitter.worldVelocity = 2 * ParticleTurbulence.flareTurbulence + downForce;
-                }
-                catch (NullReferenceException)
-                {
-                    Debug.LogWarning("CMFlare NRE setting worldVelocity");
-                }
-
-                try
-                {
-                    if (FlightGlobals.ActiveVessel && FlightGlobals.ActiveVessel.atmDensity <= 0)
+                    if (pEmitter.Current == null) continue;
+                    try
                     {
-                        gEmitter.Current.emit = false;
+                        pEmitter.Current.worldVelocity = 2 * ParticleTurbulence.flareTurbulence + downForce;
+                    }
+                    catch (NullReferenceException e)
+                    {
+                        Debug.LogWarning("[BDArmory.CMFlare]: NRE setting worldVelocity: " + e.Message);
+                    }
+
+                    try
+                    {
+                        if (FlightGlobals.ActiveVessel && FlightGlobals.ActiveVessel.atmDensity <= 0)
+                        {
+                            pEmitter.Current.emit = false;
+                        }
+                    }
+                    catch (NullReferenceException e)
+                    {
+                        Debug.LogWarning("[BDArmory.CMFlare]: NRE checking density: " + e.Message);
                     }
                 }
-                catch (NullReferenceException)
-                {
-                    Debug.LogWarning("CMFlare NRE checking density");
-                }
-            }
-            gEmitter.Dispose();
             //
 
             //thermal decay
@@ -166,30 +167,19 @@ namespace BDArmory.CounterMeasure
             {
                 alive = false;
                 BDArmorySetup.Flares.Remove(this);
-
-                List<KSPParticleEmitter>.Enumerator pe = pEmitters.GetEnumerator();
-                while (pe.MoveNext())
-                {
-                    if (pe.Current == null) continue;
-                    pe.Current.emit = false;
-                }
-                pe.Dispose();
-
-                List<BDAGaplessParticleEmitter>.Enumerator gpe = gaplessEmitters.GetEnumerator();
-                while (gpe.MoveNext())
-                {
-                    if (gpe.Current == null) continue;
-                    gpe.Current.emit = false;
-                }
-                gpe.Dispose();
-
-                IEnumerator<Light> lgt = lights.AsEnumerable().GetEnumerator();
-                while (lgt.MoveNext())
-                {
-                    if (lgt.Current == null) continue;
-                    lgt.Current.enabled = false;
-                }
-                lgt.Dispose();
+                this.transform.localScale = Vector3.zero;
+                using (List<KSPParticleEmitter>.Enumerator pe = pEmitters.GetEnumerator())
+                    while (pe.MoveNext())
+                    {
+                        if (pe.Current == null) continue;
+                        pe.Current.emit = false;
+                    }
+                using (IEnumerator<Light> lgt = lights.AsEnumerable().GetEnumerator())
+                    while (lgt.MoveNext())
+                    {
+                        if (lgt.Current == null) continue;
+                        lgt.Current.enabled = false;
+                    }
             }
 
             if (Time.time - startTime > lifeTime + 11) //disable object after x seconds
@@ -219,6 +209,18 @@ namespace BDArmory.CounterMeasure
                 velocity += FlightGlobals.getGeeForceAtPosition(transform.position) * Time.fixedDeltaTime;
 
             transform.position += velocity * Time.fixedDeltaTime;
+        }
+
+        public void EnableEmitters()
+        {
+            if (pEmitters == null) return;
+            using (var emitter = pEmitters.GetEnumerator())
+                while (emitter.MoveNext())
+                {
+                    if (emitter.Current == null) continue;
+                    if (emitter.Current.name == "pEmitter") emitter.Current.emit = BDArmorySettings.FLARE_SMOKE;
+                    else emitter.Current.emit = true;
+                }
         }
     }
 }

@@ -1,5 +1,7 @@
-using BDArmory.Core;
 using UnityEngine;
+
+using BDArmory.Settings;
+using BDArmory.Utils;
 
 namespace BDArmory.FX
 {
@@ -12,6 +14,7 @@ namespace BDArmory.FX
         Vector3 angularVelocity;
 
         float atmDensity;
+        int collisionLayerMask = (int)(LayerMasks.Parts | LayerMasks.Scenery | LayerMasks.Unknown19); // Why 19?
 
         void OnEnable()
         {
@@ -51,8 +54,7 @@ namespace BDArmory.FX
             if (BDArmorySettings.SHELL_COLLISIONS)
             {
                 RaycastHit hit;
-                if (Physics.Linecast(transform.position, transform.position + velocity * Time.fixedDeltaTime, out hit,
-                    557057))
+                if (Physics.Linecast(transform.position, transform.position + velocity * Time.fixedDeltaTime, out hit, collisionLayerMask))
                 {
                     velocity = Vector3.Reflect(velocity, hit.normal);
                     velocity *= 0.55f;

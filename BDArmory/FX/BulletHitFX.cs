@@ -1,27 +1,93 @@
 using System.Collections.Generic;
-using BDArmory.Core;
-using BDArmory.Core.Extension;
-using BDArmory.Misc;
 using UniLinq;
 using UnityEngine;
 
+using BDArmory.Damage;
+using BDArmory.Extensions;
+using BDArmory.Settings;
+using BDArmory.UI;
+using BDArmory.Utils;
+
 namespace BDArmory.FX
 {
+    [KSPAddon(KSPAddon.Startup.Flight, false)]
+    class Decal : MonoBehaviour
+    {
+        Part parentPart;
+        public static ObjectPool CreateDecalPool(string modelPath)
+        {
+            var template = GameDatabase.Instance.GetModel(modelPath);
+            var decal = template.AddComponent<Decal>();
+            template.AddOrGetComponent<Renderer>();
+            template.SetActive(false);
+            return ObjectPool.CreateObjectPool(template, BDArmorySettings.MAX_NUM_BULLET_DECALS, false, true, 0, true);
+        }
+
+        public void AttachAt(Part hitPart, RaycastHit hit, Vector3 offset)
+        {
+            parentPart = hitPart;
+            transform.SetParent(hitPart.transform);
+            transform.position = hit.point + offset;
+            transform.rotation = Quaternion.FromToRotation(Vector3.forward, hit.normal);
+            parentPart.OnJustAboutToDie += OnParentDestroy;
+            parentPart.OnJustAboutToBeDestroyed += OnParentDestroy;
+            gameObject.SetActive(true);
+        }
+        public void SetColor(Color color)
+        {
+            var r = gameObject.GetComponentInChildren<Renderer>();
+            if (r != null)
+            {
+                r.material.shader = Shader.Find("KSP/Particles/Alpha Blended");
+                r.material.SetColor("_TintColor", color);
+                r.material.color = color;
+            }
+            else
+            {
+                Debug.Log("[PAINTBALL] no renderer found in decal");
+            }
+
+        }
+        public void OnParentDestroy()
+        {
+            if (parentPart)
+            {
+                parentPart.OnJustAboutToDie -= OnParentDestroy;
+                parentPart.OnJustAboutToBeDestroyed -= OnParentDestroy;
+                parentPart = null;
+                transform.parent = null;
+                gameObject.SetActive(false);
+            }
+        }
+
+        public void OnDestroy()
+        {
+            OnParentDestroy(); // Make sure it's disabled and book-keeping is done.
+        }
+    }
+
     public class BulletHitFX : MonoBehaviour
     {
         KSPParticleEmitter[] pEmitters;
         AudioSource audioSource;
+        enum AudioClipType { Ricochet1, Ricochet2, Ricochet3, BulletHit1, BulletHit2, BulletHit3, Artillery_Shot };
+        static Dictionary<AudioClipType, AudioClip> audioClips;
         AudioClip hitSound;
-        public Vector3 normal;
         float startTime;
         public bool ricochet;
         public float caliber;
 
-        public GameObject bulletHoleDecalPrefab;
         public static ObjectPool decalPool_small;
         public static ObjectPool decalPool_large;
+        public static ObjectPool decalPool_paint1;
+        public static ObjectPool decalPool_paint2;
+        public static ObjectPool decalPool_paint3;
+        public static ObjectPool bulletHitFXPool;
+        public static ObjectPool penetrationFXPool;
+        public static ObjectPool leakFXPool;
+        public static ObjectPool FireFXPool;
+        public static ObjectPool flameFXPool;
         public static Dictionary<Vessel, List<float>> PartsOnFire = new Dictionary<Vessel, List<float>>();
-        public static Queue<BulletHitFX> HitsLoaded = new Queue<BulletHitFX>();
 
         public static int MaxFiresPerVessel = 3;
         public static float FireLifeTimeInSeconds = 5f;
@@ -30,65 +96,142 @@ namespace BDArmory.FX
 
         public static void SetupShellPool()
         {
-            GameObject templateShell_large;
-            templateShell_large =
-                    Instantiate(GameDatabase.Instance.GetModel("BDArmory/Models/bulletDecal/BulletDecal2"));
-            templateShell_large.SetActive(false);
-            if (decalPool_large == null)
-                decalPool_large = ObjectPool.CreateObjectPool(templateShell_large, BDArmorySettings.MAX_NUM_BULLET_DECALS, true, true);
-
-            GameObject templateShell_small;
-            templateShell_small =
-                Instantiate(GameDatabase.Instance.GetModel("BDArmory/Models/bulletDecal/BulletDecal1"));
-            templateShell_small.SetActive(false);
-            if (decalPool_small == null)
-                decalPool_small = ObjectPool.CreateObjectPool(templateShell_small, BDArmorySettings.MAX_NUM_BULLET_DECALS, true, true);
-        }
-
-        public static void SpawnDecal(RaycastHit hit, Part hitPart, float caliber, float penetrationfactor)
-        {
-            if (!BDArmorySettings.BULLET_DECALS) return;
-            ObjectPool decalPool_;
-
-            if (caliber >= 90f)
+            if (!BDArmorySettings.PAINTBALL_MODE)
             {
-                decalPool_ = decalPool_large;
+                if (decalPool_large == null)
+                    decalPool_large = Decal.CreateDecalPool("BDArmory/Models/bulletDecal/BulletDecal2");
+
+                if (decalPool_small == null)
+                    decalPool_small = Decal.CreateDecalPool("BDArmory/Models/bulletDecal/BulletDecal1");
             }
             else
             {
-                decalPool_ = decalPool_small;
+                if (decalPool_paint1 == null)
+                    decalPool_paint1 = Decal.CreateDecalPool("BDArmory/Models/bulletDecal/BulletDecal3");
+
+                if (decalPool_paint2 == null)
+                    decalPool_paint2 = Decal.CreateDecalPool("BDArmory/Models/bulletDecal/BulletDecal4");
+
+                if (decalPool_paint3 == null)
+                    decalPool_paint3 = Decal.CreateDecalPool("BDArmory/Models/bulletDecal/BulletDecal5");
+
+            }
+        }
+
+        public static void AdjustDecalPoolSizes(int size)
+        {
+            if (decalPool_large != null) decalPool_large.AdjustSize(size);
+            if (decalPool_small != null) decalPool_small.AdjustSize(size);
+            if (decalPool_paint1 != null) decalPool_paint1.AdjustSize(size);
+            if (decalPool_paint2 != null) decalPool_paint2.AdjustSize(size);
+            if (decalPool_paint3 != null) decalPool_paint3.AdjustSize(size);
+        }
+
+        // We use an ObjectPool for the BulletHitFX and PenFX instances as they leak KSPParticleEmitters otherwise.
+        public static void SetupBulletHitFXPool()
+        {
+            if (bulletHitFXPool == null)
+            {
+                var bulletHitFXTemplate = GameDatabase.Instance.GetModel("BDArmory/Models/bulletHit/bulletHit");
+                var bFX = bulletHitFXTemplate.AddComponent<BulletHitFX>();
+                bFX.audioSource = bulletHitFXTemplate.AddComponent<AudioSource>();
+                bFX.audioSource.minDistance = 1;
+                bFX.audioSource.maxDistance = 50;
+                bFX.audioSource.spatialBlend = 1;
+                bulletHitFXTemplate.SetActive(false);
+                bulletHitFXPool = ObjectPool.CreateObjectPool(bulletHitFXTemplate, 10, true, true, 10f * Time.deltaTime, false);
+            }
+            if (penetrationFXPool == null)
+            {
+                var penetrationFXTemplate = GameDatabase.Instance.GetModel("BDArmory/FX/PenFX");
+                var bFX = penetrationFXTemplate.AddComponent<BulletHitFX>();
+                bFX.audioSource = penetrationFXTemplate.AddComponent<AudioSource>();
+                bFX.audioSource.minDistance = 1;
+                bFX.audioSource.maxDistance = 50;
+                bFX.audioSource.spatialBlend = 1;
+                penetrationFXTemplate.SetActive(false);
+                penetrationFXPool = ObjectPool.CreateObjectPool(penetrationFXTemplate, 10, true, true, 10f * Time.deltaTime, false);
+            }
+            if (flameFXPool == null)
+            {
+                var flameTemplate = GameDatabase.Instance.GetModel("BDArmory/FX/FlameEffect2/model");
+                flameTemplate.AddComponent<DecalEmitterScript>();
+                DecalEmitterScript.shrinkRateFlame = 0.125f;
+                DecalEmitterScript.shrinkRateSmoke = 0.125f;
+                foreach (var pe in flameTemplate.GetComponentsInChildren<KSPParticleEmitter>())
+                {
+                    if (!pe.useWorldSpace) continue;
+                    var gpe = pe.gameObject.AddComponent<DecalGaplessParticleEmitter>();
+                    gpe.Emit = false;
+                }
+                flameTemplate.SetActive(false);
+                flameFXPool = ObjectPool.CreateObjectPool(flameTemplate, 10, true, true);
+            }
+        }
+
+        public static void SpawnDecal(RaycastHit hit, Part hitPart, float caliber, float penetrationfactor, string team)
+        {
+            if (!BDArmorySettings.BULLET_DECALS) return;
+            ObjectPool decalPool_;
+            if (!BDArmorySettings.PAINTBALL_MODE)
+            {
+                if (caliber >= 90f)
+                {
+                    decalPool_ = decalPool_large;
+                }
+                else
+                {
+                    decalPool_ = decalPool_small;
+                }
+            }
+            else
+            {
+                int i;
+                i = UnityEngine.Random.Range(1, 4);
+                if (i < 1.66)
+                {
+                    decalPool_ = decalPool_paint1;
+                }
+                else if (i > 2.33)
+                {
+                    decalPool_ = decalPool_paint2;
+                }
+                else
+                {
+                    decalPool_ = decalPool_paint3;
+                }
             }
 
             //front hit
-            GameObject decalFront = decalPool_.GetPooledObject();
+            var decalFront = decalPool_.GetPooledObject();
             if (decalFront != null && hitPart != null)
             {
-                decalFront.transform.SetParent(hitPart.transform);
-                decalFront.transform.position = hit.point + new Vector3(0.25f, 0f, 0f);
-                decalFront.transform.rotation = Quaternion.FromToRotation(Vector3.forward, hit.normal);
-                decalFront.SetActive(true);
+                var decal = decalFront.GetComponentInChildren<Decal>();
+                decal.AttachAt(hitPart, hit, new Vector3(0.25f, 0f, 0f));
+
+                if (BDArmorySettings.PAINTBALL_MODE)
+                {
+                    if (team != null && BDTISetup.Instance.ColorAssignments.ContainsKey(team))
+                    {
+                        decal.SetColor(BDTISetup.Instance.ColorAssignments[team]);
+                    }
+                }
             }
             //back hole if fully penetrated
-            if (penetrationfactor >= 1)
+            if (penetrationfactor >= 1 && !BDArmorySettings.PAINTBALL_MODE)
             {
-                GameObject decalBack = decalPool_.GetPooledObject();
+                var decalBack = decalPool_.GetPooledObject();
                 if (decalBack != null && hitPart != null)
                 {
-                    decalBack.transform.SetParent(hitPart.transform);
-                    decalBack.transform.position = hit.point + new Vector3(-0.25f, 0f, 0f);
-                    decalBack.transform.rotation = Quaternion.FromToRotation(Vector3.forward, hit.normal);
-                    decalBack.SetActive(true);
-                }
-
-                if (CanFlamesBeAttached(hitPart))
-                {
-                    AttachFlames(hit, hitPart, caliber);
+                    var decal = decalBack.GetComponentInChildren<Decal>();
+                    decal.AttachAt(hitPart, hit, new Vector3(-0.25f, 0f, 0f));
                 }
             }
         }
 
         private static bool CanFlamesBeAttached(Part hitPart)
         {
+            if (hitPart == null || hitPart.vessel == null) return false;
             if (!BDArmorySettings.FIRE_FX_IN_FLIGHT && !hitPart.vessel.LandedOrSplashed || !hitPart.HasFuel())
                 return false;
 
@@ -120,188 +263,251 @@ namespace BDArmory.FX
             return true;
         }
 
-        void Start()
+        public static void CleanPartsOnFireInfo()
         {
-            HitsLoaded.Enqueue(this);
-            if (decalPool_large == null || decalPool_small == null)
-                SetupShellPool();
-
-            startTime = Time.time;
-            pEmitters = gameObject.GetComponentsInChildren<KSPParticleEmitter>();
-
-            IEnumerator<KSPParticleEmitter> pe = pEmitters.AsEnumerable().GetEnumerator();
-            while (pe.MoveNext())
+            HashSet<Vessel> keysToRemove = new HashSet<Vessel>();
+            foreach (var key in PartsOnFire.Keys.ToList())
             {
-                if (pe.Current == null) continue;
-                EffectBehaviour.AddParticleEmitter(pe.Current);
+                PartsOnFire[key] = PartsOnFire[key].Where(x => (Time.time - x) < FireLifeTimeInSeconds).ToList(); // Remove expired fires.
+                if (PartsOnFire[key].Count == 0) { keysToRemove.Add(key); } // Remove parts no longer on fire.
+            }
+            PartsOnFire = PartsOnFire.Where(kvp => kvp.Key != null && !keysToRemove.Contains(kvp.Key)).ToDictionary(kvp => kvp.Key, kvp => kvp.Value); // Remove null keys (vessels) and those with no parts on fire.
+        }
+
+        void Awake()
+        {
+            if (audioClips == null)
+            {
+                audioClips = new Dictionary<AudioClipType, AudioClip>{
+                    {AudioClipType.Ricochet1, GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/ricochet1")},
+                    {AudioClipType.Ricochet2, GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/ricochet1")},
+                    {AudioClipType.Ricochet3, GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/ricochet3")},
+                    {AudioClipType.BulletHit1, GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/bulletHit1")},
+                    {AudioClipType.BulletHit2, GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/bulletHit2")},
+                    {AudioClipType.BulletHit3, GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/bulletHit3")},
+                    {AudioClipType.Artillery_Shot, GameDatabase.Instance.GetAudioClip("BDArmory/Sounds/Artillery_Shot")},
+                };
+            }
+        }
+
+        void OnEnable()
+        {
+            startTime = Time.time;
+            disabled = false;
+
+            foreach (var pe in pEmitters)
+            {
+                if (pe == null) continue;
+                EffectBehaviour.AddParticleEmitter(pe);
             }
 
-            pe.Dispose();
-
-            audioSource = gameObject.AddComponent<AudioSource>();
-            audioSource.minDistance = 1;
-            audioSource.maxDistance = 50;
-            audioSource.spatialBlend = 1;
+            audioSource = gameObject.GetComponent<AudioSource>();
             audioSource.volume = BDArmorySettings.BDARMORY_WEAPONS_VOLUME;
 
-            int random = Random.Range(1, 3);
+            int random = UnityEngine.Random.Range(1, 3);
 
             if (ricochet)
             {
                 if (caliber <= 30)
                 {
-                    string path = "BDArmory/Sounds/ricochet" + random;
-                    hitSound = GameDatabase.Instance.GetAudioClip(path);
+                    switch (random)
+                    {
+                        case 1:
+                            hitSound = audioClips[AudioClipType.Ricochet1];
+                            break;
+                        case 2:
+                            hitSound = audioClips[AudioClipType.Ricochet2];
+                            break;
+                        case 3:
+                            hitSound = audioClips[AudioClipType.Ricochet3];
+                            break;
+                    }
                 }
                 else
                 {
-                    string path = "BDArmory/Sounds/Artillery_Shot";
-                    hitSound = GameDatabase.Instance.GetAudioClip(path);
+                    hitSound = audioClips[AudioClipType.Artillery_Shot];
                 }
             }
             else
             {
                 if (caliber <= 30)
                 {
-                    string path = "BDArmory/Sounds/bulletHit" + random;
-                    hitSound = GameDatabase.Instance.GetAudioClip(path);
+                    switch (random)
+                    {
+                        case 1:
+                            hitSound = audioClips[AudioClipType.BulletHit1];
+                            break;
+                        case 2:
+                            hitSound = audioClips[AudioClipType.BulletHit2];
+                            break;
+                        case 3:
+                            hitSound = audioClips[AudioClipType.BulletHit3];
+                            break;
+                    }
                 }
                 else
                 {
-                    string path = "BDArmory/Sounds/Artillery_Shot";
-                    hitSound = GameDatabase.Instance.GetAudioClip(path);
+                    hitSound = audioClips[AudioClipType.Artillery_Shot];
                 }
             }
 
             audioSource.PlayOneShot(hitSound);
         }
 
+        void OnDisable()
+        {
+            foreach (var pe in pEmitters)
+                if (pe != null)
+                {
+                    pe.emit = false;
+                    EffectBehaviour.RemoveParticleEmitter(pe);
+                }
+        }
+
         void Update()
         {
-            using (new PerformanceLogger("BulletHitFX.Update"))
+            if (!disabled && Time.time - startTime > Time.deltaTime)
             {
-                if (!disabled && Time.time - startTime > 0.03f)
-                {
-                    IEnumerator<KSPParticleEmitter> pe = pEmitters.AsEnumerable().GetEnumerator();
+                using (var pe = pEmitters.AsEnumerable().GetEnumerator())
                     while (pe.MoveNext())
                     {
                         if (pe.Current == null) continue;
                         pe.Current.emit = false;
                     }
-                    pe.Dispose();
-                    disabled = true;
-                }
-                if (Time.time - startTime > 0.3f)
-                {
-                    HitsLoaded.Dequeue();
-                    Destroy(gameObject);
-                }
+                disabled = true;
             }
         }
 
-        public static void CreateBulletHit(Part hitPart, Vector3 position, RaycastHit hit, Vector3 normalDirection,
-                                            bool ricochet, float caliber, float penetrationfactor)
+        public static void CreateBulletHit(Part hitPart, Vector3 position, RaycastHit hit, Vector3 normalDirection, bool ricochet, float caliber, float penetrationfactor, string team)
         {
-            if (HitsLoaded.Count > 5) return;
-
             if (decalPool_large == null || decalPool_small == null)
                 SetupShellPool();
-
-            GameObject go;
-
-            if (caliber <= 30)
-            {
-                go = GameDatabase.Instance.GetModel("BDArmory/Models/bulletHit/bulletHit");
-            }
-            else
-            {
-                go = GameDatabase.Instance.GetModel("BDArmory/FX/PenFX");
-            }
+            if (BDArmorySettings.PAINTBALL_MODE && decalPool_paint1 == null)
+                SetupShellPool();
+            if (bulletHitFXPool == null || penetrationFXPool == null || flameFXPool == null)
+                SetupBulletHitFXPool();
 
             if ((hitPart != null) && caliber != 0 && !hitPart.IgnoreDecal())
             {
-                SpawnDecal(hit, hitPart, caliber, penetrationfactor); //No bullet decals for laser or ricochet
+                SpawnDecal(hit, hitPart, caliber, penetrationfactor, team); //No bullet decals for laser or ricochet                
             }
 
-            GameObject newExplosion =
-                (GameObject)Instantiate(go, position, Quaternion.LookRotation(normalDirection));
+            GameObject newExplosion = (caliber <= 30 || BDArmorySettings.PAINTBALL_MODE) ? bulletHitFXPool.GetPooledObject() : penetrationFXPool.GetPooledObject();
+            newExplosion.transform.SetPositionAndRotation(position, Quaternion.LookRotation(normalDirection));
+            var bulletHitComponent = newExplosion.GetComponent<BulletHitFX>();
+            bulletHitComponent.ricochet = ricochet;
+            bulletHitComponent.caliber = caliber;
+            bulletHitComponent.pEmitters = newExplosion.GetComponentsInChildren<KSPParticleEmitter>();
             newExplosion.SetActive(true);
-            newExplosion.AddComponent<BulletHitFX>();
-            newExplosion.GetComponent<BulletHitFX>().ricochet = ricochet;
-            newExplosion.GetComponent<BulletHitFX>().caliber = caliber;
-            IEnumerator<KSPParticleEmitter> pe = newExplosion.GetComponentsInChildren<KSPParticleEmitter>().Cast<KSPParticleEmitter>().GetEnumerator();
-            while (pe.MoveNext())
+            foreach (var pe in bulletHitComponent.pEmitters)
             {
-                if (pe.Current == null) continue;
-                pe.Current.emit = true;
+                if (pe == null) continue;
+                pe.emit = true;
 
-                if (pe.Current.gameObject.name == "sparks")
+                if (pe.gameObject.name == "sparks")
                 {
-                    pe.Current.force = (4.49f * FlightGlobals.getGeeForceAtPosition(position));
+                    pe.force = (4.49f * FlightGlobals.getGeeForceAtPosition(position));
                 }
-                else if (pe.Current.gameObject.name == "smoke")
+                else if (pe.gameObject.name == "smoke")
                 {
-                    pe.Current.force = (1.49f * FlightGlobals.getGeeForceAtPosition(position));
+                    pe.force = (1.49f * FlightGlobals.getGeeForceAtPosition(position));
                 }
             }
-            pe.Dispose();
         }
 
-        public static void AttachFlames(RaycastHit hit, Part hitPart, float caliber)
+        public static void AttachLeak(RaycastHit hit, Part hitPart, float caliber, bool explosive, bool incendiary, string sourcevessel, bool inertTank)
         {
-            var modelUrl = "BDArmory/FX/FlameEffect2/model";
-
-            var flameObject =
-                (GameObject)
-                Instantiate(
-                    GameDatabase.Instance.GetModel(modelUrl),
-                    hit.point + new Vector3(0.25f, 0f, 0f),
-                    Quaternion.identity);
-
-            flameObject.SetActive(true);
-            flameObject.transform.SetParent(hitPart.transform);
-            flameObject.AddComponent<DecalEmitterScript>();
-
-            if (hitPart.vessel.LandedOrSplashed && hitPart.GetFireFX() && caliber >= 100f)
+            if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_TANKS && hitPart.Modules.GetModule<HitpointTracker>().Hitpoints > 0)
             {
-                DecalEmitterScript.shrinkRateFlame = 0.25f;
-                DecalEmitterScript.shrinkRateSmoke = 0.125f;
-            }
+                if (leakFXPool == null)
+                    leakFXPool = FuelLeakFX.CreateLeakFXPool("BDArmory/FX/FuelLeakFX/model");
+                var fuelLeak = leakFXPool.GetPooledObject();
+                var leakFX = fuelLeak.GetComponentInChildren<FuelLeakFX>();
 
-            foreach (var pe in flameObject.GetComponentsInChildren<KSPParticleEmitter>())
-            {
-                if (!pe.useWorldSpace) continue;
-                var gpe = pe.gameObject.AddComponent<DecalGaplessParticleEmitter>();
-                gpe.Emit = true;
+                var leak = hitPart.GetComponentsInChildren<FuelLeakFX>();
+                if (leak != null) //only apply one leak to engines
+                {
+                    if (!hitPart.isEngine())
+                    {
+                        leakFX.AttachAt(hitPart, hit, new Vector3(0.25f, 0f, 0f));
+                        leakFX.transform.localScale = Vector3.one * (caliber / 10);
+                        leakFX.drainRate = ((caliber / 10) * BDArmorySettings.BD_TANK_LEAK_RATE);
+                        leakFX.lifeTime = (BDArmorySettings.BD_TANK_LEAK_TIME);
+                        if (BDArmorySettings.BD_FIRES_ENABLED && !inertTank)
+                        {
+                            float ammoMod = BDArmorySettings.BD_FIRE_CHANCE_TRACER; //10% chance of AP rounds starting fires from sparks/tracers/etc
+                            if (explosive)
+                            {
+                                ammoMod = BDArmorySettings.BD_FIRE_CHANCE_HE; //20% chance of starting fires from HE rounds
+                            }
+                            if (incendiary)
+                            {
+                                ammoMod = BDArmorySettings.BD_FIRE_CHANCE_INCENDIARY; //90% chance of starting fires from inc rounds
+                            }
+                            double Diceroll = UnityEngine.Random.Range(0, 100);
+                            if (Diceroll <= ammoMod)
+                            {
+                                leakFX.lifeTime = 0;
+                                int leakcount = 0;
+                                foreach (var existingLeakFX in hitPart.GetComponentsInChildren<FuelLeakFX>())
+                                {
+                                    existingLeakFX.lifeTime = 0; //kill leakFX, start fire
+                                    leakcount++;
+                                }
+                                //if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.BullethitFX]: Adding fire. HE? " + explosive + "; Inc? " + incendiary + "; inerttank? " + inertTank);
+                                AttachFire(hit.point, hitPart, caliber, sourcevessel, -1, leakcount);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    leakFX.AttachAt(hitPart, hit, new Vector3(0.25f, 0f, 0f));
+                    leakFX.transform.localScale = Vector3.one * (caliber / 10);
+                    leakFX.drainRate = ((caliber / 10) * BDArmorySettings.BD_TANK_LEAK_RATE);
+                    leakFX.lifeTime = (BDArmorySettings.BD_TANK_LEAK_TIME);
+
+                    if (hitPart.isEngine())
+                    {
+                        leakFX.lifeTime = (10 * BDArmorySettings.BD_TANK_LEAK_TIME);
+                    }
+                }
+                if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.BulletHitFX]: BulletHit attaching fuel leak, drainrate: " + leakFX.drainRate);
+
+                fuelLeak.SetActive(true);
             }
         }
+        public static void AttachFire(Vector3 hit, Part hitPart, float caliber, string sourcevessel, float burntime = -1, int ignitedLeaks = 1, bool surfaceFire = false)
+        {
+            if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_FIRES_ENABLED && hitPart.Modules.GetModule<HitpointTracker>().Hitpoints > 0)
+            {
+                if (FireFXPool == null)
+                    FireFXPool = FireFX.CreateFireFXPool("BDArmory/FX/FireFX/model");
+                var fire = FireFXPool.GetPooledObject();
+                var fireFX = fire.GetComponentInChildren<FireFX>();
+                fireFX.burnTime = burntime; //this apparently never got implemented... !?
+                fireFX.AttachAt(hitPart, hit, new Vector3(0.25f, 0f, 0f), sourcevessel);
+                fireFX.burnRate = (((caliber / 50) * BDArmorySettings.BD_TANK_LEAK_RATE) * ignitedLeaks);
+                fireFX.surfaceFire = surfaceFire;
+                //fireFX.transform.localScale = Vector3.one * (caliber/10);
 
+                if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.BulletHitFX]: BulletHit fire, burn rate: " + fireFX.burnRate + "; Surface fire: " + surfaceFire);
+                fire.SetActive(true);
+            }
+        }
         public static void AttachFlames(Vector3 contactPoint, Part hitPart)
         {
             if (!CanFlamesBeAttached(hitPart)) return;
 
-            var modelUrl = "BDArmory/FX/FlameEffect2/model";
-
-            var flameObject =
-                (GameObject)
-                Instantiate(
-                    GameDatabase.Instance.GetModel(modelUrl),
-                    contactPoint,
-                    Quaternion.identity);
-
-            flameObject.SetActive(true);
-            flameObject.transform.SetParent(hitPart.transform);
-            flameObject.AddComponent<DecalEmitterScript>();
-
-            DecalEmitterScript.shrinkRateFlame = 0.125f;
-            DecalEmitterScript.shrinkRateSmoke = 0.125f;
-
-            foreach (var pe in flameObject.GetComponentsInChildren<KSPParticleEmitter>())
+            if (flameFXPool == null) SetupBulletHitFXPool();
+            var flameObject = flameFXPool.GetPooledObject();
+            if (flameObject == null)
             {
-                if (!pe.useWorldSpace) continue;
-                var gpe = pe.gameObject.AddComponent<DecalGaplessParticleEmitter>();
-                gpe.Emit = true;
+                Debug.LogError("[BDArmory.BulletHitFX]: flameFXPool gave a null flameObject!");
+                return;
             }
+            flameObject.transform.SetParent(hitPart.transform);
+            flameObject.SetActive(true);
         }
     }
 }

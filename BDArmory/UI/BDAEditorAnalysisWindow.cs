@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using BDArmory.Misc;
-using BDArmory.Modules;
-using BDArmory.Radar;
 using KSP.UI.Screens;
 using UnityEngine;
+
+using BDArmory.CounterMeasure;
+using BDArmory.Radar;
+using BDArmory.Utils;
 
 namespace BDArmory.UI
 {
@@ -16,7 +17,7 @@ namespace BDArmory.UI
         private ApplicationLauncherButton toolbarButton = null;
 
         private bool showRcsWindow = false;
-        private string windowTitle = "BDArmory Radar Cross Section Analysis";
+        private string windowTitle = "BDArmory Radar Cross Section Analysis (Worst Three Aspects)";
         private Rect windowRect = new Rect(300, 150, 650, 500);
 
         private bool takeSnapshot = false;
@@ -53,7 +54,7 @@ namespace BDArmory.UI
             // first pass, then sort
             for (int i = 0; i < radars.Length; i++)
             {
-                if (string.IsNullOrEmpty(radars[i].radarName)) radars[i].radarName = radars[i].part?.partInfo?.title;
+                if (string.IsNullOrEmpty(radars[i].radarName)) radars[i].radarName = (radars[i].part == null ? null : radars[i].part.partInfo == null ? null : radars[i].part.partInfo.title);
                 GUIContent gui = new GUIContent(radars[i].radarName);
             }
             Array.Sort(radars, delegate (ModuleRadar r1, ModuleRadar r2) { return r1.radarName.CompareTo(r2.radarName); });
@@ -72,6 +73,23 @@ namespace BDArmory.UI
 
         private void OnEditorShipModifiedEvent(ShipConstruct data)
         {
+            delayedTakeSnapShot = true;
+            if (!delayedTakeSnapShotInProgress)
+                StartCoroutine(DelayedTakeSnapShot());
+        }
+
+        private bool delayedTakeSnapShot = false;
+        private bool delayedTakeSnapShotInProgress = false;
+        IEnumerator DelayedTakeSnapShot()
+        {
+            delayedTakeSnapShotInProgress = true;
+            while (delayedTakeSnapShot) // Wait until ship modified events stop coming.
+            {
+                delayedTakeSnapShot = false;
+                yield return null;
+                yield return null; // Two yield nulls to wait for HP changes to delayed ship modified events in HitpointTracker
+            }
+            delayedTakeSnapShotInProgress = false;
             takeSnapshot = true;
             previous_index = -1;
         }
@@ -137,6 +155,112 @@ namespace BDArmory.UI
         }
 
         void WindowRcs(int windowID)
+        {
+            if (GUI.Button(new Rect(windowRect.width - 18, 2, 16, 16), "X"))
+            {
+                HideToolbarGUI();
+            }
+
+            GUI.Label(new Rect(10, 40, 200, 20), $"Az {RadarUtils.worstRCSAspects[0, 0].ToString("0")}, El {RadarUtils.worstRCSAspects[0, 1].ToString("0")}", BDArmorySetup.BDGuiSkin.box);
+            GUI.Label(new Rect(220, 40, 200, 20), $"Az {RadarUtils.worstRCSAspects[1, 0].ToString("0")}, El {RadarUtils.worstRCSAspects[1, 1].ToString("0")}", BDArmorySetup.BDGuiSkin.box);
+            GUI.Label(new Rect(430, 40, 200, 20), $"Az {RadarUtils.worstRCSAspects[2, 0].ToString("0")}, El {RadarUtils.worstRCSAspects[2, 1].ToString("0")}", BDArmorySetup.BDGuiSkin.box);
+
+            if (takeSnapshot)
+                takeRadarSnapshot();
+
+            // Draw renderings
+            GUI.DrawTexture(new Rect(10, 70, 200, 200), RadarUtils.GetTexture1, ScaleMode.StretchToFill);
+            GUI.DrawTexture(new Rect(220, 70, 200, 200), RadarUtils.GetTexture2, ScaleMode.StretchToFill);
+            GUI.DrawTexture(new Rect(430, 70, 200, 200), RadarUtils.GetTexture3, ScaleMode.StretchToFill);
+
+            GUI.Label(new Rect(10, 275, 200, 20), string.Format("{0:0.00}", RadarUtils.worstRCSAspects[0, 2]) + " m^2", BDArmorySetup.BDGuiSkin.label);
+            GUI.Label(new Rect(220, 275, 200, 20), string.Format("{0:0.00}", RadarUtils.worstRCSAspects[1, 2]) + " m^2", BDArmorySetup.BDGuiSkin.label);
+            GUI.Label(new Rect(430, 275, 200, 20), string.Format("{0:0.00}", RadarUtils.worstRCSAspects[2, 2]) + " m^2", BDArmorySetup.BDGuiSkin.label);
+
+            GUIStyle style = BDArmorySetup.BDGuiSkin.label;
+            style.fontStyle = FontStyle.Bold;
+            GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + string.Format("{0:0.00} m^2 (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
+            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
+
+            style.fontStyle = FontStyle.Normal;
+            GUI.Label(new Rect(10, 380, 600, 20), "** (Range evaluation not accounting for ECM/countermeasures)", style);
+            GUI.Label(new Rect(10, 410, 600, 20), text_detection, style);
+            GUI.Label(new Rect(10, 430, 600, 20), text_locktrack, style);
+            GUI.Label(new Rect(10, 450, 600, 20), text_sonar, style);
+
+            bool bNewValue = GUI.Toggle(new Rect(490, 348, 150, 20), bLandedSplashed, "Splashed/Landed", BDArmorySetup.BDGuiSkin.toggle);
+
+            if (radars == null)
+            {
+                FillRadarList();
+                GUIStyle listStyle = new GUIStyle(BDArmorySetup.BDGuiSkin.button);
+                listStyle.fixedHeight = 18; //make list contents slightly smaller
+                radarBox = new BDGUIComboBox(new Rect(10, 350, 600, 20), new Rect(10, 350, 250, 20), radarBoxText, radarsGUI, 124, listStyle);
+            }
+
+            int selected_index = radarBox.Show();
+
+            if ((selected_index != previous_index) || (bNewValue != bLandedSplashed))
+            {
+                text_sonar = "";
+                bLandedSplashed = bNewValue;
+
+                // selected radar changed - evaluate craft RCS against this radar
+                if (selected_index != -1)
+                {
+                    var selected_radar = radars[selected_index];
+
+                    // ground clutter factor from radar
+                    if (bLandedSplashed)
+                        rcsGCF = selected_radar.radarGroundClutterFactor;
+                    else
+                        rcsGCF = 1.0f;
+
+                    if (selected_radar.canScan)
+                    {
+                        for (float distance = selected_radar.radarMaxDistanceDetect; distance >= 0; distance--)
+                        {
+                            text_detection = $"Detection: undetectable by this radar.";
+                            if (selected_radar.radarDetectionCurve.Evaluate(distance) <= (RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
+                            {
+                                text_detection = $"Detection: detected at {distance} km and closer";
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        text_detection = "Detection: This radar does not have detection capabilities.";
+                    }
+
+                    if (selected_radar.canLock)
+                    {
+                        text_locktrack = $"Lock/Track: untrackable by this radar.";
+                        for (float distance = selected_radar.radarMaxDistanceLockTrack; distance >= 0; distance--)
+                        {
+                            if (selected_radar.radarLockTrackCurve.Evaluate(distance) <= (RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
+                            {
+                                text_locktrack = $"Lock/Track: tracked at {distance} km and closer";
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        text_locktrack = "Lock/Track: This radar does not have locking/tracking capabilities.";
+                    }
+
+                    if (selected_radar.getRWRType(selected_radar.rwrThreatType) == "SONAR")
+                        text_sonar = "SONAR - will only be able to detect/track splashed or submerged vessels!";
+                }
+            }
+            previous_index = selected_index;
+
+            GUI.DragWindow();
+            GUIUtils.RepositionWindow(ref windowRect);
+        }
+
+        void WindowRcsLegacy(int windowID)
         {
             if (GUI.Button(new Rect(windowRect.width - 18, 2, 16, 16), "X"))
             {
@@ -250,7 +374,7 @@ namespace BDArmory.UI
             previous_index = selected_index;
 
             GUI.DragWindow();
-            BDGUIUtils.RepositionWindow(ref windowRect);
+            GUIUtils.RepositionWindow(ref windowRect);
         }
 
         void takeRadarSnapshot()
@@ -261,8 +385,9 @@ namespace BDArmory.UI
             // Encapsulate editor ShipConstruct into a vessel:
             Vessel v = new Vessel();
             v.parts = EditorLogic.fetch.ship.Parts;
-            RadarUtils.RenderVesselRadarSnapshot(v, EditorLogic.RootPart.transform);  //first rendering for true RCS
-            RadarUtils.RenderVesselRadarSnapshot(v, EditorLogic.RootPart.transform, true);  //second rendering for nice zoomed-in view
+            v.vesselType = VesselType.Plane; // Tell KSP that it's not debris (which we ignore in the snapshot).
+            // RadarUtils.RenderVesselRadarSnapshot(v, EditorLogic.RootPart.transform);  //first rendering for true RCS
+            RadarUtils.RenderVesselRadarSnapshot(v, EditorLogic.RootPart.transform, true);  //create renders
             takeSnapshot = false;
 
             // get RCS reduction measures (stealth/low observability)

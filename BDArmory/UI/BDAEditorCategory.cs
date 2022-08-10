@@ -1,12 +1,18 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using BDArmory.Control;
-using BDArmory.Core;
-using BDArmory.CounterMeasure;
-using BDArmory.Modules;
 using KSP.UI;
 using KSP.UI.Screens;
 using UnityEngine;
+
+using BDArmory.Control;
+using BDArmory.CounterMeasure;
+using BDArmory.Radar;
+using BDArmory.Settings;
+using BDArmory.Targeting;
+using BDArmory.Utils;
+using BDArmory.Weapons;
+using BDArmory.Weapons.Missiles;
+using BDArmory.WeaponMounts;
 
 namespace BDArmory.UI
 {
@@ -87,7 +93,7 @@ namespace BDArmory.UI
                 {
                     if (parts.Current == null || !parts.Current.partPrefab || parts.Current.partConfig == null)
                         continue;
-                    if (parts.Current.partConfig.HasValue(BDACategoryKey) || parts.Current.manufacturer == Misc.BDAEditorTools.Manufacturer)
+                    if (parts.Current.partConfig.HasValue(BDACategoryKey) || parts.Current.manufacturer == BDAEditorTools.Manufacturer)
                     {
                         partsDetected = true;
                         GameEvents.onGUIEditorToolbarReady.Add(LoadBDArmoryCategory);
@@ -116,6 +122,13 @@ namespace BDArmory.UI
                                     else
                                         parts.Current.partConfig.AddValue(AutoBDACategoryKey, "Lasers");
                                 }
+                                if (moduleWeapon.weaponType == "rocket")
+                                {
+                                    if (parts.Current.partPrefab.FindModuleImplementing<ModuleTurret>())
+                                        parts.Current.partConfig.AddValue(AutoBDACategoryKey, "Rocket turrets");
+                                    else
+                                        parts.Current.partConfig.AddValue(AutoBDACategoryKey, "Rocketlaunchers");
+                                }
                                 else
                                 {
                                     if (parts.Current.partPrefab.FindModuleImplementing<ModuleTurret>())
@@ -137,13 +150,6 @@ namespace BDArmory.UI
                             else if (parts.Current.partPrefab.FindModuleImplementing<MissileTurret>() != null)
                             {
                                 parts.Current.partConfig.AddValue(AutoBDACategoryKey, "Missile turrets");
-                            }
-                            else if (parts.Current.partPrefab.FindModuleImplementing<RocketLauncher>() != null)
-                            {
-                                if (parts.Current.partPrefab.FindModuleImplementing<ModuleTurret>())
-                                    parts.Current.partConfig.AddValue(AutoBDACategoryKey, "Rocket turrets");
-                                else
-                                    parts.Current.partConfig.AddValue(AutoBDACategoryKey, "Rocket pods");
                             }
                             else if (parts.Current.partPrefab.FindModuleImplementing<ModuleRadar>() != null)
                             {
@@ -254,8 +260,8 @@ namespace BDArmory.UI
                 PartCategorizer.Instance.editorPartList.Refresh();
             }
 
-            BDGUIUtils.RepositionWindow(ref SettingsWindow);
-            BDGUIUtils.UseMouseEventInRect(SettingsWindow);
+            GUIUtils.RepositionWindow(ref SettingsWindow);
+            GUIUtils.UseMouseEventInRect(SettingsWindow);
         }
 
         private void CreateBDAPartBar()
@@ -278,7 +284,7 @@ namespace BDArmory.UI
                             foundCategories.Add(cat);
                     }
                     // If part does not have a bdacategory but manufacturer is BDA.
-                    else if (parts.Current.manufacturer == Misc.BDAEditorTools.Manufacturer)
+                    else if (parts.Current.manufacturer == BDAEditorTools.Manufacturer)
                         foundLegacy = true;
                 }
             Categories.RemoveAll(s => !foundCategories.Contains(s) && s != "All");
@@ -293,7 +299,8 @@ namespace BDArmory.UI
             BDAPartBar = BDAPartBarContainer.AddComponent<RectTransform>();
             BDAPartBar.name = "BDAPartBar";
             BDAPartBarContainer.transform.SetParent(PartCategorizer.Instance.transform, false);
-            BDAPartBar.anchoredPosition = EditorPanels.Instance.partsEditorModes.panelTransform.anchoredPosition + new Vector2(-212, -126);
+            BDAPartBar.anchoredPosition = EditorPanels.Instance.partsEditorModes.panelTransform.anchoredPosition;// + new Vector2(-212, -126);
+            var panelTop = EditorPanels.Instance.partsEditorModes.transform.position.y - 1;
 
             // BDA part category bar background
             // DOESN'T WORK, NOTHING WORKS. :(
@@ -324,7 +331,8 @@ namespace BDArmory.UI
                     button.btnToggleGeneric.onTrueBtn.RemoveAllListeners();
                     button.btnToggleGeneric.SetGroup(412440121);
                     button.transform.SetParent(BDAPartBar, false);
-                    button.transform.position = new Vector3(BDACategory.button.transform.position.x + 34, 424, 750) + button_offset * SubcategoryButtons.Count;
+                    // button.transform.position = new Vector3(BDACategory.button.transform.position.x + 34, 424, 750) + button_offset * SubcategoryButtons.Count;
+                    button.transform.position = new Vector3(BDACategory.button.transform.position.x + 34, panelTop - button_offset.y, 750) + button_offset * SubcategoryButtons.Count;
                     categorizer_button.DeleteSubcategory();
                     SubcategoryButtons.Add(button);
                     // Gotta use a saved value, because the enumerator changes the value during the run
@@ -347,7 +355,7 @@ namespace BDArmory.UI
                     return part.partConfig.HasValue(BDArmorySettings.AUTOCATEGORIZE_PARTS ? AutoBDACategoryKey : BDACategoryKey);
 
                 case "Legacy":
-                    return part.manufacturer == Misc.BDAEditorTools.Manufacturer;
+                    return part.manufacturer == BDAEditorTools.Manufacturer;
 
                 case "Misc":
                     {

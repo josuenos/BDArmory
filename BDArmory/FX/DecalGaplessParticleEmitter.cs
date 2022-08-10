@@ -11,7 +11,6 @@ namespace BDArmory.FX
         public Rigidbody rb;
         Vector3 internalVelocity;
         Vector3 lastPos;
-        bool useInternalV;
 
         Vector3 velocity
         {
@@ -27,7 +26,6 @@ namespace BDArmory.FX
                 }
                 else
                 {
-                    useInternalV = true;
                     return internalVelocity;
                 }
             }
@@ -65,7 +63,6 @@ namespace BDArmory.FX
 
             if (!Emit) return;
 
-            //var velocity = part?.GetComponent<Rigidbody>().velocity ?? rb.velocity;
             var originalLocalPosition = gameObject.transform.localPosition;
             var originalPosition = gameObject.transform.position;
             var startPosition = gameObject.transform.position + velocity * Time.fixedDeltaTime;
@@ -90,7 +87,8 @@ namespace BDArmory.FX
 
         public void EmitParticles()
         {
-            var velocity = part?.GetComponent<Rigidbody>().velocity ?? rb.velocity;
+            var partRB = part != null ? part.GetComponent<Rigidbody>() : null;
+            var velocity = partRB != null ? partRB.velocity : rb.velocity;
             var originalLocalPosition = gameObject.transform.localPosition;
             var originalPosition = gameObject.transform.position;
             var startPosition = gameObject.transform.position + velocity * Time.fixedDeltaTime;

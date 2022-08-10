@@ -1,4 +1,2075 @@
-﻿v1.3.1
+﻿v1.5.1.2
+FIXES
+- Fix adjustable armor unclamped scaling.
+- Loosen distance checks for anti-radiation missiles fired at fast-moving targets (fixes instances when AI would not fire anti-radiation missiles at fast-moving targets).
+- Fixes for some issues occuring on KSP 1.9.
+
+v1.5.1.1
+FIXES
+- Fix AI not firing anti-radiation missiles at targets detected via RWR.
+- Fix KeyNotFoundException error in weapon selection code.
+
+v1.5.1.0
+IMPROVEMENTS / FIXES
+- General:
+	- Remove the "-pre" from the version string, fix some typos.
+- AI:
+	- Allow a vessel that's lost parts after launch to still be auto-tuned.
+	- Don't reset the assigned fly-to position when arriving at an orbiting point so that planes actually orbit the targeted point.
+	- Resume various pilot commands if interrupted once the cause of the interruption is removed.
+	- Adjust the fly-to point's altitude closer to the default altitude when at longer ranges so planes with higher default altitudes will attack from above and vice-versa.
+	- Reduce the half-life of the velocity smoothing for the turn radius calculation to allow faster updates for terrain avoidance.
+	- AI can now fire antirad missiles at targets detected via RWR.
+	- Fix AI not firing heatseekers.
+	- Fix launch authorisation check throwing an NRE for modular missiles.
+	- Further fix to bombs ignoring max missiles/tge.
+- Competition:
+	- Calculate the proper separation between teams for starting a competition - fixes the competitions not starting bug.
+	- Set the number of teams to 0 in one-at-a-time waypoint mode tournaments so spawning works correctly.
+	- Ignore modular missile engines when activating all engines during spawning.
+	- Fix the waypoint altitude slider to actually apply to waypoints when starting a waypoint run.
+- Weapons:
+	- Add pro-nav gain parameter as tunable parameter for missile parts (pronavGain), set pro-nav gain to 3 by default.
+	- Anti-rad missiles now continue to target the last known GPS point instead of disabling guidance.
+	- Fix ShapedCharge warheads doing no damage.
+	- Activate modular missile engines directly instead of using staging (which sometimes doesn't work).
+	- Apply Floating Origin/Krakensbane corrections to missile guidances - fixes missiles detonating partway to target due to miss checks.
+- Armor:
+	- Fix ProcArmor max scalar clamp not appearing.
+	- Add Yield and YoungModulus fields to armour for reflection - fixes armour definitions without these properties not loading properly.
+	- Tweak penetration calcs for ultra-low ductility armor materials.
+- UI:
+	- Missile names now linked to launching craft teamcolor.
+	- Set the AI GUI window rect in Start, not Awake, to guarantee that BDArmorySettings values have been read - fixes the 0-height AI GUI window.
+
+v1.5.0.0
+FIXES
+- Fix 'resizeSquare' texture not being loaded sometimes (due to a race condition?).
+- Clean up log spam from ExplosionFX.
+- Fix Ammo Selection Tool GUI when selecting a weapon using legacy ammo definitions.
+- Fix ATG missiles not respecting maxMissilesPerTarget.
+- Fixes Procwing HP and Armor calcs when using FAR.
+- Fix ProcParts not updating HP/Armor volume.
+- Adds missing FFAR rocket ammo to universal ammo boxes.
+- Fixes TOW missile FX.
+- Fixes Proc Armor bugs.
+- Fixes broken hydraulics on Chaingun, Hydra Turret and Patriot Launcher models.
+- Fixes custom armor volumes in .cfgs being ignored.
+- Fix some EMP weapon Selection logic.
+- EMP AMRAAM and EMP Hellfire missiles now have different names to differentiate them from vanilla variants.
+- Fixes Armor explosion resistance.
+- Armor panels no longer indestructible.
+- VTOL AI no longer toggles off guard mode in competitions.
+- Fixes Debris icons not appearing when Team Icons enabled.
+- Fixes Chaingun/Rocketpod Rounds Per Minute slider values when reverting to VAB/SPH.
+- Fixes ripplefire issue with weapons with different rates of fire in one weapongroup.
+- Fix for issue where AI was not leading target when KSP was running on M1 Macs (Apple Silicon).
+- Fixes JDAM inaccuracy issue.
+
+IMPROVEMENTS
+- General:
+	- Rebranded as "BDArmory Plus" (BDA+) on SpaceDock/CKAN (from "BDArmory for Runway Project") and forum thread created.
+	- Major internal refactor to better organise code.
+	- Switch to a single DLL release.
+	- Add missing HP rounding to some parts.
+	- Stop continuous single spawn when running a tournament.
+	- Optimise the PartExploderSystem to minimise creation of new vessels.
+	- CM Flares optimized, now have much reduced performance hit.
+	- Add a toggle to the UI settings section to disable flare smoke.
+	- Add a toggle to the UI settings section to disable gapless particle emitters (mostly used for engine trails).
+	- Debug labels now organized by type for easier debug tracking.
+	- Refactor the debug settings to be more specific and to have an on-screen only debug labels.
+	- Adds SelfSealingTanks/Firebottle options to Proc Part Tanks.
+	- Bullets/explosions/etc now ignore flags.
+	- Adds new CameraTools switching modes, right click the cameraTools button [A] on the VesselSwitcherGUI.
+		- [S] - Camera will autoswitch to vessel with highest score.
+		- [D] - Camera will switch to furthest vessel from dogfight centroid.
+	- Restore the precision of Vector2d persistent fields.
+	- Update the continuous spawning log parsing script.
+	- Add some extra layer masks (internal kerbals are 1<<16, wheels are 1<<26).
+	- Add a BodyUtils.GetTerrainAltitudeAtPos function.
+	- Adds optional setting to clamp proc part/proc wing max HP to a configurable maximum when Runway Project enabled.
+	- Adds UI Icon team color reset button.
+	- Adds missile names to missile warning icons when vessel names enabled.
+	- Add a config option for the maximum time scaling.
+	- Add a new logarithmic float range PAW slider type.
+
+- AI:
+	- Add a 5° deadzone around being on target for dynamic damping to avoid feed-back loop in PID.
+	- Add a check for requested extending already being satisfied.
+	- Add terrain awareness to the pilot AI's waypoint fly-to direction.
+	- Add a 'Waypoint Terrain Avoidance' slider to the pilot AI to control the range and strength of the waypoint terrain avoidance reaction.
+	- Fixes AI GUI slider increments to match AI PAW.
+	- Adds Dynamic Damping P/Y/R readouts to AI GUI.
+	- Fix AI takeoff behavior.
+	- Add Store/Restore option to save control surface configs in Pilot AI.
+	- Add extend angle to AI to clamp climb/dive angle when doing Air-to-air extending.
+	- Add Air/Ground target preference weighting to Target Priorities.
+	- Make the extend toggle apply to air-to-air missiles as well as air-to-air guns.
+	- Update the AI GUI help text for the current extending settings.
+	- Make the AI GUI vertically resizable.
+	- AI will now head to target's last known position if contact lost (out of sight range/angle/radar detection), with accuracy of predicted position decaying over time.
+	- AI will now enable radars when guard mode enabled.
+	- Add an altitude steer limiter to the pilot AI.
+	- Apply user-defined steer limiters to roll.
+	- Force VTOL AI to aim towards targets when trying to fire missiles (if it can't already fire the missile).
+	- Add a PID auto-tuning mode:
+		- The AI will use gradient descent to optimize the plane's ability to turn to a range of headings and stabilize in those directions.
+		- The loss being minimized is ∫f(x,θ)dθ over the range θ ∈ (30°,120°) (using the midpoint Riemann sum), where f(x,θ) is ∫(δp²·(α+t²)/θ² + γ·δr²·(α+t)/100/θ)dt for the current PID values (x) and heading change (θ), where δp is the pointing error, δr is the roll error, α is the fast response relevance and γ is the roll relevance (which is automatically adjusted over time to balance the contribution from the pointing and roll errors).
+		- Usage: Once the plane is airborne (and not in combat), enable auto-tuning and set the sliders to the desired values (the defaults are reasonable starting points and can be preset in the SPH; adjusting some of the sliders will restart the auto-tuning), then allow the auto-tuning to run until it stops automatically when the learning rate (LR) decreases to below 1e-3. The PID values will revert to those giving the lowest loss and these will be stored so they can be restored in the SPH.
+		- Recommendations:
+			1. Set the auto-tuning altitude and speed to those expected to be used in combat.
+			2. Use 5-10x time-scaling.
+			3. Avoid mountainous terrain.
+			4. Tune without dynamic damping first and use the result as the starting point for dynamic damping with all the damping values set to the tuned static damping value and the dynamic damping factors set to 1.
+			5. Since the PID values are (currently) being optimized for flying to fixed points, the tuned I value may not be optimal for moving targets in combat and a slightly larger I may be desirable.
+
+- GameModes:
+	- Waypoints:
+		- Add support for multiple waypoint gate models.
+		- Add waypoint scaling from 50-1000m.
+		- Altitude overrides for S4R10.
+		- Remember the previously used HoSTag.
+		- Add right click to 'Run waypoints' to spawn with the vessel spawner coordinates instead of the hard-coded ones.
+		- Add multiple courses and a selection UI.
+		- Convert Waypoints from hardcoded courses to a config based implementation.
+		- Add support for unique Waypoint names.
+		- Add support for independently scaling (model and approach threshold) individual waypoints.
+		- Add support for independently setting individual waypoint altitudes.
+		- Waypoint Scale and Waypoint Altitude are now global overrides that will set all WPs to the specified value if not set to default; else will use values from the course data.
+		- Adds support for off-world waypoint courses both locally and API-run competitions.
+		- Add a slider for activating guard mode when passing a waypoint.
+		- Allow multiple laps for waypoints.
+
+- Weapons:
+	- Use min of missile drop time or 2 sec instead of fixed two second period for check target will be within missile maxOffBoresight at future time.
+	- Sidam Turret retextured (thanks Concodroid!).
+	- Allow turrets to fire outside of visual range if they have a radar lock.
+	- Issue 348; weapons will no longer manually fire if mouse cursor is over Weapon Manager GUI.
+	- APBulletMod now implemented for sabot rounds.
+	- Adjusted Sabot depth calculation, should no longer overpenetrate quite so much.
+	- Sabots now recognized as AP ammo in ammo labels.
+	- Weapons and explosions no longer cause armor damage/shrapnel/spalling damage in paintball mode.
+	- Add charge-up mechanic for weapons.
+		- Adds new .cfg fields: ChargeTime = n; ChargeEachShot = T/F; hasChargeAnimation = T/F; chargeAnimName = animName.
+	- Weapon debug lines now account for frame velocity and flight integrator delay.
+	- Rockets now support beehive/nuclear warhead options.
+	- EMP weapons fired at targets with AI/ WM off will not cause them to activate when target reboots.
+	- Bullets now support shaped charge HE fillers (for HEAT rounds and similar):
+		- Bullet.cfg 'explosive =' field no longer true/false, now select from 'Standard' or 'Shaped' in place of explosive = true, or 'None' in place of explosive = false.
+	- Missiles:
+		- Adds Missile multi-targeting.
+		- Adds new Max Missile Tgts setting in WM to set max targets to engage with missiles.
+		- Adds incoming missile alert.
+		- Shift some missile targeting code from OnUpdate to OnFixedUpdate.
+		- Prevent heat-seeking missiles from targeting debris.
+		- Remove restrictions on heat-seeking missiles attacking ground targets.
+		- Prioritize anti-rad missiles first in using missiles against ground targets with active radars.
+		- Adjust DLZ calculation to allow for better missile usage at close ranges, small angles to target.
+		- Possibly fixed the 'Radar Stuck' bug.
+		- Add option to display distances on the RWR logarithmically.
+		- AI will now break off and extend away from target when firing nukes if within projected blast radius.
+		- Continuous Rod warhead missiles now target a point a few meters above their target to better take advantage of planar AoE.
+		- Missiles no longer prematurely detonate if DetonateAtMinimumDistance is enabled.
+		- Fix HARMs ignoring max missiles on target.
+		- Add chaffEffectivity parameter to missile configs. See AIM-120 config for more details.
+		- Modular Missile ActiveRadarRange can now be set to 0.
+		- Deprecate allAspect parameter, missile modders should now use uncagedLock instead (old missiles will automatically have the uncagedLock parameter value set to the value of allAspect.
+		- Implemented Proportional Navigation and Augmented Proportional Navigation as missile guidance options for missile parts and modular missiles. For missile parts, set:
+			- homingType = pronav [for Pro-Nav].
+			- homingType = augpronav [for Augmented Pro-Nav].
+
+- Armor:
+	- Adds Oblique Triangle Proc Armor panel.
+	- Proc Armor nodes on triangular panels now orient themselves to current angle of panel edge.
+	- Proc Armor max scale can now be set in .cfg, unclamped in SPH/VAB.
+	- Armor penetration formula now uses the Tate/Alekseevskii formula. Penetration depths should be similar in most cases for modded ammos, but may need recalibration of their apBulletMod.
+	- Add Lift Visualization, Total Lift, and Wing Loading readouts (stock only, disabled when using FAR) to the BDA Armor Tool.
+
+- Detectors
+	- Adds IRST implementation for thermal detection alternative to radar.
+		-Adds thermal occlusion mechanic; heatsources hidden behind other parts will be harder to detect by IRST.
+	- Adds support for optic/thermal cloaking countermeasures.
+	- Adds new AN/AAQ-42 IRST Pod part.
+	- Radars must now be capable of detecting a target before it can be locked.
+
+- Spawning:
+	- Refactor spawning into more modular coroutines for use with the spawn and orchestration strategies.
+	- Add an 'instant' lowering mode for vessel easing after spawn (VESSEL_SPAWN_EASE_IN_SPEED = 0).
+	- Add a test for spawning a vessel into an active competition using the SingleVesselSpawning class (debug build only).
+	- Randomise team spawn order (similar to random FFA ordering).
+	- Switch the camera to a random plane after spawning instead of the last plane spawned.
+
+- RWP:
+	- Hall of Shame now supports multiple craft.
+	- Add HoS support to Waypoint mode.
+
+
+v1.4.18.4
+IMPROVEMENTS
+- Add slider in the pilot AI for controlling the waypoint pre-roll time.
+- Add slider in the pilot AI for waypoint yaw authority time to switch from normal steering mode control of yaw to aiming steering mode of yaw when approaching waypoints.
+- Add relevant AI GUI entries for these too.
+- Also check for WM when checking that a waypoint competition is running.
+
+v1.4.18.3
+IMPROVEMENTS
+- Waypoint visualization added.
+	- 3 rings with radii 500m, 100m and 10m, with a central crosshair and animated arrows.
+	- Togglable in the Waypoints Options section of the Vessel Spawner window.
+	- Waypoint model can be customized to whatever, provided the model URL is "BDArmory/Models/WayPoint/model".
+
+v1.4.18.2
+IMPROVEMENTS
+- Predict the minimum deviation on the frame before passing a waypoint to avoid the bad fly-to direction for the frame after passing that waypoint.
+- Roll into waypoints 0.5s ahead of the waypoint in preparation for the next one.
+- Add initial support for using splines.
+
+v1.4.18.1
+FIXES
+- Check waypoint completion when in waypoints mode even if a different action is being taken (fixes extra large deviations and missed waypoints).
+IMPROVEMENTS
+- Interpolate the waypoint deviation to give a better estimate of the minimum deviation.
+
+v1.4.18.0
+Note: Due to some internal refactoring, CameraTools also needs to be updated to version 1.21.0 to work with this version of BDArmory.
+FIXES
+- Add checks to only adjust scores when a competition is active.
+- Fix interpretation of demo vessel optimisation script.
+- Fix CASE-2 ammo reduction when cloning part.
+- Fix laser battledamage.
+- Fix DebugLines not disabling when toggled off.
+- Reorder custom bay toggle branch so it's not overwritten by airstream check (fixes custom cargo bay not being deployed).
+- Fixed Anti-Radiation missiles not working properly.
+- Fix barrage mode fire rate decrease/guns never overheating.
+- Fix armor panels being too protective against HE.
+- Fix selection logic for missiles when targeting missiles.
+- Fix ammo belt exploit.
+IMPROVEMENTS
+- General:
+	- Major internal refactor for code organisation and maintainability.
+	- BDArmory is now a single DLL (the old BDArmory.Core.dll will be detected and removed).
+	- Add a 'Generate Clean Save' toggle for auto-loading to the KSC without generating a clean save (tournaments and evolution still generate a clean save).
+- AI:
+	- New AI part: AI Vertical Takeoff and Landing Pilot (for helicopters, VTOL jets, and airships). 
+		- The VTOL AI behaves like the Surface AI in combat.
+		- The AI flies your craft by using throttle to control altitude and pitch to control speed.
+		- The AI will try to stay above the minimum altitude at all times and if it can, at the default altitude outside of combat and the combat altitude during combat.
+		- The AI will obey the max pitch and max bank settings and fly no faster than the set maximum and combat speed settings.
+	- Don't treat passive (non-radar-guided) missiles outside visual range as incoming missile threats until they enter visual range.
+	- Lower the altitude at which gear is toggled to the minimum of 50m or minAltitude/2.
+	- Lower the minimum of the terrain avoidance sliders to allow values below 1.
+- WM:
+	- Extend MMG smartpick selection logic.
+	- Targets in guard mode no longer receive RWR warnings for missile launches outside their visual range.
+	- Craft in guard mode will turn off their radars if they have an incoming anti-radiation missile within visual range.
+- Armor:
+	- Explosive Reactive Armor HP is now customizable.
+- Weapons:
+	- Remove the 0.04s delay on firing a rocket.
+	- Add explModelPath and explSoundPath to Sidam.
+	- Clean up rocket aiming, switch it to use the more accurate leap-frog numerical integrator and use ballistic aiming once the thrust period is over.
+	- Set laser weapons to use standard FX pipeline.
+	- Create new antiradTargetTypes variable for missiles that allows you to specify the RWR Threat Type that the anti-radiation missile should target. Default is 0,5 (SAM,Detection). See the HARM config file for more details.
+- GameModes:
+	- Paintball Mode now affects Nukes.
+	- Waypoint Mode added for racing/time trials instead of combat.
+- Tournamements:
+	- Add checks to only adjust scores when a competition is active (fixes differences in the API scores due to timing issues).
+	- Use base64 encoded vessel names internally in the parser to avoid issues with craft naming (e.g., craft with ':' in the name).
+	- Adds NPC swapper functionality to remote orchestration tournaments.
+- RWP:
+	- Add Hall of Shame code.
+- UI:
+	- Add a Waypoints Mode section to the Vessel Spawner window when the Waypoints game mode is enabled.
+- Internal:
+	- Replace hard-coded RWR threat types with RWRThreatType reference.
+	- Remove reference to TargetingModeTerminal since TargetingMode is updated to be equal to TargetingModeTerminal once terminal guidance activates.
+	- New spawn and orchestration strategies are partially implemented.
+	- Some refactoring of the spawning code is in progress.
+
+v1.4.17.0
+FIXES
+- Fix auto-resume evolution not finding the evolution.state file.
+- Fix localization for target priority on weapons manager.
+- Configure the paths when loading the statefile if they're not configured.
+- Avoid NRE in ModuleResourceDrain due to detonating when the parent part is being destroyed.
+- Fixes Ammo belt Configuration, can no longer be used to stick ammo from one gun into the belt of another.
+- Fixes Weapon Manager GUI weapon selection glitch.
+- Fixes gun reticles floating a few meters in front of the weapon.
+- Fix subMunitionCount = 0 in custom bullet/rocket defs breaking weapons.
+- Fix Protect VIP(s) target priority for when there are more than 2 teams.
+- Give default gpsTargetName as Unknown instead of empty to avoid KSP's flightstate autosave from complaining.
+IMPROVEMENTS
+- General:
+	- Add in the remaining localisations for parts.
+	- Add hotkey option for time scaling.
+	- Add options (in Radar Settings section) to invert the mouse in the targeting window.
+	- Add an Auto-Load-To-KSC option (in the GamePlay settings section).
+- AI:
+	- Use maxAllowedAoA in post-stall test in FlyToPosition instead of hard-coded 30°.
+	- Tweak the clamped altitude and speed min/max values to give more usable sliders.
+	- Scale steer limiter based on atmospheric density in order to account how dynamic pressure will vary based on this value.
+	- Add the target's average radius to the vessel-avoidance detection.
+	- Adjust the default vessel-avoidance values and increase the upper limit of the avoidance strength slider.
+	- Use an average of the recent speed instead of the max speed in determining the turn radius.
+	- Adjust the extending to update the extend-from position when the extend-from target is a vessel.
+	- Replace the extend multiplier with explicit extend distances for air-to-air, air-to-ground (guns) and air-to-ground.
+- WM:
+	- Add a Protect Teammates target priority.
+- GameModes:
+	- Add options for respecting the flow state of stealing (in)/stolen (out) resources.
+- UI:
+	- Add a "Slider Resolution" slider to the pilot AI (currently just PID, Altitudes and Speeds) to allow finer or coarser adjustments to those sliders in the PAW (not the AI GUI for now).
+- Weapons:
+	- Add in option to set an action group toggled for when weapons are selected/deselected (can be used for deploying weapons or for other actions).
+	- Ammo belt tool now loads in existing belts, if present.
+	- Abrams can now properly select ammo types in flight.
+- Armor:
+	- Configurable Armor panels should cause less lag on loading in.
+- Tournaments:
+	- Add option to save the summary plot to a PNG file. Use '-s' to save to a random tempfile, use '-s fig.png' to specify the file.
+	- Tweak the auto-vessels-per-heat optimisation for when we're just over the limit.
+- Internal:
+	- Add option to use average radius in Vessel.GetRadius instead of max.
+	- Rename Misc.Misc to Misc.Utils to fix naming conflict between namespace and class.
+	- Some debug message cleanup to reduce log spam.
+	- Replace loading a clean.sfs save file with generating a new clean sandbox game.
+
+v1.4.16.1
+FIXES
+- Fix for tournament.state files with craft filenames containing commas (don't use filenames containing '],['!).
+- Fixes issue breaking some guns in v1.4.16.0.
+IMPROVEMENTS
+- Adds localization for various parts.
+- Adds Deployable Missile Rail demo part.
+
+v1.4.16.0
+FIXES
+- Don't clamp values when switching from text input to sliders and the unclamped option has been toggled.
+- Fix wrong component type in BD check.
+- Fix rocketpod RoF slider.
+- Fix barrage-firing burst-fire weapons; these will now properly ripple again.
+- Remove the restriction on the target being ahead of the weapon for opening/closing cargo bays as it messes with missile bays while planes are evading.
+- Fix ammo selector issue.
+- Fix various NREs.
+IMPROVEMENTS
+- General:
+	- Add Waterfall config for the Saturn engine.
+	- Increase the HP of the combat seat to the same as a kerbal (500).
+	- Add a time scaling option to the GamePlay section of the settings for speeding up/slowing down the game rate while competitions are active.
+		- This does not affect the physics time-step, which remains at 0.02, but simply tries to make the in-game clock go faster with respect to a wall clock, so it should not affect the physics (if they're implemented correctly).
+		- WARNING: This is likely to mess with any other mod that adjusts the time rate, e.g., TimeControl, if they're active at the same time.
+		- WARNING: Consistency of the results (compared to running at normal speed) is not yet verified, but initial results look promising.
+- Internal:
+	- Add the script for evaluating the score weights and the old dmg_analysis (for .50cal, 20mm and 30mm ammo) to '_Other Stuff'.
+	- Remove executable status of the vessel-trace plotting script.
+	- Replace hard-coded layer mask numbers in raycasts and similar with bitwise combinations of the LayerMasks enum. Many of these raycast include questionable/unknown layers.
+	- Move the main competition update loop (death checks, etc.) to be run consistently from the physics updates instead of from the rendering updates to remove results bias due to computer performance when PHYSICS_FRAME_DT_LIMIT is large.
+- AI:
+	- Tweaks to VacuumAI terrain avoidance.
+	- Add the off-by-one frame fix to ramming and missile guidance.
+	- Add logic for planes in Follow mode for the period between taking off and reaching their min altitude.
+	- Add unclamped values for the low- and high-speed steer limiters.
+- Weapons:
+	- Move finalFire checks into a single function that runs in AimAndFire during the FashionablyLate timing phase instead of being spread between Update and FixedUpdate.
+	- Add check to AI when using a weapons group to grab the lead offset from a weapon that can fire (has ammo/not reloading/overheated/pointing at self), not merely the first weapon found.
+	- Reduce spin up times for Vulcan/Gaus.
+	- Fix shrapnel radius of missiles/bombs/shells using standard warheads.
+	- Add support for multiple laserbeamFX textures.
+	- Add DeployableRail module for missilebays.
+	- Explosions from impact-fuzed HE bullets now properly bypass armor when calculating damage to the hit part.
+	- Add weapon priority slider allowing setting custom weapon selection order for Missiles/Bombs.
+- Armor:
+	- Add additional check to ArmorTool, can no longer make engines out of wood.
+	- Proc Armor panels no longer clamped to 0.5m increments.
+	- Fixes proc armor panels slightly shifting attached parts on load.
+- Tournamements:
+	- Add some timestamp and duration output to the tournament summary.
+	- Include damage taken in the console output of the parsing script.
+	- Adjust spacing in output from parsing script.
+	- Add an optional title to the summary plots.
+	- Add debug statement about which savegame is loaded with auto-resume functionality.
+	- Simplify the score calculation slightly and make it slightly more easily customisable.
+	- Update the score weights in the tournament parsing script to be more balanced.
+	- Remove version strings from the python script filenames and add a --version option to the scripts instead.
+	- Add a new (default) 'Fill Seats' option to fill all cockpits, or fill the first combat seat if no cockpits are found.
+
+v1.4.15.0
+FIXES
+- Adds some checks for inerted tanks catching fire in some edge cases.
+- Fix firebottle gui not updating when they're used.
+- Make nukes detonate when fired.
+- Fixes for continuous spawning.
+- Only report scores to the remote API and stop the heat if the competition actually starts (avoids the empty result from a competition failing to start).
+- Register the collision detection time for the case where the other vessel has disappeared (fixes some invalid death times).
+- Move evolution path configuration from constructor to Awake to satisfy MonoBehaviour conditions.
+- Fix cost of aluminum armor panels.
+- Fueltanks will no longer randomly explode when shot.
+- Fix ModulePartVariants giving negative money with wooden parts.
+- Fix LeakFX not appearing.
+- Fix fuel leak duration.
+- Fix InertTanks/SelfSealing Tanks/Armored Cockpits not persisting through reloading.
+- Fix various NREs.
+IMPROVEMENTS
+- General:
+	- Option for forcing gliders. Specify 'NoEngines' in the RWP cheat-code box to toggle it for now, or just edit the settings.cfg file.
+	- An updated continuous spawning log parser.
+	- Adjust the ballistic trajectory simulation time-step multiplier based on the distance to the target to give improved debug lines/targeting line visuals.
+	- Armor Panels now use Armor Integrity instead of HP.
+	- Nukes now support custom FX.
+- AI:
+	- Also avoid 0 altitude (terrain avoidance) for bodies without solid surfaces or oceans (i.e., Jool).
+	- Reworked the integral component of the PID to work as an actual PID again:
+		- The integral is no longer reset to 0 when the pitch error changes sign, nor decays with time.
+		- The integral is now vector valued to account for coupling between the yaw and pitch axes due to roll and the individual pitch and yaw components are projected out from this integral.
+		- The maximum contribution to the steering from the integral component is 1 (similar to the magnitude of the individual components before this change, but larger than the original 0.2 prior to the previous change).
+		- The internal yaw damping factor is increased from 0.2 to 0.33 to keep the internal ratios between the axes consistent for each of the P, I and D components (1:0.33:0.1 for pitch:yaw:roll).
+	- Use missile velocity vector for evasion instead of missile relative position to prevent turning into missiles when they are at close range. 
+	- Use soonest time to closest approach instead of closest distance to select highest threat missile. 
+	- Change closest approach point to ignore missile threats to 3 Blast Radius from 1.5 Blast Radius.
+
+Message #tea
+
+- Weapons:
+	- Adds Chaingun functionality; chainguns have user configurable RoF in the SPH/VAB.
+	- Adds Weapon Spool up time functionality (for Gatling guns, etc).
+	- Lasers get damage/FX growth option for increasing damage/changing beam width/color the longer they've been firing.
+	- Adds support for EMP, Beehive, Impulse, Gravitic, and Nuclear bullets.
+	- Expands GUI ammo labels to include above types.
+- Battle Damage:
+	- Restore ability to add firebottles to engines.
+	- Adds a toggle for whether burning fueltanks will explode.
+	- Toggling paintball mode now toggles BattleDamage off.
+- Tournaments:
+	- Add the savegame field to tournament.state on tournament generation.
+	- Add Auto-Quit at end of tournament hidden option (for automation: AUTO_QUIT_AT_END_OF_TOURNAMENT).
+	- Add custom max number of rounds to tournaments (edit the settings.cfg file to set it: TOURNAMENT_ROUNDS_CUSTOM).
+	- Make the auto-generated vessels-per-heat setting customisable (by editing the settings.cfg).
+	- Rename the summary plotting script and allow specifying the tournament folder.
+
+v1.4.14.1
+FIXES
+- Fix typo in 2x1 legacy armour panel.
+- Fixes missile turret Cost.
+- Fixes missile RMB warhead info.
+- Fixes NRE with proc armor parts on loading a craft.
+- Nukes no longer explode when destroyed (if engineCore = false, so S3R1 Chernobyl functionality still present, just not all the time).
+- Account for starting resource cost modifier to part cost, fix discount to reduce up to 500 from cost.
+IMPROVEMENTS
+- Restores ability to set custom tracer stats in weapon.cfg. Use "tracerOverrideWidth = true" in the cfg to use override values instead of dynamically determined tracer settings.
+- BattleDamage fire chance on hit now editable in the settings config.
+- Teams:
+	- Adds ability to set teams to neutral in team selector/VesselSwitcher/WM.
+	- Right clicking on the team button in the Team Selector/WM will toggle non-default teams (A, B, Neutral) neutral status.
+	- Right clicking on the [t] button to the right of a vessel button in the VS will open the Team Selector.
+	- Left click will switch to next combat team, mouse-3 will switch to next neutral team.
+
+v1.4.14.0
+FIXES
+- Switch worlds to the spawn point before spawning if the spawn point is on a different world (fixes broken tournament resuming on other worlds).
+- Use GetRadarAltitudeAtPos instead of radarAltitude as the latter reads wrong for our purposes when underwater.
+- Fix the bad check preventing competition start if a vessel doesn't take off.
+- Fix NRE in CheckExtend.
+- Remove extraneous trajectory simulation when firing a bullet.
+- Fix infinite recursion bug in the evolution engine.
+- Compensate for the delay in calculating the effects of collisions and properly attribute deaths (including death order and time) due to ramming correctly.
+- Fix bug in part counting that was occassionally causing negative part counts in rams.
+- Handle EVA kerbal disappearing during KerbalSafety configuring.
+- Add null check to IsKerbalEVA extension.
+- Fixes .50 turret explosion model.
+- Fixes rocket aim reticle hovering a meter in front of muzzle.
+- Fixes some localization typos.
+- Fix Nuke FX scaling issue.
+- Fixes Fuel Inerting mass discrepancy.
+- Fix Inerted tanks still being able to catch fire.
+- Fix Firebottles not extinguishing fires.
+- Fix CASE II bug setting non-integer ammo amounts.
+- Fix Armor of pretty much any thickness completely stopping explosion damage.
+IMPROVEMENTS
+- AI/WM:
+	- Use CM threshold for determining missile closest approach instead of a fixed 2s value.
+	- Add alternate max for strafingSpeed.
+	- Switch turrets to use the Firing Angle instead of needing to be directly on-target.
+	- Added a nonlinear oscillation ("Evasion/Extension Nonlinearity" in the pilot AI) when extending or evading to avoid going in a straight line.
+	- Lasers now selectable by the AI for attacking ground targets.
+	- Adds some catches to AI MMG selection logic.
+- Armour:
+	- Abrams Turret can now support more than 10 armor.
+	- Armor type 'None' no longer takes damage/spalls.
+	- Armor Plates can now be set to armorType 'None', used as structural panels.
+	- Adds new BDAdjustableArmor module.
+	- Armor panels replaced with new procedural armor panels. Old panels moved to legacy to prevent breaking saved craft.
+- Weapons:
+	- Adds underwater rocket trajectory calcs to permit AI to aim underwater rocket weapons.
+	- Nuke damage falloff calcs corrected, blast radii no longer far larger than they should be.
+	- Nukes will no longer hit craft that have managed to get out of the blast zone before the blast wave arrives.
+	- Adds Clusterbomb rmb Info.
+	- Adds shaped charge and continuous rod warhead options to Rockets/Missiles/Bombs, use "warheadType = "shapedcharge" or "continuousrod" in the BDexplosivePart Module of the part.cfg, or setting "shaped = true" in the rocket config.
+	- BDA stock missiles updated with new warheads where appropriate - check RMB info in the editor.
+- Tournaments:
+	- Add option to auto-generate a tournament if auto-resuming and there isn't an incomplete tournament to run.
+- Parser:
+	- Use a more natural sorting order for rounds in the parser so the score-by-round is consistent.
+	- Use more precision in the csv file for the cumulative scores.
+- Evolution:
+	- Maintain evolution state and properly add in support for auto-resuming evolutions.
+	- Add current heat to the evolution window.
+	- Include rockets fired and rocket strikes in the evolution scoring metric.
+	- Update the set of parameters the evolution engine can modify for the latest pilot AI and remove invalid ones.
+	- Limit evolved control surface authority to 150% (i.e., in-game limits).
+	- Add auto-quit memory threshold between evolution groups.
+- Spawning:
+	- Add some checks for missing vessels during post-spawning.
+
+v1.4.13.2
+FIXES
+- Fix comboboxes triggering force close on themselves when they should be opening.
+- Use the correct spawn distance based on the spawn distance toggle for tournaments.
+- Don't extend from ground targets when using a weapon that doesn't target ground targets, immediately look for another target instead.
+IMPROVEMENTS
+- Set the default evasionTimeThreshold to 0.1s.
+- Make all custom paths relative to the KSP install directory to remove dependence on running location (PRE needs fixing for this to be usable though).
+- Count rockets fired separately from shots fired and calculate rocket accuracy from the number of rocket strikes.
+- Disable guard mode on spawned vessels during spawning and clear their current target (prevents using AG10 to activate guard mode earlier than should be allowed).
+- Extend vessel easing during spawning until a vessel's cockpit is in the water (or it has stopped sinking) to allow it to settle a bit.
+
+v1.4.13.1
+IMPROVEMENTS
+- Apply/de-apply the intake hack when toggling the option in the settings.
+- Hack intakes (if enabled) on newly spawned vessels spawned by VesselMover or SPH→runway.
+- Count rockets fired separately from shots fired and calculate rocket accuracy from the number of rocket strikes.
+
+v1.4.13.0
+FIXES
+- Tournaments:
+	- Fix some typos and bugs in assist counting in the local tournament parser.
+	- Clear rocket dictionaries between heats. Compute assists under the same conditions for local and remote tournaments.
+	- Cause a spawn failure instead of throwing an exception so that tournaments can retry spawning.
+- Craft/Battle Damage:
+	- Fix SelfSealingTanks being addable to engines.
+	- Fix SelfSealingTanks not showing on/off status on load.
+	- Fix SelfSealingTanks not respecting symmetry.
+	- Re-add ModuleSelfSealingTank to Cockpits (for armored cockpits).
+	- Fix fires not extinguishing if fuel < 0.
+	- Fix engine fire behavior, now capped to max one fire at a time.
+	- Fix Steel parts gaining more than the 1.75x HP they should be getting.
+	- Fix fire generation on subsystem damage.
+	- Fixes non-fueltank fires not burning out and extinguishing after a period of time.
+	- Fix inert tanks not catching all possible sources of fire generation.
+	- Fix invalid cast and NRE for modular missiles.
+- AI:
+	- Fix AI aim offset being offset.
+	- Only extend when a bomb is selected once extending is requested.
+	- Activate only the current mode of multi-modal engines.
+	- Release pilot AI from attack command if they have a target within gun range (fixes bug with very long-range guns not engaging targets at competition start), regardless of whether RWP toggle is on.
+- General:
+	- Fix Paintball decals not appearing in paintball Mode.
+	- Fix AIR-2 Genie cost.
+	- Fix Explosions/Nukes not damaging buildings.
+	- Fix RESET_ARMOR resetting hull material.
+	- Fix Audio cutting out when firing lasers using looping SFX.
+	- Fix for KerbalSafety sometimes being given the KerbalSeat instead of the KerbalEVA as the part.
+IMPROVEMENTS
+- Internal:
+	- Allow BDGUIComboBox to be relocated/resized.
+	- Rework Nuke EMP radius calc; EMP radius at lower alt/lower yield is now much smaller.
+	- Bullet penetration depth capped to hypervelocity penetration depth.
+	- Add option for laser mutators to use Team Color for beam color (set bulletType in the mutator config to "def").
+	- Add part and vessel to debug info for AddDamage and AddHealth.
+	- Add debug info for when fires get added if debug labels are enabled.
+	- Slight buff to chaff factor.
+	- Add some missing localisations.
+	- Remove expensive Find call during spawning, since we already know which objects it needs to find.
+	- Only run more expensive debug checks on the debug version, not the release version.
+- BattleDamage:
+	- Fix SelfSealingTanks maxing tank capacity when switching instead of simply adjusting maximum.
+	- Increases CASE cost at higher levels (mass increase, ammo capacity reduction).
+	- Reduce firebottle extinguish delay time to 4 sec.
+	- Fire chance from HE rounds reduced from 33% to 20%.
+	- Hits to Wings/ControlSurfaces/Subsystems/Cockpits with overpenetrating rounds will now only proc a single BattleDamage event.
+	- Fires will no longer consume a firebottle per fire; on trigger, single firebottle will now extinguish all internal fires present on the part.
+	- Surface fires will now extinguish if vessel moving > 120m/s.
+	- Adds Fuel Inerting option to fuel tanks to prevent fires.
+	- Adds Armored Cockpit option to cockpits to reduce/prevent pilot Kill battledamage.
+	- Adds ProcWings support - can now add Firebottles/SelfSealing/Inerted tanks to Pwing fueltanks; Pwings with fuel can now catch on fire when shot.
+	- Adds missing BattleDamage 'Subsystem Damage' toggle.
+	- Makes BD to control surfaces less immediately debilitating.
+- UI:
+	- Add check for disabled PRE when competitions are active.
+	- Add a check for the number of AIs and WMs during spawning (when RWP is enabled) and give an in-game message if there's not one of each.
+	- Armor GUI submenu functionality based on current HP/Armor/Hull Reset toggle settings.
+	- Adds Hull Material visualizer to SPH/VAB Armor GUI tool.
+	- Improves Weapon Manager GUI infolink descriptions of target priority settings.
+	- Add off-world spawning to Spawn menu (spawn locations and tournaments get automatically upgraded).
+	- Add ability to add custom spawn sites to spawn menu.
+	- Add Persistent UI button to Vessel Switcher to keep VS and Web Orchestration windows open when F2 UI toggled off.
+	- Add an estimate of the current memory usage to the settings menu when Auto-Quit Memory Threshold is enabled.
+	- Allow a user-set max value to the Time Scaling factor.
+- Game Modes:
+	- Add secret Disco Mode.
+	- Zombie Mode option moved to cheat mode access.
+- Competitions:
+	- Adds Orbital Deployment round start mode - craft are spawned at 80km, and gravity hacked to 10 for 30 sec to accelerate craft downwards (request from SirJohn).
+	- Distinguish between deliberate and accidental rams. Accidental rams don't contribute to the score.
+- Tournaments:
+	- Add a '-z' option to the tournament parser to shift the scores so that the lowest is 0.
+	- Add taken counts to the summaries.
+	- Add a '-z' option to the tournament parser to shift the scores so that the lowest is 0.
+	- Adjust rocket parts hit and damage fields to match ruby schema in the remote orchestration.
+	- Only adjust the altitude for failed spawns for ground spawns.
+	- Allow specifying both '-c' and tournament dir to parse the specified tournament dir as a collection (i.e., without the tournament folder structure).
+	- Rebalance the score weights in the parsing script.
+	- Add a Gauntlet tournament style for teams tournaments (like N-choose-K, but between two groups of teams).
+- Kerbal Safety:
+	- Reconfigure inventories when the kerbal inventory slider is adjusted.
+- AI:
+	- Add additional control "Afterburner Priority" for afterburner toggling under Speed category of AI. Default value of 50. 0 and AI will not use AB, 100 and AI will always use AB.
+	- Vary AB hysteresis based on "Afterburner Priority" setting using an exponential average to smooth the vessel's TWR (lag factor of 0.5s) to judge whether AI should toggle AB vs. using instantaneous acceleration.
+	- Default Guard Range increased to 20km.
+	- Allow custom/modded missile and bomb bays. Set which action group controls the bay toggling on the missile/bomb itself and the AI will automatically open and close the bay when dropping the ordnance.
+	- New default AI and WM settings.
+- Spawning:
+	- Respawn the spawn probe when showing the spawn point if the active vessel has been destroyed.
+	- Use the backup location 'KSP/Ships/SPH' as a fall-back for the spawn probe location as CKAN puts it there.
+- RWP:
+	- Enabling the Runway Project toggle will clamp guard range to a minimum of 20km.
+ADDED/REMOVED/CHANGED SETTINGS VALUES
+- Adds Intake Hack setting to autohack intakes to work in non-Oxygen atmospheres.
+- Add a toggle in the Competition Settings section for closing the settings when clicking the start competition button.
+
+v1.4.12.6
+FIXES
+- Add a check for tournamentState.rounds being null when checking whether to resume a tournament. (Fixes failure to generate tournaments under some conditions.)
+
+v1.4.12.5
+Re-release due to not having recompiled the release version before releasing it.
+
+v1.4.12.4
+FIXES
+- Internal:
+	- Don't update the VesselModuleRegistry for a vessel when it's not yet loaded. (Fixes the missing AI/WM issue when reverting/quickloading.)
+	- Use a different function to reset the crew's inventory as the other one wasn't working properly.
+	- Register survivors with the remote orchestration in case they're didn't get registered for anything else.
+	- Also catch the LES as a SRB in ModuleSelfSealingTank.
+- AI:
+	- Fix off-by-one-physics-frame error in FlyToTarget that was affecting aiming (especially noticeable for lasers).
+	- Remove extra Deg2Rad factor from low velocity correction to terrain avoidance so that it actually has an effect (post-stall behaviour near terrain).
+	- Revert the 0.5s afterburner change as it caused issues with multiple engines not toggling simultaneously.
+	- Sync the input fields the correct way on vessel switches (and loads). (Fixes the AI settings getting reset in flight mode when switching vessels.)
+	- Fix NRE in targeting info caused by moving spawning point with a vessel that has a current target.
+- UI:
+	- Fix paintball mode not applying decals due to impulse weapons check.
+	- Fix the length of the substring in debug message for vessels that fail to spawn.
+	- Fix check in ExplosionFX for in-game messages about explosions (removes the rocket strike spam).
+- RWP:
+	- Remove the previous conditions for the RWP S4R2 condition as they aren't being used for S4R2.
+IMPROVEMENTS
+- UI:
+	- Add "Show Self" option to Team Icons (icon + name only).
+- Internal:
+	- Use warning level log entries for issues with the BDAScoreClient. Expand debug message to include stage number.
+	- Register and de-register game events in Kerbal Safety so as not to interfere with kerbals until the first competition is started.
+- RWP:
+	- Apply the S4R2 'fill seats' condition to vessel spawning.
+- Tournaments:
+	- Store unfinished tournament state files in 'PluginData/Unfinished Tournaments/' and remove them when they're finished. (Copy them to the usual tournament.state file when in the KSC screen to resume them.)
+	- Add a --show-weights option to the tournament parsing script to show the current weights of the various components of the score.
+	- Add an option to the parsing script to not show the cumulative scores by round.
+
+v1.4.12.3
+FIXES
+- Sanitise null strings in paths.
+- Fix armor panels reverting to 2 thickness.
+- Fix some errors in the MM patch for parts.
+IMPROVEMENTS
+- Better in-game and log messages for when a competition fails to start due to a vessel disappearing.
+- (RWP only) Add in-game reminder for AI and WM not attached to the root part.
+
+v1.4.12.2
+FIXES
+- Fix negative HP issue with Reactive Armor.
+- Fix CalcShrapnelDamage potentially reporting a negative number for damage.
+- Add some recursion checks to ModuleCase.
+- Add check to prevent setting Weapon material to Wood.
+- Can no longer change Armor Panel hull material.
+- SRBs no longer explode when empty if BattleDamage enabled.
+- Fixes Fuel Tank explosion yield increasing when associated resource(s) is empty.
+- Empty Ammo boxes will no longer explode when destroyed.
+IMPROVEMENTS
+- Re-add Firebottles, SelfSealing Tank option to Making History Soyuz tank.
+
+v1.4.12.1
+FIXES
+- Fix stack overflow in CASE explosions from detonating SRBs.
+- Fix NRE in PooledRockets.
+- Fix ordering of Gameplay settings.
+- Fix localisation for new Reset Material toggle.
+- Take a copy of the collider list from overlapSphereColliders to avoid potential issues since it's static and ProcessingBlastSphere can be called recursively.
+IMPROVEMENTS
+- General:
+	- Reduce the weighting of rocket hits in the parsing script.
+	- Add some more debugging to inter-competition debug statements.
+
+v1.4.12.0
+FIXES
+- Sort the protoVessel part list during spawning to fix the badly rooted vessel spawning bug.
+- Fix BDA part category placement to be usable on low resolution screens.
+- Don't add explosive forces when paintball mode is enabled.
+- Armor will no longer take damage when using Paintball Mode.
+- Subsection targeting GUI label no longer reverts to CoM.
+- Paintballs will no longer overpenetrate if base ammo type is armor piercing.
+- Shatterable armor materials now properly take full armor loss amount each shattering hit, instead of a reducing amount every subsequent hit.
+- Armor panel armor values no longer vary based on part orientation.
+- Armor Panel buoyancy fixed.
+- Rockets no longer calculate shrapnel hits twice.
+- Fixes unit conversion error in armor spalling calcs.
+- Bullet Penetration calc now properly takes angle of impact into account.
+- Minimal seat filling should fill the first non-weapon crewed command part, not the first non-weapon crewed part.
+- Iteratively refine the aiming point (measured to take 2-3 iterations typically) to avoid the turret premature firing issue.
+- Fix issue of NaN appearing in bullet damage.
+- Add a check for failing to load the tournament state.
+- Some fixes for continuous spawning, but it's still misbehaving.
+- Apply hull modifier to proc wings also.
+- Use the OS-dependent directory separator char for player-visible paths (fixes team names containing the 'AutoSpawn' folder in Windows).
+- Replace ', ' with ',' in the summary.csv file for teams for consistent team member naming.
+- Rework the extending code to remove the spaghetti and fix the bug where the plane would extend in a straight line from ground targets without AI control.
+
+IMPROVEMENTS
+- General:
+	- Update the tournament parser to sort teams by wins, have the same column order in the csv as in the console and include cumulative score per round results.
+	- Use RemoveVessel in VesselSpawner.cs for removing spectators for more consistent removal.
+	- Disable guard mode on aerial spawn to be consistent with competition start sequence (in case there's a delay between spawning and starting where someone activated guard mode on AG10).
+- UI:
+	- Use a slightly more compact spacing in the vessel switcher when teams only have 1 vessel and short team names are used.
+	- Remove unused "fire in range" toggle from weapon UI.
+	- Add a UTC timestamp to the clock.
+	- Armor Tool GUI now lists comparative strength of material vs steel, and provides a general estimate of material effectiveness against various forms of damage.
+	- In Flight Armor GUI slider changed to Armor Integrity showing percent remaining armor.
+ 	- Clarifies armor debugging statements.
+	- Armor Reset toggle split into separate Armor Reset and Hull Reset toggles.
+- AI:
+	- Add a 0.5s cool-down to the AI toggling the afterburner for when the hysteresis is insufficient.
+- Countermeasures:
+	- Add separate countermeasure settings to the weapons manager for chaff.
+	- Update default values for flares and chaff to be more effective.
+	- Lower default chaff factor to slightly nerf chaff performance.
+	- Add Vessel-Relative Bullet Checks for more accurate bullet checks that work in high-velocity environments (enabled by default).
+	- Replace smoothing of target velocity and acceleration with Brown's double exponential smoothing for improved aiming, particularly at longer ranges.
+- Armor:
+	-Armor panel thickness now starts at 25, can be increased up to old maximums.
+	-Armor panel area (in m^2) can be set in .cfg via "armorVolume =" field.
+	-Bullets will now only hit (and deal damage to) armor panels once.
+	-Armor Panel HP now directly proportional to armor integrity.
+	-ModuleReactiveArmor has been rebuilt and now works.
+	-Adds Reactive Armor example part.
+  
+ADDED/REMOVED/CHANGED SETTINGS VALUES
+	- Vessel-Relative Bullet Checks in advanced Gameplay settings.  
+	- Armor Reset toggle split into separate Armor Reset and Hull Reset toggles.
+
+v1.4.11.2
+FIXES 
+	- Fix Intake Battle Damage issue.
+	- Intake Battle Damage now clamped to a minimum of 1/4 original intake area.
+	- AP rounds that penetrate multiple parts now only register a single 'hit' for scoring.
+	- Fixes Nuke FX scale and scaling.
+IMPROVEMENTS
+	- Adds Armour Reset toggle to BDA settings menu to reset craft armor/hull material to defaults.
+	- Missiles can now use in-flight animations with the 'flightAnimationName =' field.
+	- Adds config fields to BDModuleNuke for setting custom FX/sound.
+	- Nukes now have Editor info cards.
+ADDED/REMOVED/CHANGED SETTINGS VALUES
+	- Added Armor Reset toggle.
+
+v1.4.11.1
+FIXES
+IMPROVEMENTS
+	- Adds AIR-2 Genie example weapon.
+ADDED/REMOVED/CHANGED SETTINGS VALUES
+
+v1.4.11.0
+FIXES
+	- Fix some exceptions related to flames.
+	- Fix for spawning where VESSELNAMING tag is different from the vessel's name (the name gets reverted so that the VESSELNAMING tag is effectively ignored).
+	- Fix bug where interrupted tournaments could lose team information.
+	- Fix exception in Team Icons.
+	- Allow extra attempt at spawning when no terrain was found as it sometimes works the second time.
+	- Fixes laser damage calc incorrectly using laser part armor thickness instead of target.
+	- Fixes AI not using AGMS against ground targets.
+	- Fixes sabot deformation.
+	- Fixes missiles not respecting max missiles per target setting.
+	- Rockets will now properly score only a single hit if HE.
+	- Scoring now tracks rockets fired.
+	- EMPs from nukes will no longer repeatedly fry a hit vessel.
+IMPROVEMENTS
+	- General:
+		- Add optional persistent FX for smoke/debris from explosions.
+		- Explosions will now damage a part if detonating inside it.
+		- Adds generic FX spawner.
+		- Renames RWPS3R2NukeModule to BDModuleNuke, and expands it into a missile-usable module.
+		- Adds some FX to nuke detonations.
+		- Nukes now act like explosions and delay damage/heat/impulse imparted to target based on distance from detonation.
+	- UI:
+		- Reworks the BDA Settings Menu to be less cluttered/more organized/intuitive.
+		- Less commonly used toggles/settings now enabled via Advanced User Settings toggle.
+		- Disable Kill Timer setting removed, this is now handled by the Kill Timer slider.
+		- Vessel tracing manual toggle moved from the Vessel Switcher Window to the Settings window (in the Other section when Advanced User Settings is enabled).
+		- Settings window doesn't automatically close when starting a competition.
+		- Settings are saved when switching scenes if the UI is open.
+	- Tournaments:
+		- Add an 'Auto-Resume Tournaments' option to automatically load the savegame associated with an unfinished tournament, enter flight mode and resume the tournament on KSP launch.
+		- Add an 'Auto-Quit Memory Threshold' option (when auto-resuming tournaments is enabled) to automatically quit KSP between heats if the managed memory is above a threshold. Note: native (unmanaged) memory is not measurable from within Unity, so actual memory usage may be higher. In particular, the GfxDriver can use around 5GB of memory, but isn't measurable in non-debug versions of the Unity player. See the "DEBUG Memory Usage" lines in the KSP.log.
+		- Add results.json parser for N-choose-K style tournaments to produce a table of who-beat-who."
+		- Expand the 'Folders' teams mode for spawning and tournaments to 'Per Folder / Per Craft File' where, if no subfolders are found, then each craft file in the folder is treated as if it were in a subfolder with the name of the craft file (minus the '.craft').
+	- Competitions:
+		- Landed Kill Timer no longer affects vessels using Surface AIs.
+	- AI:
+		- Apply a correction to the roll target when a low-altitude inverted-roll is requested to avoid looping down and immediately triggering terrain avoidance.
+	- Armor:
+		- Adds numeric field to Armor GUI thickness slider.
+		- Allow armor thickness adjustment in non-"integer of 5" increments.
+		- Remove lowered max temp of aluminum/steel hulls.
+	- Bullets:
+		- Sabot rounds now identified via mass, caliber, and length instead of caliber and velocity.
+		- Bullet deformation now controlled by caliber and HE ratio.
+		- Rework bullet collision, bullets now do both entry and exit damage to parts they (over)penetrate.
+		- Adds three new fuze types - Impact, Delay, and Penetrating.
+		- Proximity/Timed fuze rounds will not detonate if they hit something within their arming dist.
+	- Battle Damage:
+		- Fires Add Heat no longer prevents damage from occurring.
+		- Add Battle Damage option for fire damage to scale to fire intensity.
+		- Engines and intakes now properly take Battle Damage relative to damage taken.
+		- Engines now properly clamp thrust to thrust floor value when Battle Damage.
+		- Default Battle Damage settings are mostly true by default.
+	- Evolution:
+		- Add a hidden AUTO_RESUME_EVOLUTION setting to resume evolution on restarting KSP (similar to and overrides the 'Auto-Resume Tournaments' setting).
+ADDED/REMOVED/CHANGED SETTINGS VALUES
+	- Performance Logging option removed as it did nothing.
+	- InstaKill option removed (only affects lasers, use the InstaGib mutator instead).
+	- Auto-resume tournaments and Auto-quit KSP advanced options added to the Gameplay section, plus a hidden Auto-resume evolution setting.
+	- Persistent FX setting added.
+
+v1.4.10.0
+FIXES
+	- General:
+		- Consider 'splashed' vessels as 'landed' when spawning.
+		- Symmetric parts are updated when armour type or hull material is adjusted in the editor.
+		- Fix exception in updating radar locked targets.
+		- Remove duplicate 'Detonate At Minimum Distance' toggle from non-modular missiles.
+	- AI GUI:
+		- Get the AI on the initial load when reverting to the editor.
+		- Fix the AI GUI updating the values when switching vessels when using numeric fields.
+		- Fix some surface AI values being initialised from the wrong variables in the AI GUI.
+	- Mutators:
+		- Fix speed mutators from setting engine throttle to 0.
+		- Fix mutator mode interaction with weapon arenas and impulse weapons (gravity gun).
+	- Weapons:
+		- Fix some weapon selection criteria.
+		- Fix lasers doing negative damage.
+		- Fixes issue where AI would sometimes select rockets over guns for AtA when gun was superior option.
+		- Fixes some typos in Stingray.cfg.
+		- Torpedoes are no longer affected by Chaff.
+		- Beam-guided munitions can now properly target splashed targets.
+	- Battle Damage:
+		- Heartbleed/Armor melting no longer occurs when game is paused
+		- Adds check so empty fuel tanks will no longer catch fire if part temp exceeds fuel ignition point.
+		- Autoigniting fuel tanks will only add a single fire.
+		- Removes ability to add firebottles to SRBs.
+		- Fuel Tanks/Ammo Boxes now require 'Fires' and 'Fires Add Heat' enabled in Battle Damage settings to catch fire if too hot.
+		- Burning Fuel tanks now properly destroy the part if they explode.
+	- SPH/VAB
+		- The Armor Tool GUI will no longer reset armor thickness of all parts to 10 when opened.
+IMPROVEMENTS
+	- Weapons:
+		- Adds clusterbombs to weapon selection logic.
+		- Adds support for beam-guided AtA missiles.
+		- AI should now select best, rather than first, bomb available when attacking ground targets.
+		- Selection logic now weights cluster ammo for missile interception.
+		- AI will can now select rockets/lasers to use at close range against underwater targets.
+		- AI can now target flying targets with laser-guided munitions.
+		- AI will not use EMP missiles against targets that are currently EMP'ed.
+		- Adds water splash FX for bullets hitting water.
+		- Bullets can now ricochet off water.
+		- Added an "Underwater Bullet Drag" option for bullets and rockets to have considerable drag when in water. When enabled, the following applies:
+			- Bullets with caliber < 75 and rockets fired from above water stop when entering water and explode if they're explosive.
+			- Rockets with sufficient thrust duration can be fired from underwater at splashed/submerged targets that are close enough.
+			- Weapons targeting nearly fully submerged targets will target the water surface immediately above the target.
+			- Weapon selection updated to reflect the above changes.
+			- AI will no longer select guns when underwater.
+	- UI:
+		- Add a toggle for showing the competition status messages with the UI hidden.
+		- Add option to TimeWarp between tournament rounds (not heats) on planets with a solid surface (due to a technical constraint).
+		- Add Underwater vessel status to LoadedVesselSwitcher window and put the status after the vessel name.
+		- Expand the low altitude GM kill limit to depths of -10km.
+		- A clearer message when a tournament stops due to spawning/competition start failures.
+		- Small Warhead 'Detonate At Minimum Distance' toggle renamed to Warhead Trigger Distance, to avoid confusion when building modular missiles.
+	- RWP:
+		- Add S4R1 RWP option for globally adjusting the firing rate of weapons in-game.
+		- Add S4R2 RWP option Zombie Mode where only root part takes damage.
+			- Add non-headshot dmg multiplier slider to adjust how much damage non-root parts take.
+			- Add toggle to allow battledamage to occur on non-root parts.
+	- Internal:
+		- Adjust camera weights for picking a better vessel to switch to.
+		- Add a IsUnderwater vessel extension.
+		- Adds hidden legacy armor toggle to disable armor overhaul changes (armor types/hull material) accessible via editing settings.cfg.
+	- General:
+		- Adjust armor panel buoyancy, armor panels will float again when at max thickness.
+		- Automatically create a GameData/Custom/Flags directory for standardising the location of flags for BDArmory competitions.
+		- Price rebalance.
+		- Some RWP specific options (to be decalred once the rounds have been run).
+ADDED/REMOVED/CHANGED SETTINGS VALUES
+	- Low altitude kill limit expanded and "Off" value changed.
+	- Legacy armour option added (config file only).
+	- Competition status messages with hidden UI option added.
+	- Underwater bullet drag option added.
+
+v1.4.9.1
+FIXES
+	- Fix various fields in the AI GUI for surface AIs.
+	- Fix broadside direction to not be reversed.
+	- Set default mutator mode (for new installs) to false.
+	- Add missing checks for empty mutator list (was causing competitions to fail to start).
+	- Fix laser damage calculation.
+
+v1.4.9.0
+FIXES
+	- Fixes an NRE in PartExtension.GetSize that was causing KSP to crash when deploying a flag.
+	- Properly reset the AIGUI input fields when adding and removing multiple AIs.
+	- Add missing field to surface AI input fields.
+	- Fix Evolution UI bug and allow 0 adversaries.
+	- Make the CASE-I explosion directed in the up direction of the part.
+	- Check for null vessels in ForceUpdateRadarCrossSections (fixes competitions not starting due to this exception).
+	- When setting HP of parts, use an alternate approach to getting volume based on partSize when GetAverageBoundSize gives ridiculous results. Failing that, just base it on mass. (Fixes HP on TweakScale and AP+ parts.)
+	- Actually run the armour and hull setup functions in flight mode.
+	- Add conformal decal exception to HP/Armor visualizer.
+	- Make rendering of RCS snapshots and HP/Armor visualisers in the editor wait for ship changes to finish being triggered before rendering to reduce unnecessary renders causing flickering.
+	- Various fixes for shrapnel damage.
+	- Fix penetration velocity reduction.
+	- Fix barrage mode not cycling through singlebarrel weapons.
+	- Fix RPM for multibarrel weapons, actual RPM is now listed RPM, not listed RPM * num of barrels.
+	- Fix occasional NRE in AnalyseCollision.
+IMPROVEMENTS
+	- Internal:
+		- Add angle parameter for creating directed explosions (defaults to 100°).
+		- Log 'StopCompetition' events to the log as well as the screen.
+	- Armor:
+		- Add attach node sizes to armor panels.
+		- Add Editor RMB context info for armor panels to inform players of panel armor mass.
+	- AI:
+		- Allow collision avoidance detection from vessels approaching from behind.
+		- Don't apply premature dive fix when evading.
+		- Add an option to ignore gunfire from the current target for evasion purposes. (I.e., don't trigger evasion when jousting, only from other sources.)
+	- Game modes:
+		- Add Asteroid Field game mode, with anomalous attraction option.
+		- Add Mutator mode:
+			- Select one or more mutators to change up how weapons and craft behave for the round.
+			- Mutators can be applied globally, per vessel, or on kill.
+KNOWN ISSUES
+	- Occasional graphical glitch for proc wings in the SPH/VAB due to HP/Armor visualizer. Doesn't affect flight mode and the color resets if the craft is reloaded or the proc wings color settings are nudged.
+
+v1.4.8.2
+FIXES
+	- Fixes armor panel settings not persisting from Editor to Flight.
+	- Fixes steel hull material massively increasing weight.
+	- Triangular armor panels/wings now properly have 1/2 armor mass of rectangular panels.
+	- Put the Gau-22 in the correct category in the SPH.
+	- Fix minor mesh errors on the Sidam.
+	- Don't detonate CASE ammo on vessel packing or unloading.
+	- More fixes for proc-wings:
+		- HP is updated properly on vessel load.
+		- Mostly fixed interaction between the HP/Armor visualizer and proc wings shaders.
+IMPROVEMENTS
+	- Add a slider for controlling the distance threshold of showing team icons.
+
+KNOWN ISSUES
+	- Occasional graphical glitch for proc wings in the SPH/VAB due to HP/Armor visualizer. Doesn't affect flight mode and the color resets if the craft is reloaded or the proc wings color settings are nudged.
+	- Flickering of the RCS window, particularly when the Armor window is open. 
+	- Tweakscale HP is misbehaving beyond certain size changes.
+
+v1.4.8.1
+FIXES
+	- Fix (mostly) Pwing - HPVisualizer issue
+	- Fix burstfire
+	- Fix procwing HP bug
+IMPROVEMENTS
+	- Internal stuff:
+		- Implement the AddPlayerToRammingInformation and RemovePlayerFromRammingInformation functions (not used yet).
+
+v1.4.8.0
+FIXES
+	- Fix logic of which vessels to ignore in RCS snapshots.
+	- onDisable -> OnDisable. Deactivate FireFX properly such that the parentPart always gets cleared (also in FuelLeakFX.cs).
+	- Fix line-of-sight checks in ExplosionFX for exploding parts on vessels.
+	- Don't detonate for surface fires, excess fuel explosions cause surface fires.
+	- Don't trigger CASE ammo explosions on scene changes.
+	- Fix rippleRPM.
+	- Fixes to burstfire.
+	- Fix checks for uncontrolled vessels.
+	- Fix LangVersion in .csproj to build with later than C# 7.3.
+	- Fix missing team in summary when the team is only dead.
+	- Fix bug with 'dead teams' in tournament parser script.
+	- A variety of minor bug fixes and optimisations.
+IMPROVEMENTS
+	- General:
+		- Adds support for weapons with multiple fire animations or barrels (battleship guns/wirbelwinds/etc).
+		- Adds Sidam quad 25mm to demonstrate multi-fireanim/multi-barrel functionality, and the GAU-22 to provide a fixed 25mm weapon.
+		- Fix fuel fires/ammo explosions occasionally yielding larger than expected damage.
+		- Ammo explosion max damage now capped.
+		- Weapons with integral CASE will no longer add an additional 2000 funds to part cost on load.
+		- Add N-choose-K style tournament option.
+		- Variant engine for automated craft evolution.
+	- AI/WM:
+		- Added stand-off distance to try to avoid getting closer than this distance when tailing another craft.
+		- Improved vessel-vessel collision avoidance based on look-ahead and avoidance strength and only avoiding as long as necessary (note: this uses different settings in the pilot AI, so old craft may need re-tuning for this).
+		- Expand targeting logic for rockets.
+		- Adds AI GUI, available in both editors and in flight, with configurable hotkey (default 'Numpad /') and optional toolbar button.
+		- Expands Weapon Manager GUI, adds target priorities tab.
+		- Adds togglable context labels and infolinks to AI and WM GUIs for on-hand info about what each setting does.
+		- Ki improvements with 0.995 decay factor and fixed +1/-1 clamps.
+		- Update target priority to work for ground targets.
+	- Armor Overhaul:
+		- Armor now adds mass to craft, relative to thickness and part size.
+		- Can now select from multiple armor materials, each with their own strengths and weaknesses.
+		- Adds spalling damage from near-penetrating hits.
+		- Adds shrapnel damage from explosive detonations.
+		- Adds Armor tool to SHP/VAB editors for easy armor manipulation across a craft.
+		- Adds HP visualizer, to see HP of all parts across craft.
+	- GameModes:
+		- Adds Space Tools BDA setting.
+			- Adds Space Friction toggle for starwars-style space dogfights.
+			- Adds contragrav setting for atmospheric use for things that reasonably shouldn't fly - sky battleships/stock zeppelins/etc - or for null-atmo fights where wings can't generate lift.
+			- Adds repulsor setting for hover vehicles.
+		- Rework Tag mode to use the new scoring datastructure.
+	- Scoring:
+		- Rework the code interally for a more consistent approach.
+		- Sliders for controlling the time limits for head-shots and kill-steals.
+		- Head-shots are now separated into clean-kills (within the time limit and was the only plane to damage the target), head-shot (within the time limit, but not the only plane to damage the target) and kill-steals (within both time limits).
+		- Separate scoring categories for rockets and battle damage, giving: bullets, rockets, missiles, ramming and battle damage (including self-inflicted).
+		- Improve score-related UI messages.
+		- Updated parsing script to handle these new categories.
+		- Remote orchestration is not yet updated, so report rocket damage as missile damage to the remote orchestration for now.
+		- Fix bugs in continuous spawning and integrate it into the new scoring datastructure.
+	- UI:
+		- Always show a clock during competitions and competition start for time synchronisation of video post-processing.
+		- Add the AI/WM GUI toggle hotkeys into the hotkey settings so they can be set.
+		- Increase the default width of the vessel spawner window a bit to fit the tournament status for long tournaments. Automatically adjust existing window width if running a tournament with >99 heats.
+		- Extra damage sliders for rocket and battle damage multipliers.
+		- Add an Advanced Tweakables toggle to the BDArmory settings for easier access.
+		- Add a toggle for the BDA AI toolbar button.
+	- Internal stuff:
+		- Balance for 25mm round (tested in FJRT2).
+		- Adjustment of battle damage damage.
+		- Automatically create the AutoSpawn folder on entering flight mode if it doesn't already exist.
+		- Move toolbar button logic to BDArmorySetup.cs and enable toolbar button in SPH and VAB too for accessing BDA settings window.
+		- Move SpawnField class to BDArmory.UI.NumericInputField.
+		- Track the current HP ignoring ignored parts as needed.
+		- Deprecate BD_AMMO_DMG_MULT.
+		- CASE now uses EST.BattleDamage.
+		- Change competition update tick to 1s to match best precision of vessel state checks.
+		- Detection of crew being killed in 'uncontrolled' checks.
+
+v1.4.7.1
+FIXES
+	- Quick fix for craft names using invalid filename chars in the remote orchestration.
+	- Hide the Asteroid Rain radius slider when Follow Spread is enabled.
+	- Fix some NREs.
+	- Bias testing:
+		- Add a random spawn order toggle to the vessel spawner window, which applies in single spawn mode (i.e., everything except continuous spawning).
+		- Add option to parsing script to only parse the first N logs for use in analysing trends in results.
+IMPROVEMENTS
+	- Compiled with KSP 1.12 assemblies.
+	- Improve MIA (survived/not-survived) definition in results logs.
+	- Add telemetry readout to crafts TeamIcons HUD.
+	- Ammo belts:
+		- Add API ammo option to Vulcans, .50 cals, GAU, and M230.
+		- Add 35x228AHEADBullet ammo option to Oerlikon Millennium turret
+
+v1.4.7.0
+FIXES
+	- Fixes weapons without ammo not firing if Infinite Ammo enabled
+	- EMPs will no longer shutdown SRBs
+	- Rounds with the 'Proximity' Fuze type now properly proximity detonate
+	- Adjust Krakensbane adjustments in 'full' Kerbal Safety to hopefully reduce amount of Krakenation.
+	- Make the default value for kerbal safety be 'partial' instead of 'full' due to stability issues with 'full'.
+	- Fix various NREs and memory leaks.
+IMPROVEMENTS
+	- General
+		- Make the WM, MMG, pilot AI and surface AI modules get ignored by explosions, bullets, rockets, lasers and missiles so that they can be placed externally without being easily destroyed.
+		- Disable Kerbal Safety "R.I.P." in-game messages as they were too spammy.
+		- Add option for tournament parser to parse multiple tournaments.
+		- Allow turrets other than the current one to track the main target so they're ready to fire if the current one is unable to do so.
+		- Optimizes RocketFx, reduces rocket performance impact
+		- Adds score reporting to proximity-fuzed rockets
+		- Rocket soundFX is now customizable in weapon .cfg using the 'rocketSoundPath' field
+		- Expands Scoring metrics; Adds HP remaining (how much of the vessel is left at end of heat) and MIA (is the vessel a wreck falling out of the sky, or an intact plane?) fields
+		- Minor tweaks to Ammo Type PAW descriptions
+		- Pulse laser beam duration now clamped to fire rate
+		- Adds Incendiary ammo, plus associated BattleDamage support
+		- Adds Custom Ammo Loadouts; weapons with multiple ammo types can be configured to fire non-homogeneous loadouts (e.g. AP, AP, AP, HE, AP...)
+		- Adds Custom Ammo Belt config GUI
+		- Weapons can be configured to use custom ammo belts in .cfg with useCustomBelt = true and ammoBelt = foo; bar; 
+		- New VesselModuleRegistry class for much faster access to vessel modules which gives a nice overall performance boost.
+		- New Asteroid Rain game mode added.
+	- Resource stealing:
+		- Change resource steal to drain and fill containers evenly w.r.t. fraction of the containers, still respecting priority settings.
+		- Add option for counter-measure stealing.
+		- Add a few fuel and ammo resources that were missed.
+		- Steal integer amounts of ammo and counter-measures.
+	- Altitudes:
+		- Add Max Altitude (AGL) setting to pilot AI with a toggle to enable/disable it.
+		- Add action group options for 'Toggle Max Altitude', 'Enable Max Altitude' and 'Disable Max Altitude'.
+		- Change killer GM altitude limits to AGL.
+	- Team Icons
+		- Adds reminder message to toggle stock vessel labels if they are enabled
+		- Adds check if legacy Team Icons is installed. Remove prior installations of Team Icons
+		- Integrates Team Icons into BDA
+		- Adds User-selectable colors
+		- Team colors no longer change if a team is completely destroyed
+		- Adds Team Color indicators to Vessel Switcher GUI
+		- Paintball mode now uses Team-colored paintballs for easy hit tracking
+		- Adds Rocket alert icons
+		- Threat Indicators now show all vessels attacking a vessel + 200f
+		- Adds Telemetry HUD to Craft Icons
+	- Battle Damage
+		- Adds Damage Multiplier slider for Battle Damage Ammo Explosion damage
+		- Ammo Explosion now properly scales damage based on distance, ammo remaining in the box
+		- Ammo Explosions now properly report damage from explosions to attacker vessel responsible for triggering the explosion
+		- Fuel Tank explosions now less damaging, now use Ammo Explosion Damage Mult setting
+		- Adds ability to set lower limit on Engine thrust reduction from battle Damage
+		- Adds adjustable threshold for engine kills from Battle Damage
+		- Crew Fatalities now report name of vessel pilot was in
+		- Crew Fatalities now knock out AI if all pilots killed
+		- Self-Sealing tanks now prevent leaks unless below 50% HP
+		- Leak rate now dependent on tank pressure
+		- Fire burn rate now dependent on tank volume and available fuel
+		- Firebottles temporarily shut down burning engines to extinguish them
+		- Fires can now add heat to burning part
+		- If Fire Damage and Fire heat enabled, fires will begin do damage once part temp exceeds damage threshold
+		- Fueltanks/ammo boxes that are too hot will cook off
+		- Fires now properly recognize MonoPropellant tanks
+		- Fires now distinguish between surface and internal. Internal fires require firebottles to extinguish, surface fires will burn for a short duration, but not consume resources
+
+v1.4.6.2
+FIXES
+	- Add in steer limiter localization text (is used on Modular Missile Guidance)
+	- Always score damage from lasers, but only score hits with pulse lasers or when the accumulator is sufficient.
+	- Fix bug in advanced targeting for fixed guns.
+	- Adjust intake damage amounts.
+IMPROVEMENTS
+	- Add SRB battle damage.
+	- Filled command seats can extinguish fires.
+
+v1.4.6.1
+FIXES
+	- Fix various occasional NREs.
+	- Fix bug in parser for 'dead teams'.
+	- When a missile has lost its MissileBase set its isMissile tag to false so it no longer counts as a missile.
+	- Don't detonate CASE ammo when the vessel is null, packed or not loaded.
+	- Fixed overheated guns sometimes not being detected as overheated.
+	- Fix AI having issues avoiding terrain when in an inverted dive (would happen most frequently during missile evasion).
+IMPROVEMENTS
+	- Updated HP patch for AoA Technologies.
+	- Add check for whether guns with low RPM can fire soon, switch to a different weapon if the next time a low RPM gun can fire is greater than the Weapon Manager fire interval setting.
+	- Re-add multiple subsystem targeting to the advanced targeting.
+
+v1.4.6.0
+FIXES
+	- Store the armed/IFF state in the craft files instead of just the GUI strings.
+	- Use the correct ShipConstruct in the editor for setting the max gun range and set a minimum of 10 for the max gun range to avoid breaking the part window sliders.
+	- Add another check for vessels disappearing during spawning.
+	- Add a 0.1s time-out to the ballistic trajectory closest approach simulation to prevent freezes.
+	- Pause fire effects when the game is paused.
+	- Store the armed and IFF states of explosive parts, not their GUI strings.
+	- Fix missiles not being targeted when Engage Missiles option was selected.
+	- Fix for the AI stopping extending prematurely.
+	- Fix extending to get enough distance to fire missiles not working.
+IMPROVEMENTS
+	- Migrate non-static configs to the PluginData folder to avoid invalidating the ModuleManager cache (should give slightly faster start-up times).
+	- Add a Game Modes section to the settings and rearrange the various toggles to match.
+	- Add Heart-Bleed and Resource-Steal game modes.
+		- Fuel resources that can be stolen are 'LiquidFuel', 'SolidFuel', 'Oxidizer', 'IntakeAir' and 'ElectricCharge'.
+		- Ammo resources that can be stolen are those ending in 'Ammo', 'Shells' and 'Rocket'.
+	- Remove Target Missiles toggle from the weapons manager, this is now automatically set based on if weapons onboard the craft have the engage missiles option enabled.
+	- Expose AI extending settings to be editable by user. The AI extends when all of the below conditions are true:
+		- The target is outside of an angle in front of the craft (default of 78 degrees, now selected using Extend Target Angle).
+		- The target's speed is less than the craft's speed (default of target's speed is less than 80% of craft speed, now selected using Extend Target Velocity Factor).
+		- The target is close (default of within 400 meters, now selected using Extend Target Distance).
+	- Advanced targeting setting deprecated - targeting options are now per vessel.
+	- Max turret target setting deprecated - is now set per vessel.
+	- Adds Max Turret Targets setting to Weapon manager.
+	- Adds Targeting Options to Weapon manager.
+
+v1.4.5.0
+FIXES
+	- Fix the floating origin corrections to the vessel traces and apply the corrective rotations to the coordinates such that the local coordinates are (east, up, north) and the identity rotation is a craft pointing nose up with the underside pointing north. Include a simple python script to plot the traces.
+	- Re-enable the extending debugging (when debug labels are on).
+	- Fix the smoothing of the target acceleration and velocity for long-range targets to be applied dynamically so as to not affect short range targets and to reset when switching targets.
+IMPROVEMENTS
+	- Update the in-flight Guard Menu to match the settings in the weapon manager in the SPH.
+	- Dynamically adjust (max) gun range based on the guns that are actually on a vessel.
+	- Add log and competition status messages about disabling a vessel due to EMP damage.
+	- Upgrade the numerical integrator for bullets and ballistic trajectory simulations to use the 2nd order symplectic leapfrog method (this vastly improves the accuracy and speed of the trajectory simulations). Allows for ballistic aiming out to at least 50km.
+	- Include dead teams information in the results.
+	- Re-worked steer limiter. Steer limits are now based on two control points, defined by four variables
+		- Low Speed Control Point: Steer limit and Speed
+		- High Speed Control Point: Steer limit and Speed
+		- Below the low speed control point speed, the limit will be equal to the low speed steer limit.
+		- Above the high speed control point speed, the speed will be equal to the high speed control point limit.
+		- Between the two control points, the steer limit will vary linearly based on the craft's current speed.
+	- Add toggle for whether competition status messages are displayed.
+	- Change clearance check minimum drop time to greater than or equal to 0.1s instead of greater than 0.3s
+	- Add 1.5 safety factor to blast radius determination for missile evasion
+	- Clamp the minimum radar missile FOV used for missile evasion to 40 degrees, results in fewer instances of craft turning back towards a missile at inopportune times.
+
+v1.4.4.4
+FIXES
+	- Fix missiles firing without exhaust and heat-seeking missiles firing without a target.
+		- Regenerate exhaust prefab object pools when they're detected to contain nulls due to scene changes or reloads.
+		- Trigger missile exhaust prefab detachment on part.OnJustAboutToDie and OnDestroy as well.
+	- Add KeyNotFound and NRE checks in CheckForMissingParts.
+	- Add in SetupAudio fix in some other places for audioSource. Add check for broken animations and give error instead of exception.
+	- Remove ramming debugging toggle and just use the regular debug labels toggle instead. Adjust the debug statements in DebrisDelayedCleanUp.
+	- Don't update RCS if we've just fired a missile or are trying to fire a missile.
+	- Correctly calculate turret gimbal limits check, taking into account bullet drop.
+	- Add generic rocket resource for rocket ammo boxes (fixes rocket launchers not being able to use rocket ammo boxes)
+IMPROVEMENTS
+	- Add option to trace vessel paths and orientations. Traces are logged in GameData/BDArmory/Logs/VesselTraces/<VesselName>-<StartTime>.json
+
+v1.4.4.3
+FIXES
+	- The improved aiming code is now fixed (properly accounts for movement of the aiming vessel). Planet curvature is not yet taken into account.
+	- Re-initialise the missile audio sources if they're null (fixes failure-to-fire issue).
+
+v1.4.4.2
+FIXES
+	- Revert the improved gun aiming code as it's not working properly for non-stationary targets.
+	- Fix potential NRE in DetachExhaustPrefab.
+
+v1.4.4.1
+FIXES
+	- Fix AI trying to evade missiles after they were no longer threats or did not exist.
+	- Use object pooling for missile exhaust prefabs to avoid memory leakage.
+
+v1.4.4.0
+FIXES
+	- Add safety check around parsing BDA settings values.
+	- Re-add laser min range check.
+	- Multitargeting:
+		- Multitarget now multitargets missiles.
+		- Fix part targeting not resetting properly.
+		- Update the target parts lists correctly. Only triger target part list updates when toggling options instead of every frame when the settings are open.
+		- Add check for the list of targetable parts being empty.
+	- Remove arc length term from DLZ calculation for ground launched missiles (this was breaking VLS parts).
+
+IMPROVEMENTS
+	- Missile evasion:
+		- Behavior changes to notch and dive against missiles, pull away before impact for heat seekers only (continuing to notch is more effective against radar missiles). Fix spinning in place behavior that had occurred occasionally.
+		- Simplify entry conditions for missile evasion behavior (only occurs within threshold of when your craft is set to dispense chaff/flares regardless of whether it has chaff or flares onboard).
+		- Proper throttle settings for chaffing vs flaring.
+		- Add check if radar missiles are still boresighted towards craft as a condition to treat missiles as a threat.
+	- Shift 'AimAndFireAtEndOfFrame' to occur during the FashionablyLate timing phase of FixedUpdate and rename it 'AimAndFire'. This synchronises firing with the physics instead of waiting until the scene is rendered. It also occurs before Krakensbane adjustments have been made.
+	- Simplify target threat to either be 0 (not under attack) or 1 (under attack).
+	- Make Kerbal Safety a slider instead of a toggle to allow disabling ejection from cockpits, but still have existing kerbalEVAs deploy parachutes.
+	- Add 'Start Comp. NOW Delay' slider for automatically triggering 'Start Competition NOW' after a given delay.
+	- Tournament results parser:
+		- Add missile hits taken to the parser ('HitByMis' in console output, 'missileHitsTaken' in CSV file).
+		- Hide empty columns in the parser console output.
+
+v1.4.3.3
+FIXES
+	- Fix various NREs.
+	- Add stacktrace to exception warnings in ModuleCASE.
+	- Detonate bullets and rockets when they hit kerbals.
+IMPROVEMENTS
+	- Improve the gun aiming code.
+	- Include missile hits separately from count of parts hit by missiles in scoring logic and update tournament parser.
+
+v1.4.3.2
+FIXES
+	- Add missing Weapon condition checks.
+	- Yet another attempt at avoiding the CometVessel bug.
+	- Escape double quotes in vessel names when writing the logs to avoid breaking JSON parsing.
+
+v1.4.3.1
+FIXES
+	- Add missing values for Hydra70 and 8KOMS rockets.
+	- Fix smartpick not finding priority 0 lasers.
+IMPROVEMENTS
+	- Add gravity gun (RWP S3R4), F-86 launcher, generic rocket ammo and FFAR70 rocket definition.
+
+v1.4.3.0
+FIXES
+	- Fix rockets overriding the weapon name and breaking the editor.
+	- Maintain incoming missile warning while missiles are still incoming.
+	- Limit 'firing at me' detection (from guns) to the range of the weapon being fired.
+
+IMPROVEMENTS
+	- Make altitude limits independent of RWP and change localisation.
+	- Make missile targeting check depend on blast radius of incoming missile instead of fixed at 60m and include check for passing in close proximity.
+	- Return a full list of incoming missiles sorted by distance in UpdateGuardViewScan instead of just the first found.
+	- Convert 'under attack' and 'under fire' routines to maintain their state until 1s after last notification instead of simply resetting after a fixed period.
+	- Adds Impulse/Gravitc functionality for ballistics/rockets/lasers
+		- Adds some new configuration fields
+			- impulseWeapon = foo //gun/laser will deal impulse instead of damage
+			- Impulse = n //magnitude of impulse delivered per bullet/rocket/pulse laser shot, and impulse/sec delivered by beam lasers. setting this negative will make attractor lasers instead of repulsor lasers
+			- graviticWeapon = foo //gun/laser will temporarily modify mass of hit part
+			- massAdjustment = n //mass, in tons, added per sec by beams or per hit by bullets/rockets/pulselasers
+		- Adds some new rocketdef config options
+			- gravitic = foo //rocket will temporarily modify weight of parts hit by rocket and its explosion
+			- impulse = foo //rocket applies non-damaging impulse to parts hit by rocket/explosion
+			- choker = foo //rocket will temporarily disable air intakes caught in its blast radius
+			- EMP = foo //rocket will apply EMP buildup to targets within blast radius
+
+v1.4.2.10
+FIXES
+	- Prevent log spam from ModuleWeapon.CheckAIAutoFire.
+	- Fix width of drag window in Loaded Vessel Switcher.
+
+IMPROVEMENTS
+	- Add a min altitude limit for the killer GM (once a competition is active).
+	- Make the sequenced competition command sequence dependent on the BDA round.
+
+v1.4.2.9
+FIXES
+	- Fixes for Killer GM scoring attribution and ramming detection.
+	- Fix for if a rootpart is null during spawning.
+	- Set the kraken eating things active for the correct RWP rounds.
+	- Fix local tournament sequencing when using sequenced competition (S3R3).
+
+v1.4.2.8
+FIXES
+	- Make the Kraken eating things code specific to certain RWP rounds and only active during a competition.
+	- Fixes to sequenced competition for RWP S3R3 to work with the remote orchestration.
+	- Update vessel switcher teams list as necessary.
+	- Remove direction from explosions of impacting bullets as that makes no sense.
+	- Add debug log warnings for previously silently ignored exceptions and fix a couple of NREs.
+	- Fix exception in explosion handling when part.rb is null (but part.Rigidbody isn't).
+	- Reloading/MultiTarget fix/weaponPriority
+	- Multitarget fix
+	- Chernobyl bugfixes
+	- Various NRE fixes
+
+IMPROVEMENTS
+	- Separate bullet movement and collision detection into separate functions. Detect collisions in the initial frame of a bullet so point blank shots work.
+	- Detect exit collision with objects when the barrel of the gun is within the object's collider, i.e., sub-point-blank shots.
+	- Added a slider for configuration of specific RWP rounds.
+	- Adjust parsing scripts for updated logging tags format. Add slider for setting the length of time of the death camera.
+	- Standardise the format of debug log messages to '[BDArmory.ModuleName']: ...
+	- Reload anim support
+
+v1.4.2.7
+FIXES
+	- Add a "Kerbal Inventory" slider to configure how kerbals' inventories are adjusted when "Kerbal Safety" is enabled (default is "Parachute Only").
+
+v1.4.2.6
+FIXES
+	- Fix bug in loading spawn locations on fresh installs.
+	- Give vessel spawning more than 5 frames to wait for the reference transforms.
+	- Add checks in various parts of the code to avoid potentially applying forces to physicsless parts.
+
+IMPROVEMENTS
+	- Tweak explosions from the nuclear engine code to include triggering on detachment (i.e., no WM) and give a 0.5s delay after detachment or running out of fuel before exploding.
+
+v1.4.2.5
+FIXES
+	- Wait for reference transforms to be assigned during spawning to avoid NREs.
+	- Tweak auto number of vessels for FFA with only a few craft.
+	- Fix a variety of NREs in the nuclear engine code.
+	- Avoid applying forces to physicsless parts (no rigid body), which removes the need for try..catch block. Clean up code.
+	- Track last valid atmDensity of nuclear engine to ensure correct value while vessel being destroyed.
+	- Use the approximate GetArea function instead of the radiative area if the radiative area is not available.
+	- Clean up formulas for blast impulse. Only apply damage/impulse to each part once per explosion.
+
+v1.4.2.4
+FIXES
+	- Fix various NREs.
+	- Remove null-coalescing operators from Monobehaviours as they don't work in Unity.
+	- Multi-Target barrage fix: weapons targeting a target outside their fire arc will now be skipped instead of bringing the barrage to a halt until the offending weapon can be brought to bear.
+
+IMPROVEMENTS
+	- Added a few more interesting spawning points (currently requires removing the old spawn_locations.cfg file in order to update, this will be changed soon).
+	- Re-work rocket damage to do kinetic damage and penetrate armour and correctly report scoring info.
+	- Shared bullet/rocket code moved to Misc.ProjectileUtils.cs.
+	- Weapon priority adjustments:
+		- Guns targeting ground will now prioritize biggest impact (bullet mass * velocity) instead of tntmass.
+		- Guns targeting air will now prioritize RPM for fighter-sized targets, and prioritize larger caliber guns when targeting larger targets (bombers/zeppelins/Ace Combat superweapons).
+		- Add weapon priority slider allowing setting custom weapon selection order for guns/rockets.
+	- Added Chernobyl Nuke module for RWP S3R2.
+	- Update the list of maintainers and contributors in the README.
+
+v1.4.2.3
+FIXES
+	- Fix the issue of player names in the remote orchestration containing the separator character.
+
+v1.4.2.2
+FIXES
+	- Correct logic for checking if a weapon is powering down/disabled.
+	- Actually use the modified team starting distance for teams.
+IMPROVEMENTS
+	General:
+	- Allow configurable muzzleTransformName.
+	- Trigger RemoveCometVessel on onCometSpawned instead of onNewVesselCreated.
+	- Allow middle click individual 'T' icons to set neutral team.
+	- Small optimisation in explosion book-keeping.
+	- Increase maximum firing angle to 4 in both the weapon and the weapon manager.
+
+	Kerbal Safety:
+	- Ejection from cockpits and cabins is now working. Note: ejecting lots (>100) of kerbals simultaneously can cause KSP to freeze for several minutes.
+	- Set random rotation and torque to ejected kerbals. Disable collisions while manually moving the EVA kerbal.
+	- Let the Kraken eat kerbals that get invalid positions (NaN). Note: this doesn't appear to be an issue now due to the fix above.
+	- Self-destruct action group for WM (helps with testing things).
+	- Remove the kerbals' jetpacks to save 45kg.
+
+	Parsing script:
+	- Add default interpreter (for Linux) to parsing script.
+	- Default to looking for the latest tournament folder.
+	- Rearrange display order so that the 'Score' column is first after the 'Name' column
+	- Fix check for default team names in summary
+	- Only print teams summary if it's not 'A', 'B', ... as those aren't consistent.
+	- Update formatting of tournament parser output to console for consistent column spacing.
+	- Add various options to tournament parsing script (run with -h flag for help).
+		-q Don't print results summary to console. (default: False)
+		-n Don't create summary files. (default: False)
+		-s Compute scores. (default: True)
+		-so Only display the scores in the summary on the console. (default: False)
+		-w Score weights (in order of main columns from 'Wins' to 'Ram'). (default: 1,0,-1.5,1,2e-3,3,1,5e-3,1e-5,0.01,1e-7,5e-2)
+		-c Parse the logs in the current directory as if it was a tournament without the folder structure. (default: False)
+
+v1.4.2.1
+FIXES
+	- Fix a stack overflow due to recursion in IsValidVessel check.
+	- Swap labels of 'high' and 'low' speed steer limiters.
+
+v1.4.2
+FIXES
+	- Further adjustments to remove annoying space objects that get spawned during competitions.
+	- Add warning about missing SpawnProbe.craft.
+	- Bugfix for Scores when starting competition without using spawning.
+	- Fix occassional NRE in SmartFindTarget
+	- Adjust 'inhibiting gain alt' debug messages.
+	- Fix for damage reduction formula, armor damage reduction occurs for armor thickness > 20. Max armor thickness of 1500 results in ~90% damage reduction.
+	- Disable (missing) legacy code analysis tools in .csproj.
+IMPROVEMENTS
+	- Explosive damage penetration:
+		- Basic explosive damage penetration handling. Parts closer to the explosion are ablated first with a small amount of bleed through for relatively weak parts.
+		- Add comment on original BDA methodology source. Calculate positive phase time based on source method equations. Correct CalculateIncidentImpulse not bounding scaledDistance
+	- Remote orchestration:
+		- Add slider for inter-heat delay for remote orchestration. Also, doesn't rely on RWP option being enabled now.
+		- Make remote orchestration baseURL configurable, defaults to FC.
+	- Pilot AI:
+		- Enable storing and restoring settings (keyed by vessel name) for tuning a vessel in-flight and setting those settings in the SPH.
+	- Weapon manager / weapon configuration:
+		- Rename Target Acceleration to Target TWR since that's what it is
+		- Change firing angle to scale with distance and size of target.
+			- Include maxDeviation/2 from the weapon in the firing angle calculation to allow more firing at longer range for spray-and-pray guns. Increase max firing angle to 3.
+			- Prioritize weapons that are within their firing angle.
+			- Adjust weapon prioritisation of being within firing angle for firing angle scaling with target size and distance.
+		- Added VIPs, which allow you to set up behavior such as guarding your VIP, or attacking enemy VIPs and ignoring craft defending them.
+			- Add new "Is VIP" toggle to the weapons manager. Allows you to set a craft as a "VIP" which opens up new target priority options.
+			- Added new target priority options "Protect My VIPs" and "Attack Enemy VIPs". Setting positive values on these sliders will result in the craft targeting enemies that are targeting VIPs on its own team, or attacking enemy VIPs, respectively.
+		- Don't try to engage torpedoes with guns/missiles/lasers.
+		- Use other weapons for ground targets if missiles fired is greater than or equal to max missiles on target setting.
+		- Don't use arc length calculation for torpedo DLZ since they can turn much more quickly in water than airborne missiles.
+	- Advanced Targeting option in BDA Settings:
+		- Enables turrets to target multiple simultaneous targets
+		- Enables selecting CoM or non-CoM targeting options
+	- General:
+		- Updated tournament parsing script that puts subfields in their own columns in the CSV file.
+		- Move GetRadius to VesselExtension.cs.
+		- Localisation changes for steer limiter.
+		- Update Typhoon engine (caesar_hone_60.cfg)
+
+v1.4.1
+FIXES
+	- Fix missile hit attribution from missiles without BDExplosivePart modules.
+	- Don't include negative thrust percentage drives (Danny2462 drives) in max acceleration calculation as they don't contribute to the thrust.
+	- Fix BDRotaryRail stack overflow and give warning if the conditions that gave rise to it occur again.
+	- Put chute into right state before deploying it with WM AG.
+	- Don't assign gender to spawned kerbals, let KSP do it.
+	- Fix CheckSafeToFireGuns for debris preventing firing due to being too close to the target.
+	- Reduced (but not eliminated) exceptions due to comet vessels.
+	- Change the minimum damage amount of 0.01 to 0 as this was the cause of the fire damage over time applying despite the game being paused or slowed with time control.
+	- Fix NREs in explosions from ClusterBomb.cs
+	- Add KSP version dependent checks for part.IsKerbalEVA and crew.ResetInventory.
+	- Updates Rocket targeting, fixes aimer alignment
+	- Updates laser Infos with proper resource usage
+IMPROVEMENTS
+	UI and quality-of-life tweaks:
+	- Add fault tolerance for missing bullet defs in GetInfo.
+	- Add similar handing of missing or broken rocket info as for bullet info.
+	- Move ConfigNode functions to their own translation unit.
+	- Add 'Clear Debris Now' and 'Clear Bystanders Now' buttons to the Vessel Spawner window (in Spawn Options).
+	- Option for using the old format of the Vessel Switcher window ('t'). Option for reassigning teams on spawn or retaining the original team name defined in the SPH. Right clicking 'T' in the Vessel Switcher window resets vessels to their original teams. Spawning from 'Folders' assigns the folder as the team name if team reassignment is enabled.
+	- Remember position of RWR, Radar and TargetingCamera windows.
+	- Add optional extra parameter to CreateExplosion to specify the weapon name (to be used for in-game messages for missile strikes).
+	AI:
+	- Remove 150m constant from terrain avoidance and base the terrain alert detection radius on the vessel diameter to improve ground strafing.
+	- New slider to control strafing speed of ground targets.
+	- Lasers and missiles now respect minimum engagement range settings
+	- Fixed issues that were preventing AI from finishing the extending routine
+	- Speed Adjusted Steer Limiter
+	Spawning and Tournaments:
+	- Teams options in the spawning and local tournament settings, including custom serialisation (doesn't support commas in craft file names) and UI adjustments.
+	- Configure how seats are filled in the Vessel Spawner Window: minimal, all control points, also cabins. Crewed weapons always get filled with 1 crew.
+	- Option to reset maxHitPoints on vessels loaded into flight mode (e.g., during spawning). Uses the MM patched value if available.
+	- More consistent addition of _1, _2, etc., to vessel names which should make teams of the same vessel have valid results summaries in many cases without having to rename each craft (which is still a better solution!), not just the files.
+	- Add RESULT line to competition log to indicate overall result of the competition (needed for teams).
+	- Updated format of log files for teams. Updated tournament parsing script.
+	- Add break-down of deaths (clean Bullets, clean Missiles, clean Rams, Assists, Suicides) and kills (Bullets, Missiles, Rams), and normalised death order and death time to the results summary.
+	- Set KSP version of SpawnProbe to 1.9.0 to avoid issues with spawning on older installations.
+	Kerbal Safety:
+	- Move kerbal safety code from autonomous combat seat check in BDACompetition.cs to KerbalSafety.cs with its own toggle.
+	- Free-falling kerbals deploy parachutes.
+	- Kerbals in falling command seats leave the seat.
+	- Vessels (and kerbals therein) are recovered during spawning instead of getting destroyed.
+	- Surviving kerbals are recovered and immediately available for flying in the next competition instead of being MIA.
+	- Ejection from cockpits is still a WIP.
+	Battle Damage:
+	- Battle damage is now configurable with multiple sub-categories, with the following toggles. Per-hit proc chance is also adjustable.
+	- Fuel Tanks
+		- FuelTanks will now leak when hit
+		- Tanks may be configured to be self-sealing, trading some fuel capacity for leak resistance
+		- Tank leak rate and leak duration can be adjusted
+	- Ammo Boxes
+		- Ammo boxes will potentially explode if hit
+		- Ammo Boxes can be set to explode when destroyed
+		- Adds ModuleCASE to ammo parts. Caselevel can be set from 0-2, higher levels reduce ammo explosion damage, at the cost of increased mass and cost.
+	- Engines
+		- Engine thrust reduced when hit, will start leaking fuel/catch fire/shut down when badly damaged
+		- Intakes performance reduced when hit
+		- Engine Gimbals can fail when hit
+	- Wings
+		- Wing damage per hit reduced
+		- Wing lift loss capped at 50% total lift
+		- Wing damage per hit is now configurable
+		- Ailerons can fail when hit
+	- Subsystems
+		- Subsystem components
+		- SAS/Radar/etc can be disabled when hit
+	- Command
+		- Control damage when hit
+		- Pilots can be killed from cockpit damage
+	- Fires - if a tank is leaking fuel, chance for leak to ignite
+		- Fire damage over time
+		- Fires in cockpits or other crewed or crew adjacent parts will be automatically extinguished.
+		- Adds ModuleSelfSealingTank, can be toggled to prevent tanks leaks until tank receives substantial damage. it also adds the ability to configure fueltanks and engines to carry firebottles to extinguish fires
+	RCS:
+	- Improved RCS calculation accuracy and speed, your craft's RCS may be slightly different from 1.4.0.7
+	- Recalculate RCS occasionally when parts are lost (to account for damage or missiles firing)
+	- Fix engine afterburner textures affecting RCS calculation (was an issue for Tiger and Cheetah engines from AirplanePlus)
+	Missiles:
+	- New variables that affect heat seeking missile performance: lockedSeekerFOVBias, and lockedSeekerVelocityBias. See Sidewinder config file for more details.
+	- Fixed allAspect and maxOffBoresight to work as intended. Vertical launch systems (VLS) and high off-boresight missiles should work as intended. See AIM-120 config file for details.
+	- Add ability for Air-to-Ground missiles to lead targets based on their velocity.
+	- Fixed Dynamic Launch Zone calculation, should result in more close-range missile fires and high off-boresight missiles only firing when they are likely to hit their target.
+	- Better explanation of what missile parameters do added to Sidewinder and AIM-120 config files (new heat seeker value description in Sidewinder config file).
+	- Updated torpedo tuning from Kurgan.
+	Target Priority:
+	- Target acceleration target priority now returns TWR/10 instead of instantaneous acceleration/10. Is set to -1 when target craft loses engines.
+	- Less teammates engaging target priority now returns -1 when all teammates are engaging the same target instead of 0 (allows for better ganging up on the same target).
+	Parts:
+	- New armor panels, rescaled armor panel part mass, cost, HP to scale properly based on size.
+	- Remove AIM-4 missiles, are moved to the Flying Circus mod for now, planned to be re-released in a future BDA expansion mod.
+	- Added new Typhoon engine to fill the gap between Juno and Panther.
+	Effects:
+	- New FireFX effect
+
+v1.4.0.7
+FIXES
+	- Fix rendered elevations being negative of the intended elevation.
+	- Fix logic for NRE check in TargetPriMass.
+IMPROVEMENTS
+	- Check that falling kerbals haven't regained their seat before deploying their parachute.
+	- Force RCS update on competition start to allow landing gear and other robotics to have move into flight positions.
+	- Adjust RCS normalization from 4.0 to 3.8 so sphere with 1m^2 cross section has 1m^2 RCS.
+	- Change lockbreaking strength to 300, was agreed upon value after some discussion with BDAc communities.
+	- Change minimum lockbreak to 0.
+
+v1.4.0.6
+FIXES
+	- Fix spawning over water to use water height instead of terrain below. Allow negative spawn altitudes.
+	- Fix stack overflow if collision avoidance period is 0.
+	- Check for various NREs in target priority functions.
+IMPROVEMENTS
+	- Rename 'Steer Factor' to 'Steer Power', 'Steer Ki' to 'Steer Correction' and add '(P)', '(I)' and '(D)' to the three fields.
+
+v1.4.0.5
+FIXES
+	- Fix craft being able to fire radar missiles at a target they could not lock when another target they could lock was nearby. This usually happened when the target launched missiles, since missiles have a 999 m^2 RCS by default.
+
+v1.4.0.4
+FIXES
+	- Bugfixes for rocket turrets.
+	- Bugfix for Oerlikon bulletType.
+IMPROVEMENTS
+	- Tweaks to fire angle:
+	- Default of 3°
+	- Adjustable for each weapon from 0° to 6°
+
+v1.4.0.3
+FIXES
+	- Fix broken rotation caused by the radar snapshot rendering process.
+	- Give the terrain renderer more time to spawn the terrain when spawning craft at a new location.
+IMPROVEMENTS
+	- Speed up the radar snapshot rendering.
+
+v1.4.0.2
+IMPROVEMENTS
+	- Use values from BDArmory's default bullet definition for bullet definitions that are missing fields or have invalid values.
+	- Warn about these in the logs.
+
+v1.4.0.1
+IMPROVEMENTS
+	- Improved parsing of the bullet and rocket defs with feedback on what went wrong. Use grep "ERR.*\[BDArmory\]" KSP.log (or similar search functionality) to find the failures.
+
+v1.4.0
+FIXES
+	- A whole bunch.
+IMPROVEMENTS
+	Note: Mod creators should look at the new BulletDef configuration options in order to update custom BulletDefs.
+	- Major overhaul of ModuleWeapon thanks to SuicidalInsanity.
+		- Now supports magazine-fed weapons that must be occasionally reloaded
+		- Now supports burst-fire weapons (multiple shots per fire command)
+		- Now supports crewed weapons that require a kerbal present to fire
+		- Now supports shotgun-type weapons
+		- RocketLaucher functionality has been folded into ModuleWeapon, Rocketlaunchers will need to be reconfigured.
+		- RocketLaunchers can now be supplied from external ammo boxes.
+		- Gyrojet guns now supported
+		- Rocket class weapons can now use FlaK settings (airDetonation, proximityDetonation, maxAirDetonationRange)
+		- Can set custom fire sounds for Rockets
+		- Pulse Lasers now supported
+		- Lasers can now use accuracy setting (MaxDeviation)
+		- Lasers can do explosive damage on hit
+		- Lasers no longer Aim-bot
+		- Laser and rocket scoring implementation
+		- Weapons now support multiple ammo types
+		- Adds per-ammo tracer settings
+		- Adds per-ammo fuze settings
+		- Airdetonation/proximity detonation now per-ammotype, set in bulletdef via fuze setting
+		- Changes to bulletdefs - added a fuze setting: none, timed,proxi,flak
+		- Tracer stats moved to bulletdefs following ammoswap implementation
+		- Tracer width now dynamically determined based on caliber; can be overridded in weapon cfg (laser support, mainly)
+		- Tightened up Ai accuracy - missilefire; changed permitted firing tolerance from 2-4 deg to user-customizable 0-2 deg
+		- Added cluster ammo weighting to bool smartweaponselect
+		- Adds debilitated bool to TargetInfo/MissileFire for EMP weapons
+		- Rockets use object pooling and are configured in BulletDefs/BD_Rockets.cfg.
+		- New ModuleWeapon.cfg settings
+			- BeltFed = False // enables mag-fed weapons
+			- RoundsPerMag = n // shots per magazine or shots per burst if BurstFire = true
+			- ReloadTime = n // time(sec) needed to reload
+			- BurstFire = true // enables burst fire; use with RoundsPerMag
+			- Crewserved = true // weapon part must have CrewCapacity > 0 and Kerbal occupant
+			- ExternalAmmo = true // rocket class weapons use external ammo boxes
+			- RocketPod = true // default true, used if rocketpod w/ rocket submodels (e.g. Hydra70)
+			- Setting rocketPod = true will default RoundsPerMag to the # of rocket submodels
+			- Setting rocketpod = false will default externalAmmo to true
+			- RocketPod = true and externalAmmo = true will set BeltFed = false
+			- PulseLaser = true // enables pulse laser functionality instead of beam, uses roundsPerMinute for firerate, Maxdeviation for accuracy, same as guns
+			- HEpulses = false // enables laser impacts to act like HE rounds
+			- HeatRay = false // beam lasers now AoE, add heat instead of damage
+			- ElectroLaser = false // lasers now have EMP effect, use ECPerShot
+			- BulletType = a; b; c // for ammo swap, add each ammo type the weapon can use separated with a semicolon
+			- AirDetonation, proximityDetonation depreciated, moved to bulletDef.cfg
+		- New Bullet_defs settings
+			- subprojectileCount = n // number of projectiles per round, default 1
+			- fuzeType = None // choose from None, Timed, Proximity, or Flak
+			- projectileColor = 255, 15, 0, 128//RGBA 0-255, final color of shot if fadeColor = True
+			- fadeColor = False //fade color from startColor to projectileColor?
+			- startColor = 255, 90, 0, 32 // initial shot color if fadeColor = True
+			- BlastPower, Heat, radius depreciated
+		- New Rocket_defs settings
+			- rocketMass = n //weight in tons (10kg rocket is 0.01, etc)
+			- caliber = n // rocket diameter
+			- thrust = n // thrust
+			- thrustTime = n // rocket fires for n seconds
+			- shaped = false //does rocket have shaped charge warhead
+			- flak = false //air + proximity detonation
+			- explosive = true //does it explode
+			- tntMass = n //mass of tnt in kg
+			- subProjectileCount = 1 //cluster rocket quantity, default 1
+			- thrustDeviation = 0.1 //accuracy, higher = wider divergence from boresight
+			- rocketModelpath = foo //file location of rocket model, e.g. "BDArmory/Parts/h70Launcher/h70Rocket/model"
+	- Improvements to RCS/stealth/ECM:
+		- Craft with a lower modified radar signature (from ECM Modules that reduce signature) no longer have increased lock range. The range at which craft are locked will be accurate based on the RCS Window in the SPH/VAB if no jammers are used.
+		- Re-worked RCS system. Calculate 95 azimuth/elevation pairs across 0-180 deg Az, 23 to -23 deg El, take the 3rd quartile of the distribution to use as the total RCS.
+		- Scale RCS up by 4 to better match reality and provide better balancing against stock radars.
+		- Display worst three Az/El pairs in the BDA editor window so that users can improve their design.
+		- Fix to turn on all ECM jammers when an incoming radar-missile is detected.
+	- Improvements to missiles:
+		- Allow firing multiple missiles at the same radar target without losing radar lock. Firing missiles at multiple locked targets needs considerable work to be feasible.
+		- Fix known issues with terminal guidance.
+		- Add option for configuring FireFOV of a turret (fires when pointing within this angle of target). Reduce step size of fire interval to 0.5s.
+	- Improvements to pilot AI:
+		- Allow users to set "Firing Angle," the angle the weapons are within of being on target before firing. Default is 1 deg. Setting is on Weapons Manager. Setting only affects weapons with a yaw and pitch range of less than 5 degrees for both axes.
+		- Make wing commander 'spread' and 'lag' values persistent.
+		- Allow pilots in the "Attack" command to evade if they are being fired at by another craft
+		- Sliders for controlling threshold and period of collision avoidance between vessels.
+		- Allow craft to evade if they are under attack while being commanded to "Attack."
+	- UI improvements:
+		- Improved behaviour for entering spawn coordinates and altitude.
+		- Add a slider in tournament settings to control delay between heats.
+	- Other improvements:
+		- Further balancing of the 30mm tnt mass to 0.077 (from 0.081).
+		- B9 Proc Wings HP patch
+
+v1.3.8.2
+IMPROVEMENTS
+	- Rebalance 20mm and 30mm ammo tnt amount.
+	- Weapons using electric charge count as always having ammo (not just those ending in 'Laser').
+	- Remove surface attachment option from combat seat.
+	- Add option to automatically kill off WMs after 5s when they become uncontrolled.
+	- Kerbals in falling combat seats eject to safety.
+	- Deploy halo chute for falling kerbals. Add AG to WM to deploy chutes on external kerbals.
+
+v1.3.8.1
+FIXES
+	- Report death time to web orchestration in seconds instead of minutes
+IMPROVEMENTS
+	- Autonomous combat seats: when disabled (default) during competitions, combat/command seats disable the AI when the kerbal leaves the seat and vessels that are comprised of only a single combat/command seat explode.
+	- Reduce max fireBurstLength to 10 and stepIncrement to 0.05 to allow more control of gun burst length.
+	- Updated HP patch from CeruleanEyes
+
+v1.3.8
+FIXES
+	Main fixes:
+		- The remaining main memory leaks have been eliminated resulting in a noticeable performance boost. (There are still some leaks, but they amount to only a few GB if left running overnight.)
+		- Explosions are no longer limited to 5 at a time.
+		- Fixed decals not being returned to the object pool so that they work efficiently now.
+	Other fixes:
+		- Use the correct spawn distance value in the remote orchestration.
+		- Unity's fake nulls strike again: properly reset explosion object pools on scene changes.
+		- KSP is labelling some missiles as debris. Detect these and don't remove them.
+		- Bugfixes, memory leak fixes and optimisations.
+		- Don't use Parallel.ForEach to update ramming information as Unity doesn't like get_transform being called from threads.
+		- Assign font attributes in Awake instead of Constructor.
+		- Fix potential NRE in ApplyDamage in PooledBullet.cs
+		- Fix a potential NRE in continuous spawning where a spawned vessel gets destroyed before it's activated.
+		- Fix special case of vessels with combat seats getting renamed.
+		- Reset spawn position and rotation after spawning as sometimes KSP packs and unpacks craft and resets things!
+		- Wait an extra update during spawning to allow reference transforms to be assigned.
+		- Use altitudes from FlightGlobals when raycasting fails during spawning.
+IMPROVEMENTS
+	Main improvements:
+		- Rebalance of explosion damage from bullets to approximate the previous DPS of the browning, vulcan and gau-8.
+		- AI/WM now cost 0.
+	Other improvements:
+		- Remove the '5' from the options for heat size in the automatic vessels per heat optimisation to ensure a minimum heat size of 5.
+		- Add configurable keybindings for tournament setup and running. Improve layout of 'Edit Inputs' window.
+		- Added an 'auto-enable vessel-switching' option to general settings. Added 'auto' mode for tournament generation that chooses an appropriate number of vessels per heat and distributes the deficit over multiple heats.
+		- Set up paintball decal pools when the paintball toggle is toggled.
+		- Extra damage sliders in-game
+		- Small optimisation to avoid reallocating Ray instance in PooledBullet.cs
+		- Add the explModelPath to the browninganm2.cfg
+		- Use a split slider for tournament rounds setting to allow up to 100 rounds.
+		- Reuse deathOrder variable instead of fetching it from BDACompetitionMode.Instance again.
+		- Use minSpeed instead of idleSpeed in steer limiter. Scale possibleAccel by 1/15 as before (but without G) for now until we find a better solution.
+		- Additional regular check for vessels renamed as planes due to the combat seat.
+		- Automatically end a continuous spawning competition when there's nothing left to spawn and <2 active craft.
+		- Add a max altitude GM killer.
+		- Updated Python scripts for parsing competition results logs.
+		- Also trigger competition end when there's only 1 team left.
+		- Include engine acceleration but not gravity in GetSteerLimiterForSpeedAndPower as it makes gliders and RegainEnergy work better.
+		- Use afterburners when regaining energy.
+		- Trigger the target scan after all the teams have been assigned.
+		- Enable target priority by default.
+		- Stop extending when changing targets.
+		- Include death time and normalised death order in web orchestration reporting with surviving player death order/time set to max
+
+v1.3.7
+FIXES
+	- Fix bug in spawning due to setting a non-default control point orientation.
+	- Merge two flags that represent the same status.
+	- Don't reload settings when opening the main settings window as it is already loaded on start and messes with other settings windows.
+	- Fixes AI not using Torpedos
+IMPROVEMENTS
+	- Local tournament mode (in the Vessel Spawner window).
+	- Re-worked debris/bystander removal.
+	- Sliders (in general settings) for many competition timers (such as the killer GM and various grace periods).
+	- Cargo bays only automatically close if they've been opened to drop bombs/missiles.
+	- Move vessels directly to sea-level if spawning in water.
+	- Removed RWP season 2 round 3 specific code.
+
+v1.3.6.5
+FIXES
+	- Fix resetting missile on miss. Add a bindable action group for resetting the missile if it has a pilot AI.
+IMPROVEMENTS
+	- Use aiming mode for steering when within 8s of ramming target.
+	- Add in easing factors for ramming, correct missing negative term, use ramming vessel acceleration instead of relative acceleration.
+	- Improved lead-time calculations for missile guidance with ease-in factors.
+	- Enable target lock for missiles with weapon managers to prevent re-targeting issues.
+	- Add 1f to sum of priorities to help with target bias.
+
+v1.3.6.4
+FIXES
+	- Various
+IMPROVEMENTS
+	- In-game configuration of Round 3 targets spawn point.
+	- Preserve target spawn settings when leaving/entering flight mode.
+	- Save settings when closing the Vessel Spawner window.
+	- Set target spawn location on using 'interesting' buttons.
+	- Add a countdown slider for the Round 3 GUI and set the default target geoCoords to 1°N (equivalent to around 11 km).
+	- Re-enable detonation of armed explosive parts when they are destroyed.
+	- Use partHit position instead of vessel.CoM in proximity calculations. Estimate distance on next fixed update and detonate if expected to collide next fixed update.
+	- Use time to closest point of approach for AAM guidance.
+	- Use new Saturn texture created by Stardust
+
+v1.3.6.3
+FIXES
+	- Don't autodestruct missiles if the explosive parts are using the override.
+	- Show message about why the vessel spawning timed out.
+	- Prevent windows from being competely off-screen (the drag region may still be off-screen though). Toggling "Strict Window Boundaries" will bring all the windows onto the screen if you can't find them.
+IMPROVEMENTS
+	- Absolute Distance vs Distance Factor toggle and expanded Spawn Distance slider for ranges up to 20km. (Note: for distances over 10km, it struggles due to the PRE and terrain. Using an airborne spawn first can help fix this.)
+	- Add 'Detonate At Minimum Distance' to MMG. (Note: MMG doesn't have an 'ignore friendlies' yet.)
+	- Add 'Detonate At Minimum Distance' for explosive parts too.
+		- Note: the effect of 'Detonate At Minimum Distance' is to delay the detonation/triggering once it's within the detonation radius until the distance is minimised.
+
+v1.3.6.2
+FIXES
+	- Increase the ground finding raycast distance for spawning at ground level for large radii. - Give the craft an extra 5s to land and set the spawnFailureReason if it times out.
+
+v1.3.6.1
+FIXES
+	- Various
+IMPROVEMENTS
+	- Allow the missile to get out of NotSafe mode when it is its own parent, which enables proximity detonation on such missiles.
+	- Update release command conditions
+	- Reuse pilot/missile combos if miss occurs
+
+v1.3.6
+FIXES
+	- Various
+IMPROVEMENTS
+	- Separate Vessel Spawner window.
+	- Proximity fuze added to warhead, with IFF check.
+	- Team spawning function.
+	- Add death times to death order.
+	- Better default values for dynamic damping to decent values.
+	- Enable APBulletMod
+	- Add death order to records.
+	- Relax min < max condition for damping sliders. Relabel min/max as off-target/on-target for clarity.
+	- Use a time-based check for recentlyDamaged condition in camera switch weighting.
+	- Add pyramids location to default interesting spawn locations.
+	- Paintball, now with 100% more paint
+	- Special (temporary) button for spawning Round 3 of Season 2 of Runway Project.
+
+v1.3.5.6
+FIXES
+	- Various
+IMPROVEMENTS
+	- Use secret token for reporting of scores in remote orchestration.
+
+v1.3.5.5
+FIXES
+	- Bugfix (don't adjust gravity after the competition stops).
+
+v1.3.5.4
+FIXES
+	- Bugfix for near-terrain spawning.
+IMPROVEMENTS
+	- Continuous single spawning mode (when enabled, the single spawn will respawn vessels 10s after the competition ends; it also automatically starts competitions).
+	- Relocation of competition duration slider to general slider settings.
+	- Competition duration slider now affects all competitions instead of just remotely orchestrated ones and has an 'unlimited' setting.
+
+v1.3.5.3
+IMPROVEMENTS
+	- Change some variable names to reduce bandwidth due to JSON payloads.
+
+v1.3.5.2
+FIXES
+	- 10s grace period instead of 60s for Gravtity Hacks (Increase Gravity on Death).
+IMPROVEMENTS
+	- Improvements to the remote orchestration window.
+	- Ramming and parts lost and missile damage tracked for web service.
+
+v1.3.5.1
+FIXES
+	- Fix the status in the Remote Orchestration Window
+
+v1.3.5
+FIXES
+	- Fixed various different issues that made flares ineffective.
+	- Synchronise continuous spawning to competition update ticks when competitions are active.
+	- Adjust location of camera reversion for continuous spawning and make sure that the camera distance gets set.
+IMPROVEMENTS
+	- Change section toggles in settings window to full-width buttons to make them more obvious.
+	- Added a toggle for keeping BDA windows within the screen.
+	- Added a toggle for dumping continuous spawning logs every spawn toggle.
+	- Improvements for the Remote Orchestration Window
+	- Improvement to location switching with the 'interesting spawn locations' buttons and camera handling during spawning.
+	- Latest HP part fixes from CeruleanEyes for some Mk2/H parts.
+	- Included SuicidalInsanity's B9 HP patch
+	Gravity hacks:
+		- Gravity value displayed on vessel switcher
+		- Kill time of 1s when landed with gravity hacks enabled
+		- Adjustments to gravity hacks to scale with the number of craft in the competition and for continuous spawning.
+
+v1.3.4.2
+FIXES
+	- Fix a bug with competitions failing to start when using the web orchestration due to the mass team switch not happening immediately.
+
+v1.3.4.1
+FIXES
+	- Fix the VESSELNAMING issue that prevents some players from having their scores registered.
+
+v1.3.4
+FIXES
+	- Fix craft not responding to multiple missile threats.
+	- Missing condition for regular kills with missiles.
+	- Clear the pilotActions dictionary to avoid ' is Dead' when starting a new competition with previously used pilots.
+	- Adjust DeathOrder for continuous spawn to avoid ' killed by ' messages on spawning.
+	- Fix death counts in logged scores for vessels that have run out of lives.
+	- Don't clean up SpaceObjects in RemoveDebris as it is a source of null refs in the base game.
+IMPROVEMENTS
+	- Adjust vessel switcher window's display of dead vessels to reflect clean kills vs regular ones.
+	- Only count clean kills as kill, give assists to all vessels with hits for regular kills.
+	- Support scoring for hits and damage in/out.
+	- Interesting Vessel Spawn locations with separate cfg file (spawn_locations.cfg).
+	- Trigger result logging on scene change from BDACompetitionMode.
+	- Store the competition distance.
+	- Automatically dump scores when leaving flight mode.
+	- Extra setting REMOTE_LOGGING_VISIBLE in the settings.cfg file only to hide the remote orchestration from the settings window. Defaults to False.
+	- Start tilted 10° outwards when spawning in the air.
+	- In-game messages when dumping competition logs.
+	- Rolling spawning (sliders for controlling the maximum number of craft and the number of lives they have for continuous spawning).
+	- Use user-set altitude and other settings for remote orchestration spawning.
+
+v1.3.3.1
+IMPROVEMENTS
+	- Set default value of 'Default FFA Targeting' to false.
+	- Proper targeting logic for surface vessels when target priority is enabled.
+
+v1.3.3
+FIXES
+	- Several bugfixes ('packing for orbit' for continuous spawning of command seats, revert debris clean-up coroutine).
+IMPROVEMENTS
+	- Disable camera switch on continuous spawning.
+	- Hide DEAD vessels in continuous spawning mode.
+	- Allow negative weightings for target priority sliders.
+	- Lower min combat speed speed to match take-off speed.
+	- Damage multipler slider.
+
+v1.3.2.2
+IMPROVEMENTS
+	- Updated model for the Mk1 Open Cockpit.
+
+v1.3.2.1
+FIXES
+	- Don't allow minimum altitude of 0 as it breaks taking off.
+IMPROVEMENTS
+	- Updated collision model for Mk1 Open Cockpit.
+
+v1.3.2
+IMPROVEMENTS
+	- Mk1 Open Cockpit and EAS-2 Combat Seat (with built-in AI & WM).
+	- Adjustments to spawning for planets without surfaces and over oceans.
+	- Extra setting for controlling ease-in speed during spawning.
+	- Settings toggle for Runway Project vs official.
+	- UI tidy up for AI settings.
+	- Bank and pitch angle limiters.
+	- Improved input for spawning coordinates (0.5s delay).
+	- Spawn distance factor slider.
+	- More tolerance (time) on the invalid vessel checks.
+
+v1.3.1.1
+FIXES
+	- Update the ramming information datastructures for the new vessel instances during continuous spawning.
+
+v1.3.1
+IMPROVEMENTS
+	- Added new M1 Abrams HE and M102 HE turrets and textures.
+	- Added extra target priority controls.
+	- Default target priority controls approximate "FFA Combat Targeting".
+
+v1.3.0
+FIXES
+	- Major memory leak fix, giving better stability and performance for longer competitions (aubranium, DocNappers).
+IMPROVEMENTS
+	- Remote orchestration (aubranium).
+	- HP changes for flags (Josue).
+	- HP changes for parts (CeruleanEyes).
+	- Improved spawning routines with ground, airborne and continuous spawning modes (DocNappers).
+	- Fire ALL engines on planes that don't set AG10 (DocNappers).
+	- Improved competition status messaging system (DocNappers).
+	- Tag mode (Josue).
+	- Out-of-ammo kill timer for continuous spawning mode to prevent craft wasting too much time trying to ram (DocNappers).
+	- Vessel switcher UI improvements (DocNappers).
+	- Missile scoring: parts destroyed (DocNappers).
+	- Damage tracking: ballistic + explosive damage from bullet hits and explosive damage from missile strikes (DocNappers).
+	- Score dumps to separate files (in GameData/BDArmory/Logs) (DocNappers).
+	- Handling of badly built craft, mostly (i.e., those with AI/WM not on the cockpit or command seats) (DocNappers).
+	- Partial support for command seats: they work, but frequently mess up the vessel switcher window when they spawn; this doesn't affect the scoring though (Josue, DocNappers).
+	- Control of automatic camera switching frequency (Josue).
+	- Target prioritisation (Josue).
+
+v1.2.1.3
+FIXES
+	- Check for both vessel type not being debris and vessel name not ending in "Debris" when checking if a vessel is really alive.
+
+v1.2.1.2
+FIXES
+	- Don't count missiles as debris in clean-up routine.
+
+v1.2.1.1
+FIXES
+	- Fixed spacing in some displayed messages.
+
+v1.2.1
+FIXES
+	- Don't overwrite settings.cfg, just generate one if it doesn't exist.
+	- FFA Combat Targeting is enabled by default.
+
+v1.2.0
+
+v1.1.1
+
+v1.1.0
+
+v1.0.0
+
+**** TAKEN OVER BY RWP DEV TEAM AND VERSION NUMBERS ADJUSTED ****
+
+v1.3.4
+* NEW FEATURES:
+	* Recompiled for KSP 1.9.1
+* FIXES
+	* Shaders compatibility for Mac / Linux
+	* Missiles problem regarding locking and losing lock affecting heat and radar missiles. (Thanks to TheKurgan to find the problematic commit)
+
+v1.3.3
+* NEW FEATURES:
+	* Recompiled for KSP 1.9.0
+	* Localization en-us and zh-cn (Thanks to tinygrox!)
+* FIXES
+	* Some NRE here and there.
+	* Fixes to Laser accuracy (Thanks to Gedas!)
+	* Part Categories for BDArmory is now activated by default
+
+v1.3.2
+* NEW FEATURES:
+	* Recompiled for KSP 1.8.1
+	* Munition count to Weapon Manager GUI.
+* ENHANCEMENTS
+	* Enhanced weapon selection.
+	* Beam-guided munition track moving targets.
+	* Improved camera tracking position.
+	* RMB info in editor.
+	* Ballistic guidance overhaul. Now it is possible to also select the angle of the ballistic path.
+	* Turret movement improved.
+* FIXES
+	* Weapons respect engagement range.
+	* Dozen of NRE exceptions.
+	* Fix surface ai description.
+	* Fix turret gimbal calculation.
+	* Turrets with constrained yaw should freak out less when aiming behind them.
+	* Locatization fixes.
+	* Fixed torpedo produces thrust above water. #710
+	* Fixed proximity fuze radius for explosive bullets.
+	* Fixed heat missiles missing target just after being fired.
+
+
+v1.3.1
 * FIXES
 	* All parts have bulkheadProfiles - should stop bulkhead filter NREs.
 	* Rocket pods no longer fire StackOverflows.
@@ -51,15 +2122,15 @@ v1.2.3
 	* Recompiled for KSP 1.5.1  
 	* EC per shot for energy weapons like Rail guns. #486
 	* EMP Weapons logic.
-    * Modular Missiles: Min speed before guidance trigger, time between stages.
-    * New High Explosive resource for missiles.
+	* Modular Missiles: Min speed before guidance trigger, time between stages.
+	* New High Explosive resource for missiles.
 	* New smoke model.
 	* Autopilot: Orbiting direction can be set.
 
 * ENHANCEMENTS:
 	* Explosive blast forces increased.
 	* Hitpoints rounding reduced to 100. #432
-    * Missiles can be jettisoned using action group #539
+	* Missiles can be jettisoned using action group #539
 	* Max detonation range for air explosive bullets increased from 3500m to 8000m.
 	* Autopilot improvements: pitchKi has saner values, also steering added.
 	* Guard mode: Better calculation of missiles away.
@@ -79,7 +2150,7 @@ v1.2.3
 	* Some exceptions controlled
 	* Heat missiles will not lock friendly vessels. #586
 	* Fixed issue where modular missiles were detecting themselves as enemy vessels and detonating.
-    * Modular Missiles: roll correction fixed.
+	* Modular Missiles: roll correction fixed.
 
 * BALANCE
 	* Bullet mass rebalance for lower calibers #515
@@ -99,10 +2170,10 @@ v1.2.2.2
 * Recompiled for KSP 1.4.5
 
 * FIXES
-    *Error spam in Log when a radar is destroyed.  An orphaned index was not properly being updated. 
-     Reported in BDAc Forum post: https://forum.kerbalspaceprogram.com/index.php?/topic/155014-14x-bdarmory-continued-v1221-7102018-vessel-mover-camera-tools-bdmk22-destruction-effects-burn-together/&do=findComment&comment=3425233
-     Thanks to greydragon70 for his thoughtful evaluation of BDac and issue reporting.
-    * Corrected an error where high speed missiles would sometimes not detonate in the correct location.
+	*Error spam in Log when a radar is destroyed.  An orphaned index was not properly being updated. 
+	 Reported in BDAc Forum post: https://forum.kerbalspaceprogram.com/index.php?/topic/155014-14x-bdarmory-continued-v1221-7102018-vessel-mover-camera-tools-bdmk22-destruction-effects-burn-together/&do=findComment&comment=3425233
+	 Thanks to greydragon70 for his thoughtful evaluation of BDac and issue reporting.
+	* Corrected an error where high speed missiles would sometimes not detonate in the correct location.
 
 * ENHANCEMENTS:
   * Increased maximum allowable missles per target to 18, up from 6.
@@ -110,15 +2181,15 @@ v1.2.2.2
   * Added 2 new EMP equipped missiles  HellFire EMP, and AIM-120 EMP.  Small pulse radius but demonstrates the feature.
   * Added 3 different sized EMP pulse FX, allows for additional sized pulse weapons.
   * Added Reloadable Missile Rail (ModuleMissileRearm.  Now missile launchers can be reloadable!  
-    This module can be added to missile launcher designs to allow reloading. (code used with permission courtesy of @flywyx).  
-    Requires unity based modifications,  normal rails will not function as reloadable unless additional transforms are added.
+	This module can be added to missile launcher designs to allow reloading. (code used with permission courtesy of @flywyx).  
+	Requires unity based modifications,  normal rails will not function as reloadable unless additional transforms are added.
   * Added new standard resource High Explosive.  Provides better matching of tntMass for balance.
   * Added an Ammo switcher feature (no more Firespitter required)
   * Added new Universal Ammo Box part that uses the new Ammo switcher feature.  Old part remains for backawards compatability.  
-    Use the new part going forward.  To remove the need for FireSpitter, replace existing Ammo Box parts with the new part on existing craft.
+	Use the new part going forward.  To remove the need for FireSpitter, replace existing Ammo Box parts with the new part on existing craft.
   * Improved sub categories for BDA parts.  This helps with the clutter in the Editor under the BDA category.
   * Removed BDACategoryModule as a result of the BDA categories refactor.  
-    Existing craft may see a module not found warnings in the log.  This will have no ill effects and can be safely ignored.
+	Existing craft may see a module not found warnings in the log.  This will have no ill effects and can be safely ignored.
   * Improved smoke effects for smoke canister launchers
   * Added new Jet engine based on the J-404.  Licensed from KTech. (Thanks @TheKurgan, @SpannerMonkey(SMCE) & @XOC2008!)
   * Added new BDAc Test Drone MKIII craft, utilizing the new engine.
@@ -160,7 +2231,7 @@ v1.2.1.4
   * Added mouse scrollwheel zooming in TargetCam window.  Now you can zoom in and zoom out using the mousewheel.
   * Added reactive armor part module. Modders can now take advantage of a new armor type in BDAc.
   * Added Wet Weapons Check module (ModuleWWC).  This module will pevent submerged weapons from firing (like when a ship sinks).  
-    The depth is user selectable.
+	The depth is user selectable.
 
 
 v1.2.1.3
@@ -183,12 +2254,12 @@ v1.2.1.2
   * Correct automatic resizing of WingCommander Window
   * Reintroduce BDAcUniversalAmmoBox Module Manager config file.  Somehow was dropped during a merge somewhere back.
   * Separate RWR operation from RWR display.  RWR should be enabled at all times when a Radar is installed on craft. 
-    - Opening and closing the RWR window now leaves RWR operation active.  Git Issues 410, #411, #461
+	- Opening and closing the RWR window now leaves RWR operation active.  Git Issues 410, #411, #461
   * removed part configs for the AGM86-cruise an the RBS-15  They have been broken, and are superceded by improved weapons.
 
 * ENHANCEMENTS:
   * Increase the limits of the Radar and RWR window scaling to allow for larger windows.  
-    - Add min and max settings to the settings.cfg to allow user defined limits. Git Issue #521
+	- Add min and max settings to the settings.cfg to allow user defined limits. Git Issue #521
   * Add mouse driven RWR and Radar windows resizing.  Now you can intuitivly resize by mouse.  Click an drag the lower right corner.
   * Redesigned Targeting Cam window to incorporate all features added to the Radar window - resizing, boundary checks, mouse resize, relocate buttons
   * Retune BDAc missiles to improve characteristics, performance, and balance.  Tuning performed by Kergan
@@ -271,25 +2342,25 @@ v1.0.0
 * NEW FEATURES:
 
   * Radar & Stealth, re-design of how the radar system works:
-    - New radar reflection shader (credit: original great idea by JR!), calculating cross section in m^2:
-       + allows building for stealth using angled surfaces (“scatter those pesky radar waves away!”)
-       + calculation is normalized so that a 1x1 structural plate directly frontally facing the radar yields a return of exactly 1 m^2
-    - Redesign of the radar system, radars all have different ranges & detection performance:
-       + radar part configs changed, new fields (floatcurves) to define detection and lock/track performance, new field to specify ground clutter effectiveness
-    - New in-editor analysis window to help evaluate a craft’s cross section and performance against selectable radars
-    - New options for configuration of radar guided missiles in the part config:
-       + can now explicitly specify active seeker performance (via a FloatCurve, similar to radars)
-       + can now explicitly specify the static radar cross section of a missile for detection purpose
-    - Adjustment of the Chaff countermeasure system: more gradual effect of decoying missiles away (instead of previous “all-or-nothing”)
-    - Adjustment of IR missiles and flare countermeasures: simulating now more of a “imaging infrared” seeker than an old dumb seeker – to be successfully decoyed, flares have to more closely match the thermal spectrum of the part the seeker has locked on to
+	- New radar reflection shader (credit: original great idea by JR!), calculating cross section in m^2:
+	   + allows building for stealth using angled surfaces (“scatter those pesky radar waves away!”)
+	   + calculation is normalized so that a 1x1 structural plate directly frontally facing the radar yields a return of exactly 1 m^2
+	- Redesign of the radar system, radars all have different ranges & detection performance:
+	   + radar part configs changed, new fields (floatcurves) to define detection and lock/track performance, new field to specify ground clutter effectiveness
+	- New in-editor analysis window to help evaluate a craft’s cross section and performance against selectable radars
+	- New options for configuration of radar guided missiles in the part config:
+	   + can now explicitly specify active seeker performance (via a FloatCurve, similar to radars)
+	   + can now explicitly specify the static radar cross section of a missile for detection purpose
+	- Adjustment of the Chaff countermeasure system: more gradual effect of decoying missiles away (instead of previous “all-or-nothing”)
+	- Adjustment of IR missiles and flare countermeasures: simulating now more of a “imaging infrared” seeker than an old dumb seeker – to be successfully decoyed, flares have to more closely match the thermal spectrum of the part the seeker has locked on to
 
   * Massive improvements to ballistic missile guidance and modular missiles, ability to simulate ICBM flight paths:
-    - Ballistic guidance has been enhanced to allow firing missiles accurately even at distances greater than 500 km
-    - A new field called BallisticOverShootFactor has been added to missiles, the greater the value the further the missile will go before the terminal maneuver begins
-    - By default all missiles now can steer in vacuum. New field called "vacuumSteerable" can be set to false to disable this behaviour    
-    - Auto SAS activation when the missile is fired. Before it was only activated if the parent vessel had it switched on.
-    - Improved the Cruise and Ballistic Guidance. Ballistic Guidance will switch to AGM guidance as soon as it reached the 50% of the distance
-    - Guard mode in space will consider orbiting vessels as "flying" (air targets), hence engagement of space targets is possible now
+	- Ballistic guidance has been enhanced to allow firing missiles accurately even at distances greater than 500 km
+	- A new field called BallisticOverShootFactor has been added to missiles, the greater the value the further the missile will go before the terminal maneuver begins
+	- By default all missiles now can steer in vacuum. New field called "vacuumSteerable" can be set to false to disable this behaviour    
+	- Auto SAS activation when the missile is fired. Before it was only activated if the parent vessel had it switched on.
+	- Improved the Cruise and Ballistic Guidance. Ballistic Guidance will switch to AGM guidance as soon as it reached the 50% of the distance
+	- Guard mode in space will consider orbiting vessels as "flying" (air targets), hence engagement of space targets is possible now
  
   * New dedicated sonar ping and torpedo ping sounds, courtesy of PapaJoe!
 
@@ -842,7 +2913,7 @@ v0.9.6
 - IVA gun audio low-pass filter frequency is now configurable in settings.cfg
 - Removed redundant filter effects on lower depth TGP camera
 - Tracer size updates in OnWillRenderObject instead of looping through all pooled bullets for each camera
-- Stopped guard debug log entries unless DRAW_DEBUG_LABELS is enabled
+- Stopped guard debug log entries unless DEBUG_LABELS is enabled
 - Updated laser damage (Yski)
 - Guard will use long-range turrets for distant targets if no missiles available (Yski)
 

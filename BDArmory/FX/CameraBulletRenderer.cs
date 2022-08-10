@@ -1,6 +1,7 @@
-using BDArmory.Bullets;
-using BDArmory.Modules;
 using UnityEngine;
+
+using BDArmory.Bullets;
+using BDArmory.Weapons;
 
 namespace BDArmory.FX
 {

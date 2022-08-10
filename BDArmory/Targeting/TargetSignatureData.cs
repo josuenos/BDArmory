@@ -1,11 +1,12 @@
 using System;
-using System.Collections.Generic;
-using BDArmory.Core.Extension;
-using BDArmory.CounterMeasure;
-using BDArmory.Misc;
-using BDArmory.Modules;
-using BDArmory.Radar;
 using UnityEngine;
+
+using BDArmory.Competition;
+using BDArmory.CounterMeasure;
+using BDArmory.Extensions;
+using BDArmory.Radar;
+using BDArmory.Settings;
+using BDArmory.Utils;
 
 namespace BDArmory.Targeting
 {
@@ -65,13 +66,8 @@ namespace BDArmory.Targeting
             }
             else
             {
-                List<MissileFire>.Enumerator mf = v.FindPartModulesImplementing<MissileFire>().GetEnumerator();
-                while (mf.MoveNext())
-                {
-                    Team = mf.Current.Team;
-                    break;
-                }
-                mf.Dispose();
+                var mf = VesselModuleRegistry.GetMissileFire(v, true);
+                if (mf != null) Team = mf.Team;
             }
 
             vesselJammer = v.gameObject.GetComponent<VesselECMJInfo>();
@@ -136,29 +132,27 @@ namespace BDArmory.Targeting
             }
         }
 
-        public Vector3 predictedPositionWithChaffFactor
+        public Vector3 predictedPositionWithChaffFactor(float chaffEffectivity = 1f)
         {
-            get
+            // get chaff factor of vessel and calculate decoy distortion caused by chaff echos
+            float decoyFactor = 0f;
+            Vector3 posDistortion = Vector3.zero;
+
+            if (vessel != null)
             {
-                // get chaff factor of vessel and calculate decoy distortion caused by chaff echos
-                float decoyFactor = 0f;
-                Vector3 posDistortion = Vector3.zero;
+                // chaff check
+                decoyFactor = (1f - RadarUtils.GetVesselChaffFactor(vessel));
 
-                if (vessel != null)
+                if (decoyFactor > 0f)
                 {
-                    // chaff check
-                    decoyFactor = (1f - RadarUtils.GetVesselChaffFactor(vessel));
-
-                    if (decoyFactor > 0f)
-                    {
-                        // with ecm on better chaff effectiveness due to higher modifiedSignature
-                        // higher speed -> missile decoyed further "behind" where the chaff drops (also means that for head-on engagements chaff is most like less effective!)
-                        posDistortion = (vessel.GetSrfVelocity() * -1f * Mathf.Clamp(decoyFactor * decoyFactor, 0f, 0.5f)) + (UnityEngine.Random.insideUnitSphere * UnityEngine.Random.Range(targetInfo.radarModifiedSignature, targetInfo.radarModifiedSignature * targetInfo.radarModifiedSignature) * decoyFactor);
-                    }
+                    // with ecm on better chaff effectiveness due to higher modifiedSignature
+                    // higher speed -> missile decoyed further "behind" where the chaff drops (also means that for head-on engagements chaff is most like less effective!)
+                    posDistortion = (vessel.GetSrfVelocity() * -1f * Mathf.Clamp(decoyFactor * decoyFactor, 0f, 0.5f)) + (UnityEngine.Random.insideUnitSphere * UnityEngine.Random.Range(targetInfo.radarModifiedSignature, targetInfo.radarModifiedSignature * targetInfo.radarModifiedSignature) * decoyFactor);
+                    posDistortion *= Mathf.Max(BDArmorySettings.CHAFF_FACTOR, 0f) * chaffEffectivity;
                 }
-
-                return position + (velocity * age) + posDistortion;
             }
+
+            return position + (velocity * age) + posDistortion;
         }
 
         public float altitude
@@ -181,7 +175,7 @@ namespace BDArmory.Targeting
         {
             get
             {
-                return new TargetSignatureData(Vector3.zero, Vector3.zero, Vector3.zero, false, 0);
+                return new TargetSignatureData(Vector3.zero, Vector3.zero, Vector3.zero, false, (float)RadarWarningReceiver.RWRThreatTypes.None);
             }
         }
 

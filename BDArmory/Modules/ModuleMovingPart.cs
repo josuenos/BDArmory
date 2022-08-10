@@ -1,6 +1,8 @@
 ﻿using System.Collections;
-using BDArmory.UI;
 using UnityEngine;
+
+using BDArmory.UI;
+using BDArmory.Utils;
 
 namespace BDArmory.Modules
 {
@@ -86,7 +88,7 @@ namespace BDArmory.Modules
             {
                 for (int i = 0; i < localAnchors.Length; i++)
                 {
-                    BDGUIUtils.DrawTextureOnWorldPos(parentTransform.TransformPoint(localAnchors[i]),
+                    GUIUtils.DrawTextureOnWorldPos(parentTransform.TransformPoint(localAnchors[i]),
                         BDArmorySetup.Instance.greenDotTexture, new Vector2(6, 6), 0);
                 }
             }
