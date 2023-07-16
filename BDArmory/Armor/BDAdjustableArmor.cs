@@ -15,77 +15,112 @@ namespace BDArmory.Armor
         public bool moveChildParts = true;
 
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_ArmorWidth"),//Armor Width
-            UI_FloatRange(minValue = 0.5f, maxValue = 16, stepIncrement = 0.1f, scene = UI_Scene.Editor)]
+            UI_FloatSemiLogRange(minValue = 0.1f, maxValue = 16, scene = UI_Scene.Editor)]
         public float Width = 1;
 
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = false, guiName = "#LOC_BDArmory_ArmorWidthR"),//Right Side Width
-            UI_FloatRange(minValue = 0.1f, maxValue = 8, stepIncrement = 0.1f, scene = UI_Scene.Editor)]
+            UI_FloatSemiLogRange(minValue = 0.1f, maxValue = 8, scene = UI_Scene.Editor)]
         public float scaleneWidth = 1;
 
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_ArmorLength"),//Armor Length
-            UI_FloatRange(minValue = 0.5f, maxValue = 16, stepIncrement = 0.1f, scene = UI_Scene.Editor)]
+            UI_FloatSemiLogRange(minValue = 0.1f, maxValue = 16, scene = UI_Scene.Editor)]
         public float Length = 1;
 
         [KSPField]
         public float maxScale = 16;
 
         [KSPEvent(guiActive = false, guiActiveEditor = false, guiName = "#LOC_BDArmory_ArmorTriIso", active = true)]//Toggle Tri Type
-        public void ToggleTriTypeOption()
+        public void ToggleTriTypeOption() => ToggleTriTypeOptionHandler();
+        void ToggleTriTypeOptionHandler(bool applySym = true, Toggle state = Toggle.Toggle)
         {
-            scaleneTri = !scaleneTri;
+            switch (state)
+            {
+                case Toggle.Toggle:
+                    scaleneTri = !scaleneTri;
+                    break;
+                case Toggle.NoChange:
+                    break;
+                case Toggle.Off:
+                    scaleneTri = false;
+                    break;
+                case Toggle.On:
+                    scaleneTri = true;
+                    break;
+            }
 
             Fields["scaleneWidth"].guiActiveEditor = scaleneTri;
-            UI_FloatRange AWidth = (UI_FloatRange)Fields["Width"].uiControlEditor;
-            AWidth.maxValue = scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100;
-            AWidth.minValue = scaleneTri ? 0.1f : 0.5f;
+            UI_FloatSemiLogRange AWidth = (UI_FloatSemiLogRange)Fields["Width"].uiControlEditor;
+            AWidth.UpdateLimits(clamped ? 0.1f : 0.01f, scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100);
 
             if (scaleneTri)
             {
-                Fields["Width"].guiName = Localizer.Format("#LOC_BDArmory_ArmorWidthL");
-                Events["ToggleTriTypeOption"].guiName = Localizer.Format("#LOC_BDArmory_ArmorTriSca");
+                Fields["Width"].guiName = StringUtils.Localize("#LOC_BDArmory_ArmorWidthL");
+                Events["ToggleTriTypeOption"].guiName = StringUtils.Localize("#LOC_BDArmory_ArmorTriSca");
             }
             else
             {
-                Fields["Width"].guiName = Localizer.Format("#LOC_BDArmory_ArmorWidth");
-                Events["ToggleTriTypeOption"].guiName = Localizer.Format("#LOC_BDArmory_ArmorTriIso");
+                Fields["Width"].guiName = StringUtils.Localize("#LOC_BDArmory_ArmorWidth");
+                Events["ToggleTriTypeOption"].guiName = StringUtils.Localize("#LOC_BDArmory_ArmorTriIso");
             }
             GUIUtils.RefreshAssociatedWindows(part);
-            using (List<Part>.Enumerator sym = part.symmetryCounterparts.GetEnumerator())
-                while (sym.MoveNext())
-                {
-                    if (sym.Current == null) continue;
-                    sym.Current.FindModuleImplementing<BDAdjustableArmor>().ToggleTriTypeOption();
-                }
+            if (applySym)
+            {
+                using (List<Part>.Enumerator sym = part.symmetryCounterparts.GetEnumerator())
+                    while (sym.MoveNext())
+                    {
+                        if (sym.Current == null) continue;
+                        sym.Current.FindModuleImplementing<BDAdjustableArmor>().ToggleTriTypeOptionHandler(false, state);
+                    }
+            }
         }
 
-        [KSPEvent(guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_UnclampTuning_disabledText", active = true)]//Toggle scale limit
-        public void ToggleScaleClamp()
+        [KSPEvent(active = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_UnclampTuning_disabledText")]//Toggle scale limit
+        public void ToggleScaleClamp() => ToggleScaleClampHandler();
+        public void ToggleScaleClampHandler(bool applySym = true, Toggle state = Toggle.Toggle)
         {
-            clamped = !clamped;
-            UI_FloatRange AWidth = (UI_FloatRange)Fields["Width"].uiControlEditor;
-            AWidth.maxValue = scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100;
-            UI_FloatRange ALength = (UI_FloatRange)Fields["Length"].uiControlEditor;
-            ALength.maxValue = clamped ? maxScale : 100;
-            UI_FloatRange SWidth = (UI_FloatRange)Fields["scaleneWidth"].uiControlEditor;
-            SWidth.maxValue = clamped ? maxScale / 2 : 50;
+            switch (state)
+            {
+                case Toggle.Toggle:
+                    clamped = !clamped;
+                    break;
+                case Toggle.NoChange:
+                    break;
+                case Toggle.Off:
+                    clamped = false;
+                    break;
+                case Toggle.On:
+                    clamped = true;
+                    break;
+            }
+
+            UI_FloatSemiLogRange AWidth = (UI_FloatSemiLogRange)Fields["Width"].uiControlEditor;
+            AWidth.UpdateLimits(clamped ? 0.1f : 0.01f, scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100);
+            UI_FloatSemiLogRange ALength = (UI_FloatSemiLogRange)Fields["Length"].uiControlEditor;
+            ALength.UpdateLimits(clamped ? 0.1f : 0.01f, clamped ? maxScale : 100);
+            UI_FloatSemiLogRange SWidth = (UI_FloatSemiLogRange)Fields["scaleneWidth"].uiControlEditor;
+            SWidth.UpdateLimits(clamped ? 0.1f : 0.01f, clamped ? maxScale / 2 : 50);
 
             if (!clamped)
             {
-                Events["ToggleScaleClamp"].guiName = Localizer.Format("#LOC_BDArmory_UnclampTuning_enabledText");
+                Events["ToggleScaleClamp"].guiName = StringUtils.Localize("#LOC_BDArmory_UnclampTuning_enabledText");
             }
             else
             {
-                Events["ToggleScaleClamp"].guiName = Localizer.Format("#LOC_BDArmory_UnclampTuning_disabledText");
+                Events["ToggleScaleClamp"].guiName = StringUtils.Localize("#LOC_BDArmory_UnclampTuning_disabledText");
             }
             GUIUtils.RefreshAssociatedWindows(part);
-            using (List<Part>.Enumerator sym = part.symmetryCounterparts.GetEnumerator())
-                while (sym.MoveNext())
-                {
-                    if (sym.Current == null) continue;
-                    sym.Current.FindModuleImplementing<BDAdjustableArmor>().ToggleScaleClamp();
-                }
-            GUIUtils.RefreshAssociatedWindows(part);
+            if (applySym)
+            {
+                using (List<Part>.Enumerator sym = part.symmetryCounterparts.GetEnumerator())
+                    while (sym.MoveNext())
+                    {
+                        if (sym.Current == null) continue;
+                        sym.Current.FindModuleImplementing<BDAdjustableArmor>().ToggleScaleClampHandler(false, state);
+                    }
+            }
         }
+
+        [KSPField(isPersistant = true)]
         bool clamped = true;
 
         //public bool isCurvedPanel = false;
@@ -94,6 +129,8 @@ namespace BDArmory.Armor
 
         [KSPField]
         public bool isTriangularPanel = false;
+
+        [KSPField(isPersistant = true)]
         bool scaleneTri = false;
 
         [KSPField]
@@ -125,25 +162,26 @@ namespace BDArmory.Armor
             {
                 Events["ToggleTriTypeOption"].guiActiveEditor = true;
                 scaleneTransforms = part.FindModelTransforms(ScaleneTransformName);
-                UI_FloatRange SWidth = (UI_FloatRange)Fields["scaleneWidth"].uiControlEditor;
+                UI_FloatSemiLogRange SWidth = (UI_FloatSemiLogRange)Fields["scaleneWidth"].uiControlEditor;
                 SWidth.onFieldChanged = AdjustSWidth;
-                SWidth.maxValue = maxScale / 2;
+                // SWidth.UpdateLimits(0.1f, maxScale / 2);
             }
-            Fields["scaleneWidth"].guiActiveEditor = false;
-            //figure out why the scalene tri toggle option is still visible in the flight scene
             if (HighLogic.LoadedSceneIsEditor)
             {
                 ParseStackNodePosition();
                 StartCoroutine(DelayedUpdateStackNode());
                 GameEvents.onEditorShipModified.Add(OnEditorShipModifiedEvent);
+                ToggleTriTypeOptionHandler(state: Toggle.NoChange); // Initialise the UI for the Triangle Type toggle
+                ToggleScaleClampHandler(state: Toggle.NoChange); // Initialise the UI for the Clamped toggle
             }
             UpdateThickness(true);
-            UI_FloatRange AWidth = (UI_FloatRange)Fields["Width"].uiControlEditor;
+            UI_FloatSemiLogRange AWidth = (UI_FloatSemiLogRange)Fields["Width"].uiControlEditor;
             AWidth.onFieldChanged = AdjustWidth;
-            AWidth.maxValue = maxScale;
-            UI_FloatRange ALength = (UI_FloatRange)Fields["Length"].uiControlEditor;
+            // AWidth.UpdateLimits(0.1f, maxScale);
+            UI_FloatSemiLogRange ALength = (UI_FloatSemiLogRange)Fields["Length"].uiControlEditor;
             ALength.onFieldChanged = AdjustLength;
-            ALength.maxValue = maxScale;
+            // ALength.UpdateLimits(0.1f, maxScale);
+
             armor = GetComponent<HitpointTracker>();
             UpdateScale(Width, Length, scaleneWidth, false);
             GUIUtils.RefreshAssociatedWindows(part);
@@ -169,15 +207,12 @@ namespace BDArmory.Armor
 
         private void OnDestroy()
         {
-            if (HighLogic.LoadedSceneIsEditor)
-            {
-                GameEvents.onEditorShipModified.Remove(OnEditorShipModifiedEvent);
-            }
+            GameEvents.onEditorShipModified.Remove(OnEditorShipModifiedEvent);
         }
 
         public void AdjustWidth(BaseField field, object obj)
         {
-            Width = Mathf.Clamp(Width, scaleneTri ? 0.1f : 0.5f, scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100);
+            Width = Mathf.Clamp(Width, clamped ? 0.1f : 0.01f, scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100);
             for (int i = 0; i < armorTransforms.Length; i++)
             {
                 armorTransforms[i].localScale = new Vector3(Width, Length, armorthickness);
@@ -200,7 +235,7 @@ namespace BDArmory.Armor
         }
         public void AdjustSWidth(BaseField field, object obj)
         {
-            scaleneWidth = Mathf.Clamp(scaleneWidth, 0.1f, clamped ? maxScale / 2 : 50);
+            scaleneWidth = Mathf.Clamp(scaleneWidth, clamped ? 0.1f : 0.01f, clamped ? maxScale / 2 : 50);
             for (int i = 0; i < scaleneTransforms.Length; i++)
             {
                 scaleneTransforms[i].localScale = new Vector3(scaleneWidth * 2, Length, armorthickness);
@@ -216,7 +251,7 @@ namespace BDArmory.Armor
         }
         public void AdjustLength(BaseField field, object obj)
         {
-            Length = Mathf.Clamp(Length, 0.5f, clamped ? maxScale : 100);
+            Length = Mathf.Clamp(Length, clamped ? 0.1f : 0.01f, clamped ? maxScale : 100);
             for (int i = 0; i < armorTransforms.Length; i++)
             {
                 armorTransforms[i].localScale = new Vector3(Width, Length, armorthickness);
@@ -258,7 +293,17 @@ namespace BDArmory.Armor
             updateArmorStats();
             if (updateNodes) UpdateStackNode(true);
         }
-
+        IEnumerator updateDrag()
+        {
+            yield return null;
+            DragCube DragCube = DragCubeSystem.Instance.RenderProceduralDragCube(part);
+            part.DragCubes.ClearCubes();
+            part.DragCubes.Cubes.Add(DragCube);
+            part.DragCubes.ResetCubeWeights();
+            part.DragCubes.ForceUpdate(true, true, false);
+            part.DragCubes.SetDragWeights();
+            if (HighLogic.LoadedSceneIsEditor)  GameEvents.onEditorShipModified.Fire(EditorLogic.fetch.ship);
+        }
         public void UpdateStackNode(bool translateChidren)
         {
             using (List<AttachNode>.Enumerator stackNode = part.attachNodes.GetEnumerator())
@@ -298,7 +343,7 @@ namespace BDArmory.Armor
                             if (translateChidren) MoveParts(stackNode.Current, stackNode.Current.position - prevPos, stackNode.Current.orientation - prevAngle); //look into making triangle side nodes rotate attachnode based on new angle? AttachNode.Orientation?                            
                         }
                     }
-                    if (stackNode.Current.id == "left" || stackNode.Current.id == "right")
+                    else if (stackNode.Current.id == "left" || stackNode.Current.id == "right")
                     {
                         stackNode.Current.size = Mathf.CeilToInt(Length / 2);
                         stackNode.Current.breakingForce = Length * 100;
@@ -315,7 +360,7 @@ namespace BDArmory.Armor
                             if (translateChidren) MoveParts(stackNode.Current, stackNode.Current.position - prevPos, Vector3.zero);
                         }
                     }
-                    if (stackNode.Current.id == "side")
+                    else if (stackNode.Current.id == "side")
                     {
                         stackNode.Current.size = Mathf.CeilToInt(((Width / 2) + (Length / 2)) / 2);
                         stackNode.Current.orientation = new Vector3(1, 0, -(Width / Length));
@@ -342,6 +387,7 @@ namespace BDArmory.Armor
                 armor.armorVolume /= 2;
             }
             armor.ArmorSetup(null, null);
+            StartCoroutine(updateDrag());
         }
         void UpdateThickness(bool onLoad = false)
         {

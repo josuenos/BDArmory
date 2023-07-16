@@ -5,11 +5,10 @@ using System.IO;
 using System.Linq;
 
 using BDArmory.Control;
-using BDArmory.Extensions;
 using BDArmory.Settings;
 using BDArmory.Weapons;
 
-namespace BDArmory.Competition.VesselSpawning
+namespace BDArmory.VesselSpawning
 {
     /// <summary>
     /// A static class for doing the actual spawning of a vessel from a craft file into KSP.
@@ -32,7 +31,7 @@ namespace BDArmory.Competition.VesselSpawning
                 {
                     _spawnProbeLocation = null;
                     var message = "SpawnProbe.craft is missing. Your installation is likely corrupt.";
-                    BDACompetitionMode.Instance.competitionStatus.Add(message);
+                    ScreenMessages.PostScreenMessage(message, 10);
                     Debug.LogError("[BDArmory.SpawnUtils]: " + message);
                 }
                 return _spawnProbeLocation;
@@ -87,8 +86,16 @@ namespace BDArmory.Competition.VesselSpawning
 
             newData.crew = new List<CrewData>();
 
-            return SpawnVessel(newData, out shipFacility, crewData);
+            var vessel = SpawnVessel(newData, out shipFacility, crewData);
+            SpawnUtils.RestoreKAL(vessel, BDArmorySettings.RESTORE_KAL);
+            SpawnUtils.OnVesselReady(vessel);
+            return vessel;
         }
+
+        // Crew reserved for spawning in specific craft.
+        // Make sure to reserve any crew you don't want randomly spawned!
+        // Then after spawning all the craft, clear ReservedCrew again to avoid reserving them for the next batch spawn.
+        public static HashSet<string> ReservedCrew = new HashSet<string>();
 
         static Vessel SpawnVessel(VesselData vesselData, out EditorFacility shipFacility, List<ProtoCrewMember> crewData = null)
         {
@@ -151,23 +158,31 @@ namespace BDArmory.Competition.VesselSpawning
                 }
 
                 // Add crew
-                List<Part> crewParts;
+                List<Part> crewParts; // Cockpits, combat seats, command seats, crewable weapons, in this order.
                 ModuleWeapon crewedWeapon;
                 switch (BDArmorySettings.VESSEL_SPAWN_FILL_SEATS)
                 {
                     case 0: // Minimal plus crewable weapons.
                         {
-                            crewParts = shipConstruct.parts.FindAll(p => p.protoModuleCrew.Count < p.CrewCapacity && (crewedWeapon = p.FindModuleImplementing<ModuleWeapon>()) && crewedWeapon.crewserved).ToList(); // Crewed weapons.
-                            var part = shipConstruct.parts.Find(p => p.protoModuleCrew.Count < p.CrewCapacity && !p.FindModuleImplementing<ModuleWeapon>() && (p.FindModuleImplementing<ModuleCommand>() || p.FindModuleImplementing<KerbalSeat>())); // A non-weapon crewed command part.
+                            crewParts = new List<Part>();
+                            var part = shipConstruct.parts.Find(p => p.protoModuleCrew.Count < p.CrewCapacity && p.FindModuleImplementing<ModuleCommand>()); // A cockpit.
+                            if (part == null) part = shipConstruct.parts.Find(p => p.protoModuleCrew.Count < p.CrewCapacity && p.FindModuleImplementing<KerbalSeat>() && p.FindModuleImplementing<MissileFire>()); // A combat seat.
+                            if (part == null) part = shipConstruct.parts.Find(p => p.protoModuleCrew.Count < p.CrewCapacity && p.FindModuleImplementing<KerbalSeat>()); // A command seat.
                             if (part) crewParts.Add(part);
+                            crewParts.AddRange(shipConstruct.parts.FindAll(p => p.protoModuleCrew.Count < p.CrewCapacity && (crewedWeapon = p.FindModuleImplementing<ModuleWeapon>()) && crewedWeapon.crewserved)); // Crewable weapons.
                             break;
                         }
                     case 1: // All cockpits or the first combat seat if no cockpits are found, plus crewable weapons.
                         {
                             crewParts = shipConstruct.parts.FindAll(p => p.protoModuleCrew.Count < p.CrewCapacity && p.FindModuleImplementing<ModuleCommand>()).ToList(); // Crewable cockpits.
-                            if (crewParts.Count() == 0)
+                            if (crewParts.Count() == 0) // No crewable cockpits.
                             {
                                 var part = shipConstruct.parts.Find(p => p.protoModuleCrew.Count < p.CrewCapacity && p.FindModuleImplementing<KerbalSeat>() && p.FindModuleImplementing<MissileFire>()); // The first combat seat if no cockpits were found.
+                                if (part) crewParts.Add(part);
+                            }
+                            if (crewParts.Count() == 0) // No crewable combat seats either.
+                            {
+                                var part = shipConstruct.parts.Find(p => p.protoModuleCrew.Count < p.CrewCapacity && p.FindModuleImplementing<KerbalSeat>()); // The first command seat if no cockpits or combat seats were found.
                                 if (part) crewParts.Add(part);
                             }
                             crewParts.AddRange(shipConstruct.parts.FindAll(p => p.protoModuleCrew.Count < p.CrewCapacity && ((crewedWeapon = p.FindModuleImplementing<ModuleWeapon>()) && crewedWeapon.crewserved))); // Crewable weapons.
@@ -188,20 +203,77 @@ namespace BDArmory.Competition.VesselSpawning
                 }
                 if (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 42) // Fly the Unfriendly Skies
                 { crewParts = shipConstruct.parts.FindAll(p => p.protoModuleCrew.Count < p.CrewCapacity).ToList(); }
+                List<ProtoCrewMember> reservedCrew = new List<ProtoCrewMember>();
+                if (crewData != null) // Sanity checks to avoid assigning duplicate or otherwise unavailable crew.
+                {
+                    crewData = crewData.Where(crew => crew != null && !string.IsNullOrEmpty(crew.name)).ToList(); // Remove null / no-name crew.
+                    if (crewData.Any(crew => !ReservedCrew.Contains(crew.name))) // Remove non-reserved crew.
+                    {
+                        Debug.LogWarning($"[BDArmory.VesselSpawner]: Removing specified, but not reserved crew to avoid potential collisions: {string.Join(", ", crewData.Where(crew => !ReservedCrew.Contains(crew.name)).Select(crew => crew.name))}");
+                        crewData = crewData.Where(crew => ReservedCrew.Contains(crew.name)).ToList();
+                    }
+                    if (crewData.Any(crew => crew.rosterStatus == ProtoCrewMember.RosterStatus.Assigned)) // Remove already assigned crew.
+                    {
+                        Debug.LogWarning($"[BDArmory.VesselSpawner]: Removing already assigned crew: {string.Join(", ", crewData.Where(crew => crew.rosterStatus == ProtoCrewMember.RosterStatus.Assigned).Select(crew => crew.name))}");
+                        crewData = crewData.Where(crew => crew.rosterStatus != ProtoCrewMember.RosterStatus.Assigned).ToList();
+                    }
+                    foreach (var crew in crewData.Where(crew => !HighLogic.CurrentGame.CrewRoster.Exists(crew.name)).ToList()) // Specified crew doesn't exist, WTF???
+                    {
+                        crewData.Remove(crew); // Remove the invalid crew from the crewData list.
+                        var newCrewMember = HighLogic.CurrentGame.CrewRoster.GetNewKerbal(ProtoCrewMember.KerbalType.Crew); // Try generating a new crew member and copying the expected name and gender to it.
+                        if (newCrewMember.ChangeName(crew.name))
+                        {
+                            newCrewMember.gender = crew.gender;
+                            KerbalRoster.SetExperienceTrait(newCrewMember, KerbalRoster.pilotTrait); // Make the kerbal a pilot (so they can use SAS properly).
+                            KerbalRoster.SetExperienceLevel(newCrewMember, KerbalRoster.GetExperienceMaxLevel()); // Make them experienced.
+                            newCrewMember.isBadass = true; // Make them bad-ass (likes nearby explosions).
+                            crewData.Add(newCrewMember); // Add them into the crewData list.
+                        }
+                        else
+                        {
+                            HighLogic.CurrentGame.CrewRoster.Remove(newCrewMember);
+                            Debug.LogError($"[BDArmory.VesselSpawner]: Failed to recreate the missing crew member ({crew.name}), removing from specified crew.");
+                        }
+                    }
+                    foreach (var crew in crewData) crew.rosterStatus = ProtoCrewMember.RosterStatus.Available; // Make sure the rest are available.
+                    if (crewParts.Sum(p => p.CrewCapacity - p.protoModuleCrew.Count) < crewData.Count) Debug.LogWarning($"[BDArmory.VesselSpawner]: {crewData.Count} crew requested, but only {crewParts.Sum(p => p.CrewCapacity - p.protoModuleCrew.Count)} crew positions available. Not all requested crew will be used.");
+                }
+                int specifiedCrewUsed = 0;
                 foreach (var part in crewParts)
                 {
-                    int crewToAdd = (BDArmorySettings.VESSEL_SPAWN_FILL_SEATS > 0 || (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 42)) ? part.CrewCapacity - part.protoModuleCrew.Count : 1;
+                    int crewToAdd = (BDArmorySettings.VESSEL_SPAWN_FILL_SEATS > 0 || (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 42)) ?
+                        part.CrewCapacity - part.protoModuleCrew.Count : crewData != null && crewData.Count - specifiedCrewUsed > 0 ?
+                        Math.Min(crewData.Count - specifiedCrewUsed, part.CrewCapacity - part.protoModuleCrew.Count) : 1;
                     for (int crewCount = 0; crewCount < crewToAdd; ++crewCount)
                     {
-                        // Create the ProtoCrewMember
-                        ProtoCrewMember crewMember = HighLogic.CurrentGame.CrewRoster.GetNextOrNewKerbal(ProtoCrewMember.KerbalType.Crew);
+                        ProtoCrewMember crewMember = null;
+                        if (crewData != null && specifiedCrewUsed < crewData.Count) // Crew specified. Add them in order and fill the rest with non-reserved kerbals.
+                        {
+                            crewMember = crewData[specifiedCrewUsed++];
+                        }
+                        if (crewMember == null) // Create the ProtoCrewMember
+                        {
+                            crewMember = HighLogic.CurrentGame.CrewRoster.GetNextOrNewKerbal(ProtoCrewMember.KerbalType.Crew);
+                            while (ReservedCrew.Contains(crewMember.name)) // Skip the reserved kerbals.
+                            {
+                                crewMember.rosterStatus = ProtoCrewMember.RosterStatus.Assigned; // Mark them as assigned so they don't get chosen again.
+                                reservedCrew.Add(crewMember);
+                                crewMember = HighLogic.CurrentGame.CrewRoster.GetNextOrNewKerbal(ProtoCrewMember.KerbalType.Crew);
+                            }
+                        }
                         KerbalRoster.SetExperienceTrait(crewMember, KerbalRoster.pilotTrait); // Make the kerbal a pilot (so they can use SAS properly).
                         KerbalRoster.SetExperienceLevel(crewMember, KerbalRoster.GetExperienceMaxLevel()); // Make them experienced.
                         crewMember.isBadass = true; // Make them bad-ass (likes nearby explosions).
 
                         // Add them to the part
                         part.AddCrewmemberAt(crewMember, part.protoModuleCrew.Count);
+                        crewMember.rosterStatus = ProtoCrewMember.RosterStatus.Assigned;
+                        if (BDArmorySettings.DEBUG_SPAWNING) Debug.Log($"[BDArmory.VesselSpawner]: Adding {crewMember.name} to {part.name} on {vesselData.name}");
                     }
+                }
+                foreach (var reservedCrewMember in reservedCrew)
+                {
+                    reservedCrewMember.rosterStatus = ProtoCrewMember.RosterStatus.Available; // Make the reserved crew avaiable again for the next vessel.
                 }
 
                 // Create a dummy ProtoVessel, we will use this to dump the parts to a config node.

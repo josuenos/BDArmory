@@ -5,12 +5,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using BDArmory.Competition;
 using BDArmory.Control;
+using BDArmory.Extensions;
 using BDArmory.Settings;
 using BDArmory.Utils;
 using BDArmory.UI;
 
-namespace BDArmory.Competition.VesselSpawning
+namespace BDArmory.VesselSpawning
 {
     /// <summary>
     /// Continous spawning in an airborne ring cycling through all the vessels in the spawn folder.
@@ -35,7 +37,12 @@ namespace BDArmory.Competition.VesselSpawning
 
         void LogMessage(string message, bool toScreen = true, bool toLog = true) => LogMessageFrom("ContinuousSpawning", message, toScreen, toLog);
 
-        public override IEnumerator Spawn(SpawnConfig spawnConfig) => SpawnVesselsContinuouslyAsCoroutine(spawnConfig);
+        public override IEnumerator Spawn(SpawnConfig spawnConfig)
+        {
+            var circularSpawnConfig = spawnConfig as CircularSpawnConfig;
+            if (circularSpawnConfig == null) yield break;
+            yield return SpawnVesselsContinuouslyAsCoroutine(circularSpawnConfig);
+        }
 
         public void CancelSpawning()
         {
@@ -68,7 +75,7 @@ namespace BDArmory.Competition.VesselSpawning
             BDACompetitionMode.Instance.ResetCompetitionStuff(); // Reset competition scores.
         }
 
-        public void SpawnVesselsContinuously(SpawnConfig spawnConfig)
+        public void SpawnVesselsContinuously(CircularSpawnConfig spawnConfig)
         {
             PreSpawnInitialisation(spawnConfig);
             LogMessage("[BDArmory.VesselSpawner]: Triggering continuous vessel spawning at " + spawnConfig.latitude.ToString("G6") + ", " + spawnConfig.longitude.ToString("G6") + ", with altitude " + spawnConfig.altitude + "m.", false);
@@ -79,7 +86,7 @@ namespace BDArmory.Competition.VesselSpawning
         /// A coroutine version of the SpawnAllVesselsContinuously function that performs the required prespawn initialisation.
         /// </summary>
         /// <param name="spawnConfig">The spawn config to use.</param>
-        public IEnumerator SpawnVesselsContinuouslyAsCoroutine(SpawnConfig spawnConfig)
+        public IEnumerator SpawnVesselsContinuouslyAsCoroutine(CircularSpawnConfig spawnConfig)
         {
             PreSpawnInitialisation(spawnConfig);
             LogMessage("[BDArmory.VesselSpawner]: Triggering continuous vessel spawning at " + spawnConfig.latitude.ToString("G6") + ", " + spawnConfig.longitude.ToString("G6") + ", with altitude " + spawnConfig.altitude + "m.", false);
@@ -90,7 +97,7 @@ namespace BDArmory.Competition.VesselSpawning
         // HashSet<Vessel> vesselsToActivate = new HashSet<Vessel>();
         // Spawns all vessels in a downward facing ring and activates them (autopilot and AG10, then stage if no engines are firing), then respawns any that die. An altitude of 1000m should be plenty.
         // Note: initial vessel separation tends towards 2*pi*spawnDistanceFactor from above for >3 vessels.
-        private IEnumerator SpawnVesselsContinuouslyCoroutine(SpawnConfig spawnConfig)
+        private IEnumerator SpawnVesselsContinuouslyCoroutine(CircularSpawnConfig spawnConfig)
         {
             #region Initialisation and sanity checks
             // Tally up the craft to spawn.
@@ -194,7 +201,7 @@ namespace BDArmory.Competition.VesselSpawning
                             var heading = 360f * spawnSlots[continuousSpawnedVesselCount] / spawnSlots.Count;
                             ++continuousSpawnedVesselCount;
                             continuousSpawnedVesselCount %= spawnSlots.Count;
-                            var direction = Vector3.ProjectOnPlane(Quaternion.AngleAxis(heading, radialUnitVector) * refDirection, radialUnitVector).normalized;
+                            var direction = (Quaternion.AngleAxis(heading, radialUnitVector) * refDirection).ProjectOnPlanePreNormalized(radialUnitVector).normalized;
                             craftSpawnPosition = spawnPoint + spawnDistance * direction;
                             FlightGlobals.currentMainBody.GetLatLonAlt(craftSpawnPosition, out craftGeoCoords.x, out craftGeoCoords.y, out craftGeoCoords.z); // Convert spawn point to geo-coords for the actual spawning function.
                             StartCoroutine(SpawnCraft(new VesselSpawnConfig(craftURL, craftSpawnPosition, direction, (float)spawnConfig.altitude, -80f, true, 0, true)));
@@ -205,7 +212,7 @@ namespace BDArmory.Competition.VesselSpawning
 
                     // Start the competition once we have enough craft.
                     if (currentlyActive > 1 && !(BDACompetitionMode.Instance.competitionIsActive || BDACompetitionMode.Instance.competitionStarting))
-                    { BDACompetitionMode.Instance.StartCompetitionMode(BDArmorySettings.COMPETITION_DISTANCE); }
+                    { BDACompetitionMode.Instance.StartCompetitionMode(BDArmorySettings.COMPETITION_DISTANCE, BDArmorySettings.COMPETITION_START_DESPITE_FAILURES); }
                 }
 
                 // Kill off vessels that are out of ammo for too long if we're in continuous spawning mode and a competition is active.

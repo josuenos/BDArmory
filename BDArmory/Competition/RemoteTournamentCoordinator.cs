@@ -6,10 +6,10 @@ using UnityEngine;
 
 using BDArmory.Competition.OrchestrationStrategies;
 using BDArmory.Competition.RemoteOrchestration;
-using BDArmory.Competition.VesselSpawning;
-using BDArmory.Competition.VesselSpawning.SpawnStrategies;
 using BDArmory.GameModes.Waypoints;
 using BDArmory.Settings;
+using BDArmory.VesselSpawning.SpawnStrategies;
+using BDArmory.VesselSpawning;
 using static BDArmory.Competition.OrchestrationStrategies.WaypointFollowingStrategy;
 
 namespace BDArmory.Competition
@@ -35,7 +35,7 @@ namespace BDArmory.Competition
             // first, spawn vessels
             yield return spawnStrategy.Spawn(vesselSpawner);
 
-            if( !spawnStrategy.DidComplete() )
+            if (!spawnStrategy.DidComplete())
             {
                 Debug.Log("[BDArmory.BDAScoreService] TournamentCoordinator spawn failed");
                 yield break;
@@ -47,7 +47,7 @@ namespace BDArmory.Competition
 
         public static RemoteTournamentCoordinator BuildFromDescriptor(CompetitionModel competitionModel)
         {
-            switch(competitionModel.mode)
+            switch (competitionModel.mode)
             {
                 case "ffa":
                     return BuildFFA();
@@ -68,8 +68,9 @@ namespace BDArmory.Competition
             var activeVesselIds = scoreClient.activeVessels.ToList();
             var craftUrls = activeVesselModels.Select(e => e.craft_url);
             // TODO: need coords from descriptor, or fallback to local settings
-            var kerbin = FlightGlobals.GetBodyByName("Kerbin");
-            var bodyIndex = FlightGlobals.GetBodyIndex(kerbin);
+            // var kerbin = FlightGlobals.GetBodyByName("Kerbin");
+            // var bodyIndex = FlightGlobals.GetBodyIndex(kerbin);
+            var bodyIndex = BDArmorySettings.VESSEL_SPAWN_WORLDINDEX;
             var latitude = BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.x;
             var longitude = BDArmorySettings.VESSEL_SPAWN_GEOCOORDS.y;
             var altitude = BDArmorySettings.VESSEL_SPAWN_ALTITUDE;
@@ -97,23 +98,24 @@ namespace BDArmory.Competition
             var altitude = BDArmorySettings.VESSEL_SPAWN_ALTITUDE;
             var spawnRadius = BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR;
             // var spawnStrategy = new PointSpawnStrategy(craftUrl, latitude, longitude, 2*altitude, 315.0f);
-            Debug.Log("[RemoteTournamentCoordinator] Creating Spawn Strategy - WorldIndex: " + worldIndex + "; course name: " + WaypointCourses.CourseLocations[BDArmorySettings.WAYPOINT_COURSE_INDEX].name);
+            Debug.Log("[BDArmory.RemoteTournamentCoordinator] Creating Spawn Strategy - WorldIndex: " + worldIndex + "; course name: " + WaypointCourses.CourseLocations[BDArmorySettings.WAYPOINT_COURSE_INDEX].name);
             var spawnStrategy = new SpawnConfigStrategy(
-                new SpawnConfig(
-                    worldIndex,
-                    latitude,
-                    longitude,
-                    altitude,
+                new CircularSpawnConfig(
+                    new SpawnConfig(
+                        worldIndex,
+                        latitude,
+                        longitude,
+                        altitude,
+                        true,
+                        true,
+                        0,
+                        null,
+                        null,
+                        "",
+                        activeVesselModels.Select(m => vesselSource.GetLocalPath(m.id)).ToList()
+                    ),
                     spawnRadius,
-                    BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE,
-                    BDArmorySettings.VESSEL_SPAWN_EASE_IN_SPEED,
-                    true,
-                    true,
-                    0,
-                    null,
-                    null,
-                    "",
-                    activeVesselModels.Select(m => vesselSource.GetLocalPath(m.id)).ToList()
+                    BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE
                 )
             );
             var waypoints = WaypointCourses.CourseLocations[BDArmorySettings.WAYPOINT_COURSE_INDEX].waypoints;
@@ -228,7 +230,7 @@ namespace BDArmory.Competition
 
             List<SpawnStrategy> strategies = new List<SpawnStrategy>();
 
-            if( npcCraftUrl != null )
+            if (npcCraftUrl != null)
             {
                 // turret locations (all spawned at 0m)
                 // 29.861150,-38.608205,0

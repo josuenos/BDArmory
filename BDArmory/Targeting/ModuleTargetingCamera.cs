@@ -465,7 +465,7 @@ namespace BDArmory.Targeting
 
                     if (eyeHolderTransform)
                     {
-                        Vector3 projectedForward = Vector3.ProjectOnPlane(cameraParentTransform.forward, eyeHolderTransform.parent.up);
+                        Vector3 projectedForward = cameraParentTransform.forward.ProjectOnPlanePreNormalized(eyeHolderTransform.parent.up);
                         if (projectedForward != Vector3.zero)
                         {
                             eyeHolderTransform.rotation = Quaternion.LookRotation(projectedForward, eyeHolderTransform.parent.up);
@@ -704,7 +704,7 @@ namespace BDArmory.Targeting
                     GUI.Label(new Rect(600, 1000, 100, 100), "Slew rate: " + finalSlewSpeed);
                 }
 
-                if (BDArmorySettings.DEBUG_LINES)
+                if (BDArmorySettings.DEBUG_LINES && cameraEnabled && cameraParentTransform is not null)
                 {
                     if (groundStabilized)
                     {
@@ -783,7 +783,7 @@ namespace BDArmory.Targeting
 
             //horizon indicator
             float horizY = imageRect.y + imageRect.height - indicatorSize - indicatorBorder;
-            Vector3 hForward = Vector3.ProjectOnPlane(vesForward, upDirection);
+            Vector3 hForward = vesForward.ProjectOnPlanePreNormalized(upDirection);
             float hAngle = -BDAMath.SignedAngle(hForward, vesForward, upDirection);
             horizY -= (hAngle / 90) * (indicatorSize / 2);
             Rect horizonRect = new Rect(indicatorBorder + imageRect.x, horizY, indicatorSize, indicatorSize);
@@ -793,14 +793,14 @@ namespace BDArmory.Targeting
             Rect rollRect = new Rect(indicatorBorder + imageRect.x, imageRect.y + imageRect.height - indicatorSize - indicatorBorder, indicatorSize, indicatorSize);
             GUI.DrawTexture(rollRect, rollReferenceTexture, ScaleMode.StretchToFill, true);
             Vector3 localUp = vessel.ReferenceTransform.InverseTransformDirection(upDirection);
-            localUp = Vector3.ProjectOnPlane(localUp, Vector3.up).normalized;
+            localUp = localUp.ProjectOnPlanePreNormalized(Vector3.up).normalized;
             float rollAngle = -BDAMath.SignedAngle(-Vector3.forward, localUp, Vector3.right);
             GUIUtility.RotateAroundPivot(rollAngle, rollRect.center);
             GUI.DrawTexture(rollRect, rollIndicatorTexture, ScaleMode.StretchToFill, true);
             GUI.matrix = Matrix4x4.identity;
 
             //target direction indicator
-            float angleToTarget = BDAMath.SignedAngle(hForward, Vector3.ProjectOnPlane(targetPointPosition - transform.position, upDirection), Vector3.Cross(upDirection, hForward));
+            float angleToTarget = BDAMath.SignedAngle(hForward, (targetPointPosition - transform.position).ProjectOnPlanePreNormalized(upDirection), Vector3.Cross(upDirection, hForward));
             GUIUtility.RotateAroundPivot(angleToTarget, rollRect.center);
             GUI.DrawTexture(rollRect, BDArmorySetup.Instance.targetDirectionTexture, ScaleMode.StretchToFill, true);
             GUI.matrix = Matrix4x4.identity;
@@ -1301,7 +1301,7 @@ namespace BDArmory.Targeting
 
             RaycastHit rayHit;
             Ray ray = new Ray(cameraParentTransform.position + (50 * cameraParentTransform.forward), cameraParentTransform.forward);
-            bool raycasted = Physics.Raycast(ray, out rayHit, maxRayDistance - 50, (int)(LayerMasks.Parts | LayerMasks.Scenery | LayerMasks.EVA | LayerMasks.Unknown19 | LayerMasks.Unknown23));
+            bool raycasted = Physics.Raycast(ray, out rayHit, maxRayDistance - 50, (int)(LayerMasks.Parts | LayerMasks.Scenery | LayerMasks.EVA | LayerMasks.Unknown19 | LayerMasks.Unknown23 | LayerMasks.Wheels));
             if (raycasted)
             {
                 if (FlightGlobals.getAltitudeAtPos(rayHit.point) < 0)
@@ -1310,14 +1310,28 @@ namespace BDArmory.Targeting
                 }
                 else
                 {
+                    KerbalEVA hitEVA = rayHit.collider.gameObject.GetComponentUpwards<KerbalEVA>();
+                    Part p = hitEVA ? hitEVA.part : rayHit.collider.GetComponentInParent<Part>();
+
+                    bool pCheck = false;
+
+                    if (p && p.vessel)
+                    {
+                        var pMissile = VesselModuleRegistry.GetModule<MissileBase>(p.vessel);
+                        if (pMissile != null)
+                        {
+                            if (pMissile.SourceVessel == vessel) return;
+                        }
+                        pCheck = true;
+                    }
+
                     groundStabilized = true;
                     groundTargetPosition = rayHit.point;
 
                     if (CoMLock)
                     {
-                        KerbalEVA hitEVA = rayHit.collider.gameObject.GetComponentUpwards<KerbalEVA>();
-                        Part p = hitEVA ? hitEVA.part : rayHit.collider.GetComponentInParent<Part>();
-                        if (p && p.vessel && p.vessel.CoM != Vector3.zero)
+                        
+                        if (pCheck && p.vessel.CoM != Vector3.zero)
                         {
                             groundTargetPosition = p.vessel.CoM + (p.vessel.Velocity() * Time.fixedDeltaTime);
                             StartCoroutine(StabilizeNextFrame());
@@ -1377,7 +1391,7 @@ namespace BDArmory.Targeting
 
             RaycastHit rayHit;
             Ray ray = new Ray(cameraParentTransform.position + (50 * cameraParentTransform.forward), cameraParentTransform.forward);
-            if (Physics.Raycast(ray, out rayHit, maxRayDistance - 50, (int)(LayerMasks.Parts | LayerMasks.Scenery | LayerMasks.EVA | LayerMasks.Unknown19 | LayerMasks.Unknown23)))
+            if (Physics.Raycast(ray, out rayHit, maxRayDistance - 50, (int)(LayerMasks.Parts | LayerMasks.Scenery | LayerMasks.EVA | LayerMasks.Unknown19 | LayerMasks.Unknown23 | LayerMasks.Wheels)))
             {
                 targetPointPosition = rayHit.point;
 
@@ -1476,13 +1490,22 @@ namespace BDArmory.Targeting
             radarLock = false;
             StopResetting();
             ClearTarget();
-            if (cameraParentTransform == null) yield break;
+            if (cameraParentTransform == null)
+            {
+                slewingToPosition = false;
+                yield break;
+            }
             while (!stopPTPR && Vector3.Angle(cameraParentTransform.transform.forward, position - (cameraParentTransform.transform.position)) > 0.1f)
             {
                 Vector3 newForward = Vector3.RotateTowards(cameraParentTransform.transform.forward, position - cameraParentTransform.transform.position, 90 * Mathf.Deg2Rad * Time.fixedDeltaTime, 0);
                 //cameraParentTransform.rotation = Quaternion.LookRotation(newForward, VectorUtils.GetUpDirection(transform.position));
                 PointCameraModel(newForward);
                 yield return new WaitForFixedUpdate();
+                if (cameraParentTransform == null)
+                {
+                    slewingToPosition = false;
+                    yield break;
+                }
                 if (gimbalLimitReached)
                 {
                     ClearTarget();
@@ -1498,7 +1521,6 @@ namespace BDArmory.Targeting
                 GroundStabilize();
             }
             slewingToPosition = false;
-            yield break;
         }
 
         void StopResetting()
@@ -1527,16 +1549,15 @@ namespace BDArmory.Targeting
                         weaponManager.slavingTurrets = false;
                     }
                 }
-
-                GameEvents.onVesselCreate.Remove(Disconnect);
             }
+            GameEvents.onVesselCreate.Remove(Disconnect);
         }
 
         Vector2 TargetAzimuthElevationScreenPos(Rect screenRect, Vector3 targetPosition, float textureSize)
         {
             Vector3 localPos = vessel.ReferenceTransform.InverseTransformPoint(targetPosition);
             Vector3 aziRef = Vector3.up;
-            Vector3 aziPos = Vector3.ProjectOnPlane(localPos, Vector3.forward);
+            Vector3 aziPos = localPos.ProjectOnPlanePreNormalized(Vector3.forward);
             float elevation = VectorUtils.SignedAngle(aziPos, localPos, Vector3.forward);
             float normElevation = elevation / 70;
 

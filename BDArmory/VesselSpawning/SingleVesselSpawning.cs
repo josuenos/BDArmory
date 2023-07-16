@@ -3,9 +3,11 @@ using System.Collections;
 using System.IO;
 using System.Linq;
 
+using BDArmory.Competition;
+using BDArmory.Extensions;
 using BDArmory.Utils;
 
-namespace BDArmory.Competition.VesselSpawning
+namespace BDArmory.VesselSpawning
 {
     [KSPAddon(KSPAddon.Startup.Flight, false)]
     public class SingleVesselSpawning : VesselSpawnerBase
@@ -56,7 +58,7 @@ namespace BDArmory.Competition.VesselSpawning
             var spawnPoint = FlightGlobals.currentMainBody.GetWorldSurfacePosition(latitude, longitude, terrainAltitude + altitude);
             var radialUnitVector = (spawnPoint - FlightGlobals.currentMainBody.transform.position).normalized;
             var north = VectorUtils.GetNorthVector(spawnPoint, FlightGlobals.currentMainBody);
-            var direction = Vector3.ProjectOnPlane(Quaternion.AngleAxis(initialHeading, radialUnitVector) * north, radialUnitVector).normalized;
+            var direction = (Quaternion.AngleAxis(initialHeading, radialUnitVector) * north).ProjectOnPlanePreNormalized(radialUnitVector).normalized;
             var airborne = altitude > 10;
             VesselSpawnConfig vesselSpawnConfig = new VesselSpawnConfig(craftUrl, spawnPoint, direction, (float)altitude, initialPitch, airborne);
 

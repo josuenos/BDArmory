@@ -1,10 +1,10 @@
 using System;
 using UnityEngine;
 
+using BDArmory.Extensions;
 using BDArmory.Settings;
 using BDArmory.UI;
 using BDArmory.Utils;
-using BDArmory.Weapons;
 
 namespace BDArmory.WeaponMounts
 {
@@ -83,7 +83,7 @@ namespace BDArmory.WeaponMounts
 
             if (!string.IsNullOrEmpty(audioPath) && (yawSpeedDPS != 0 || pitchSpeedDPS != 0))
             {
-                soundClip = GameDatabase.Instance.GetAudioClip(audioPath);
+                soundClip = SoundUtils.GetAudioClip(audioPath);
 
                 audioSource = gameObject.AddComponent<AudioSource>();
                 audioSource.clip = soundClip;
@@ -172,13 +172,12 @@ namespace BDArmory.WeaponMounts
             float deltaTime = Time.fixedDeltaTime;
 
             Vector3 yawNormal = yawTransform.up;
-            Vector3 yawComponent = Vector3.ProjectOnPlane(targetDirection, yawNormal);
-            Vector3 pitchNormal = Vector3.Cross(yawComponent, yawNormal);
-            Vector3 pitchComponent = Vector3.ProjectOnPlane(targetDirection, pitchNormal);
+            Vector3 yawComponent = targetDirection.ProjectOnPlanePreNormalized(yawNormal);
+            Vector3 pitchComponent = targetDirection.ProjectOnPlane(Vector3.Cross(yawComponent, yawNormal));
 
             float currentYaw = yawTransform.localEulerAngles.y.ToAngle();
             float yawError = VectorUtils.SignedAngleDP(
-                Vector3.ProjectOnPlane(referenceTransform.forward, yawNormal),
+                referenceTransform.forward.ProjectOnPlanePreNormalized(yawNormal),
                 yawComponent,
                 Vector3.Cross(yawNormal, referenceTransform.forward));
             float yawOffset = Mathf.Abs(yawError);
@@ -235,6 +234,9 @@ namespace BDArmory.WeaponMounts
                 pitchTransform.localRotation = Quaternion.RotateTowards(pitchTransform.localRotation,
                     Quaternion.Euler(-targetPitchAngle, 0, 0), pitchSpeed);
         }
+
+        public float Pitch => -pitchTransform.localEulerAngles.x.ToAngle();
+        public float Yaw => yawTransform.localEulerAngles.y.ToAngle();
 
         public bool ReturnTurret()
         {
@@ -309,6 +311,8 @@ namespace BDArmory.WeaponMounts
             }
             minPitchRange.minValue = minPitchLimit;
             minPitchRange.maxValue = 0;
+            if (minPitchLimit != 0)
+                minPitchRange.stepIncrement = Mathf.Pow(10, Mathf.Min(1f, Mathf.Floor(Mathf.Log10(Mathf.Abs(minPitchLimit)) + (1 - Mathf.Log10(20f) - 1e-4f)))) / 10f; // Use between 20 and 200 divisions
 
             UI_FloatRange maxPitchRange = (UI_FloatRange)Fields["maxPitch"].uiControlEditor;
             if (maxPitchLimit > 90)
@@ -321,6 +325,8 @@ namespace BDArmory.WeaponMounts
             }
             maxPitchRange.maxValue = maxPitchLimit;
             maxPitchRange.minValue = 0;
+            if (maxPitchLimit != 0)
+                maxPitchRange.stepIncrement = Mathf.Pow(10, Mathf.Min(1f, Mathf.Floor(Mathf.Log10(Mathf.Abs(maxPitchLimit)) + (1 - Mathf.Log10(20f) - 1e-4f)))) / 10f; // Use between 20 and 200 divisions
 
             UI_FloatRange yawRangeEd = (UI_FloatRange)Fields["yawRange"].uiControlEditor;
             if (yawRangeLimit > 360)
@@ -344,6 +350,8 @@ namespace BDArmory.WeaponMounts
                 yawRangeEd.minValue = 0;
                 yawRangeEd.maxValue = yawRangeLimit;
             }
+            if (yawRange != 0)
+                yawRangeEd.stepIncrement = Mathf.Pow(10, Math.Min(1f, Mathf.Floor(Mathf.Log10(Mathf.Abs(yawRange)) + (1 - Mathf.Log10(20f) - 1e-4f)))) / 10f; // Use between 20 and 200 divisions
         }
     }
     public class BDAScaleByDistance : PartModule

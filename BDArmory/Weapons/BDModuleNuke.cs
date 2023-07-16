@@ -3,7 +3,6 @@ using System.Collections;
 using System.Text;
 using UnityEngine;
 
-using BDArmory.Competition.VesselSpawning;
 using BDArmory.Competition;
 using BDArmory.Control;
 using BDArmory.Damage;
@@ -11,6 +10,7 @@ using BDArmory.Extensions;
 using BDArmory.FX;
 using BDArmory.Settings;
 using BDArmory.Utils;
+using BDArmory.VesselSpawning;
 using BDArmory.Weapons.Missiles;
 
 namespace BDArmory.Weapons
@@ -21,7 +21,7 @@ namespace BDArmory.Weapons
         public string status = "OFFLINE";
 
         [KSPField(isPersistant = true, guiActive = true, guiName = "Coolant Remaining", guiActiveEditor = false), UI_Label(scene = UI_Scene.All)]
-        public double fuelleft;
+        public double fuelleft = 0;
 
         public static string defaultflashModelPath = "BDArmory/Models/explosion/nuke/nukeFlash";
         [KSPField]
@@ -66,6 +66,7 @@ namespace BDArmory.Weapons
         public float meltDownDuration = 2.5f;
 
         private int FuelID;
+        private int MPID;
         private bool hasDetonated = false;
         private bool goingCritical = false;
         public string Sourcevessel;
@@ -84,15 +85,21 @@ namespace BDArmory.Weapons
             }
         }
 
-        public override void OnStart(StartState state)
+        public void Start()
         {
             if (HighLogic.LoadedSceneIsFlight)
             {
                 if (engineCore)
                 {
                     FuelID = PartResourceLibrary.Instance.GetDefinition("LiquidFuel").id;
+                    Debug.Log($"[BDArmory.BDModuleNuke]: Resource definition for LiquidFuel is" + FuelID);
                     vessel.GetConnectedResourceTotals(FuelID, out double fuelCurrent, out double fuelMax);
                     fuelleft = fuelCurrent;
+                    Debug.Log($"[BDArmory.BDModuleNuke]: Found {fuelMax} LF on {part.vessel.GetName()}");
+                    MPID = PartResourceLibrary.Instance.GetDefinition("MonoPropellant").id;
+                    vessel.GetConnectedResourceTotals(MPID, out double mpCurrent, out double mpMax);
+                    fuelleft += mpCurrent;
+                    Debug.Log($"[BDArmory.BDModuleNuke]: Found {mpMax} MP on {part.vessel.GetName()}");
                     var engine = part.FindModuleImplementing<ModuleEngines>();
                     if (engine != null)
                     {
@@ -104,7 +111,8 @@ namespace BDArmory.Weapons
                 {
                     Fields["status"].guiActive = false;
                     Fields["fuelleft"].guiActive = false;
-                    var missile = part.FindModuleImplementing<MissileLauncher>();
+                    Fields["status"].guiActiveEditor = false;
+                    Fields["fuelleft"].guiActiveEditor = false;
                 }
                 Sourcevessel = part.vessel.GetName();
 
@@ -112,10 +120,9 @@ namespace BDArmory.Weapons
                 GameEvents.onVesselPartCountChanged.Add(CheckAttached);
                 GameEvents.onVesselCreate.Add(CheckAttached);
             }
-            base.OnStart(state);
         }
 
-        public void Update()
+        public void FixedUpdate()
         {
             if (HighLogic.LoadedSceneIsFlight)
             {
@@ -125,11 +132,13 @@ namespace BDArmory.Weapons
                     {
                         vessel.GetConnectedResourceTotals(FuelID, out double fuelCurrent, out double fuelMax);
                         fuelleft = fuelCurrent;
+                        vessel.GetConnectedResourceTotals(MPID, out double mpCurrent, out double mpMax);
+                        fuelleft += mpCurrent;
                         if (fuelleft <= 0)
                         {
                             if (!hasDetonated && !goingCritical)
                             {
-                                if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.RWPS3R2NukeModule]: nerva on " + Sourcevessel + " is out of fuel.");
+                                if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.RWPS3R2NukeModule]: nerva on " + (String.IsNullOrEmpty(Sourcevessel)? Sourcevessel : part.vessel.GetName()) + " is out of fuel.");
                                 StartCoroutine(DelayedDetonation(meltDownDuration)); //bingo fuel, detonate
                             }
                         }
@@ -177,7 +186,7 @@ namespace BDArmory.Weapons
         {
             if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.RWPS3R2NukeModule]: Nuclear engine on " + Sourcevessel + " going critical in " + delay.ToString("0.0") + "s.");
             goingCritical = true;
-            yield return new WaitForSeconds(delay);
+            yield return new WaitForSecondsFixed(delay);
             if (!hasDetonated && part != null) Detonate();
         }
 
@@ -193,14 +202,14 @@ namespace BDArmory.Weapons
             {
                 return;
             }
-            if (missile != null &&
-                (missile.MissileState == MissileBase.MissileStates.Idle || missile.MissileState == MissileBase.MissileStates.Drop))
+            if (Launcher != null &&
+                (Launcher.MissileState == MissileBase.MissileStates.Idle || Launcher.MissileState == MissileBase.MissileStates.Drop))
             {
                 return;
             }
             if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.BDModuleNuke]: Running Detonate() on nukeModule in vessel " + Sourcevessel);
             //affect any nearby parts/vessels that aren't the source vessel
-            NukeFX.CreateExplosion(part.transform.position, ExplosionSourceType.BattleDamage, Sourcevessel, reportingName, 0, thermalRadius, yield, fluence, isEMP, blastSoundPath, flashModelPath, shockModelPath, blastModelPath, plumeModelPath, debrisModelPath, "", "");
+            NukeFX.CreateExplosion(part.transform.position, Launcher != null ? ExplosionSourceType.Missile : ExplosionSourceType.BattleDamage, Sourcevessel, reportingName, 0, thermalRadius, yield, fluence, isEMP, blastSoundPath, flashModelPath, shockModelPath, blastModelPath, plumeModelPath, debrisModelPath, "", "");
             hasDetonated = true;
             if (part.vessel != null) // Already in the process of being destroyed.
                 part.Destroy();
@@ -216,7 +225,7 @@ namespace BDArmory.Weapons
                 output.AppendLine($"Yield: {yield}");
                 output.AppendLine($"Generates EMP: {isEMP}");
             }
-            if (missile != null)
+            if (Launcher != null)
             {
                 output.AppendLine($"Nuclear Warhead");
                 output.AppendLine($"Yield: {yield}");
