@@ -967,6 +967,8 @@ namespace BDArmory.VesselSpawning
             if (finalSpawnRotations.ContainsKey(vesselName)) finalSpawnRotations.Remove(vesselName);
             SpawnUtils.RemoveVessel(vessel);
         }
+
+        public Dictionary<string, string> GetSpawnedVesselURLs() => spawnedVesselURLs.ToDictionary(kvp => kvp.Key, kvp => kvp.Value); // Return a copy.
         #endregion
         #endregion
     }

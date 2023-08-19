@@ -271,6 +271,7 @@
     <Compile Include="UI\KrakensbaneDebug.cs" />
     <Compile Include="UI\LoadedVesselSwitcher.cs" />
     <Compile Include="UI\RemoteOrchestrationWindow.cs" />
+    <Compile Include="UI\ScoreWindow.cs" />
     <Compile Include="UI\VesselSpawnerWindow.cs" />
     <Compile Include="Utils\AIUtils.cs" />
     <Compile Include="Utils\BDAEditorTools.cs" />

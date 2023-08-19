@@ -897,10 +897,7 @@ namespace BDArmory.Radar
                 }
             }
 
-            if (Event.current.type == EventType.MouseUp && resizingWindow)
-            {
-                resizingWindow = false;
-            }
+            if (resizingWindow && Event.current.type == EventType.MouseUp) { resizingWindow = false; }
             const string windowTitle = "Radar";
             BDArmorySetup.WindowRectRadar = GUI.Window(524141, BDArmorySetup.WindowRectRadar, WindowRadar, windowTitle, GUI.skin.window);
             GUIUtils.UseMouseEventInRect(BDArmorySetup.WindowRectRadar);
@@ -1815,7 +1812,7 @@ namespace BDArmory.Radar
             var vesselIndex = displayedTargets.FindIndex(t => t.vessel == vessel);
             if (vesselIndex != -1)
             {
-                activeLockedTargetIndex = vesselIndex;
+                activeLockedTargetIndex = lockedTargetIndexes.IndexOf(vesselIndex);
                 UpdateLockedTargets();
                 return true;
             }
@@ -1856,11 +1853,10 @@ namespace BDArmory.Radar
         public void UnlockSelectedTarget(Vessel vessel)
         {
             if (!locked) return;
-
             var vesselIndex = displayedTargets.FindIndex(t => t.vessel == vessel);
             if (vesselIndex != -1)
             {
-                ModuleRadar rad = displayedTargets[lockedTargetIndexes[vesselIndex]].detectedByRadar;
+                ModuleRadar rad = displayedTargets[vesselIndex].detectedByRadar;
                 rad.UnlockTargetAt(rad.currentLockIndex);
             }
         }
@@ -2243,7 +2239,7 @@ namespace BDArmory.Radar
                     }
                 }
             }
-            
+
         }
 
         private void DrawDisplayedIRContacts()

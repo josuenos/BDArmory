@@ -249,6 +249,7 @@ namespace BDArmory.UI
             HPvisualizer = false;
             HullVisualizer = false;
             LiftVisualizer = false;
+            if (thicknessField != null && thicknessField.ContainsKey("Thickness")) thicknessField["Thickness"].tryParseValueNow();
             Visualize();
         }
 
@@ -279,7 +280,10 @@ namespace BDArmory.UI
 
             GUIStyle style = BDArmorySetup.BDGuiSkin.label;
 
-            useNumField = GUI.Toggle(new Rect(windowRect.width - 36, 2, 16, 16), useNumField, "#", useNumField ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+            if (useNumField != (useNumField = GUI.Toggle(new Rect(windowRect.width - 36, 2, 16, 16), useNumField, "#", useNumField ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))
+            {
+                if (!useNumField && thicknessField != null && thicknessField.ContainsKey("Thickness")) thicknessField["Thickness"].tryParseValueNow();
+            }
 
             float line = 1.5f;
 
@@ -364,8 +368,9 @@ namespace BDArmory.UI
                 }
                 else
                 {
-                    thicknessField["Thickness"].tryParseValue(GUI.TextField(new Rect(20, line * lineHeight, 260, lineHeight), thicknessField["Thickness"].possibleValue, 4));
-                    Thickness = Mathf.Min((float)thicknessField["Thickness"].currentValue, maxThickness); // FIXME Mathf.Min shouldn't be necessary if the maxValue of the thicknessField has been updated for maxThickness
+                    var field = thicknessField["Thickness"];
+                    field.tryParseValue(GUI.TextField(new Rect(20, line * lineHeight, 260, lineHeight), field.possibleValue, 4, field.style));
+                    Thickness = Mathf.Min((float)field.currentValue, maxThickness); // FIXME Mathf.Min shouldn't be necessary if the maxValue of the thicknessField has been updated for maxThickness
                     line++;
                 }
                 line += 0.75f;
@@ -633,7 +638,7 @@ namespace BDArmory.UI
                     }
                 }
             wingLoading = totalLift / EditorLogic.fetch.ship.GetTotalMass(); //convert to kg/m2. 1 LiftingArea is ~ 3.51m2, or ~285kg/m2
-            totalLiftArea = totalLift * 3.51f;
+            totalLiftArea = totalLift * 3.52f;
             WLRatio = (EditorLogic.fetch.ship.GetTotalMass() * 1000) / totalLiftArea;
 
             CalculateTotalLiftStacking();

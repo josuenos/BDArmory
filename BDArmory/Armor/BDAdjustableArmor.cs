@@ -5,6 +5,7 @@ using UnityEngine;
 using BDArmory.Damage;
 using KSP.Localization;
 using BDArmory.Utils;
+using BDArmory.Settings;
 
 namespace BDArmory.Armor
 {
@@ -50,7 +51,7 @@ namespace BDArmory.Armor
 
             Fields["scaleneWidth"].guiActiveEditor = scaleneTri;
             UI_FloatSemiLogRange AWidth = (UI_FloatSemiLogRange)Fields["Width"].uiControlEditor;
-            AWidth.UpdateLimits(clamped ? 0.1f : 0.01f, scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100);
+            AWidth.UpdateLimits(clamped ? 0.1f : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.x, scaleneTri ? clamped ? maxScale / 2 : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y / 2 : clamped ? maxScale : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y);
 
             if (scaleneTri)
             {
@@ -94,11 +95,11 @@ namespace BDArmory.Armor
             }
 
             UI_FloatSemiLogRange AWidth = (UI_FloatSemiLogRange)Fields["Width"].uiControlEditor;
-            AWidth.UpdateLimits(clamped ? 0.1f : 0.01f, scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100);
+            AWidth.UpdateLimits(clamped ? 0.1f : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.x, scaleneTri ? clamped ? maxScale / 2 : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y / 2 : clamped ? maxScale : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y);
             UI_FloatSemiLogRange ALength = (UI_FloatSemiLogRange)Fields["Length"].uiControlEditor;
-            ALength.UpdateLimits(clamped ? 0.1f : 0.01f, clamped ? maxScale : 100);
+            ALength.UpdateLimits(clamped ? 0.1f : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.x, clamped ? maxScale : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y);
             UI_FloatSemiLogRange SWidth = (UI_FloatSemiLogRange)Fields["scaleneWidth"].uiControlEditor;
-            SWidth.UpdateLimits(clamped ? 0.1f : 0.01f, clamped ? maxScale / 2 : 50);
+            SWidth.UpdateLimits(clamped ? 0.1f : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.x, clamped ? maxScale / 2 : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y / 2);
 
             if (!clamped)
             {
@@ -212,7 +213,7 @@ namespace BDArmory.Armor
 
         public void AdjustWidth(BaseField field, object obj)
         {
-            Width = Mathf.Clamp(Width, clamped ? 0.1f : 0.01f, scaleneTri ? clamped ? maxScale / 2 : 50 : clamped ? maxScale : 100);
+            Width = Mathf.Clamp(Width, clamped ? 0.1f : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.x, scaleneTri ? clamped ? maxScale / 2 : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y / 2 : clamped ? maxScale : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y);
             for (int i = 0; i < armorTransforms.Length; i++)
             {
                 armorTransforms[i].localScale = new Vector3(Width, Length, armorthickness);
@@ -235,7 +236,7 @@ namespace BDArmory.Armor
         }
         public void AdjustSWidth(BaseField field, object obj)
         {
-            scaleneWidth = Mathf.Clamp(scaleneWidth, clamped ? 0.1f : 0.01f, clamped ? maxScale / 2 : 50);
+            scaleneWidth = Mathf.Clamp(scaleneWidth, clamped ? 0.1f : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.x, clamped ? maxScale / 2 : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y / 2);
             for (int i = 0; i < scaleneTransforms.Length; i++)
             {
                 scaleneTransforms[i].localScale = new Vector3(scaleneWidth * 2, Length, armorthickness);
@@ -251,7 +252,7 @@ namespace BDArmory.Armor
         }
         public void AdjustLength(BaseField field, object obj)
         {
-            Length = Mathf.Clamp(Length, clamped ? 0.1f : 0.01f, clamped ? maxScale : 100);
+            Length = Mathf.Clamp(Length, clamped ? 0.1f : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.x, clamped ? maxScale : BDArmorySettings.PROC_ARMOR_ALT_LIMITS.y);
             for (int i = 0; i < armorTransforms.Length; i++)
             {
                 armorTransforms[i].localScale = new Vector3(Width, Length, armorthickness);
@@ -302,7 +303,7 @@ namespace BDArmory.Armor
             part.DragCubes.ResetCubeWeights();
             part.DragCubes.ForceUpdate(true, true, false);
             part.DragCubes.SetDragWeights();
-            if (HighLogic.LoadedSceneIsEditor)  GameEvents.onEditorShipModified.Fire(EditorLogic.fetch.ship);
+            if (HighLogic.LoadedSceneIsEditor) GameEvents.onEditorShipModified.Fire(EditorLogic.fetch.ship);
         }
         public void UpdateStackNode(bool translateChidren)
         {

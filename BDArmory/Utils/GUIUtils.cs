@@ -157,7 +157,7 @@ namespace BDArmory.Utils
         public static void UseMouseEventInRect(Rect rect)
         {
             if (Event.current == null) return;
-            if (GUIUtils.MouseIsInRect(rect) && ((Event.current.isMouse && (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)) || Event.current.isScrollWheel))
+            if (GUIUtils.MouseIsInRect(rect) && ((Event.current.isMouse && Event.current.type == EventType.MouseDown) || Event.current.isScrollWheel)) // Don't consume MouseUp events as multiple windows should use these.
             {
                 Event.current.Use();
             }

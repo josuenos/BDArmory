@@ -455,7 +455,8 @@ namespace BDArmory.VesselSpawning
             if (!spawning)
             {
                 var overLand = (worldIndex != -1 ? FlightGlobals.Bodies[worldIndex] : FlightGlobals.currentMainBody).TerrainAltitude(latitude, longitude) > 0;
-                FlightGlobals.fetch.SetVesselPosition(worldIndex != -1 ? worldIndex : FlightGlobals.currentMainBody.flightGlobalsIndex, latitude, longitude, overLand ? Math.Max(5, altitude) : altitude, FlightGlobals.ActiveVessel.vesselType == VesselType.Plane ? 0 : 90, 0, true, overLand); // FIXME This should be using the vessel reference transform to determine the inclination. Also below.
+                var easeToSurface = altitude <= 10;
+                FlightGlobals.fetch.SetVesselPosition(worldIndex != -1 ? worldIndex : FlightGlobals.currentMainBody.flightGlobalsIndex, latitude, longitude, overLand ? Math.Max(5, altitude) : altitude, FlightGlobals.ActiveVessel.vesselType == VesselType.Plane ? 0 : 90, 0, true, easeToSurface, easeToSurface ? 0.1 : 1); // FIXME This should be using the vessel reference transform to determine the inclination. Also below.
                 FloatingOrigin.SetOffset(FlightGlobals.ActiveVessel.transform.position); // This adjusts local coordinates, such that the vessel position is (0,0,0).
                 VehiclePhysics.Gravity.Refresh();
             }

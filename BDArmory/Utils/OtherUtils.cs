@@ -198,4 +198,14 @@ namespace BDArmory.Utils
     }
 
     public enum Toggle { On, Off, Toggle, NoChange }; // Turn something on, off, toggle it or leave it as it is.
+
+
+    /// <summary>
+    /// For serializing List<List<string>>
+    /// </summary>
+    [Serializable]
+    public struct StringList
+    {
+        public List<string> ls;
+    }
 }

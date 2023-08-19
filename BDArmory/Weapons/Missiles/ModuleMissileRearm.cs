@@ -35,10 +35,10 @@ UI_FloatRange(minValue = 1f, maxValue = 4, stepIncrement = 1f, scene = UI_Scene.
         [KSPField] public float reloadTime = 5f;
         [KSPField] public bool AccountForAmmo = true;
         [KSPField] public float maxAmmo = 20;
-        public float tntmass = 1;
+        //public float tntmass = 1;
         AvailablePart missilePart;
         public Part SpawnedMissile;
-        public void SpawnMissile(Transform MissileTransform, float offset = 0, bool deductAmmo = true)
+        public bool SpawnMissile(Transform MissileTransform, float offset = 0, bool deductAmmo = true)
         {
             if (ammoCount >= 1 || BDArmorySettings.INFINITE_ORDINANCE)
             {
@@ -58,11 +58,12 @@ UI_FloatRange(minValue = 1f, maxValue = 4, stepIncrement = 1f, scene = UI_Scene.
                             if (MMR != null) SpawnedMissile.RemoveModule(MMR);
                             if (!BDArmorySettings.INFINITE_ORDINANCE && deductAmmo) ammoCount--;
                             if (BDArmorySettings.DEBUG_MISSILES) Debug.Log("[BDArmory.ModuleMissileRearm] spawned " + SpawnedMissile.name + "; ammo remaining: " + ammoCount);
-                            return;
+                            return true;
                         }
                     }
                 }
             }
+            return false;
         }
 
         public override void OnStart(PartModule.StartState state)
@@ -71,7 +72,8 @@ UI_FloatRange(minValue = 1f, maxValue = 4, stepIncrement = 1f, scene = UI_Scene.
             this.part.force_activate();
             var MML = part.FindModuleImplementing<MultiMissileLauncher>();
             if (MML == null || MML && MML.isClusterMissile) MissileName = part.name;
-            StartCoroutine(GetMissileValues());
+            if (HighLogic.LoadedSceneIsEditor || HighLogic.LoadedSceneIsFlight)
+                StartCoroutine(GetMissileValues());
             //GameEvents.onEditorShipModified.Add(ShipModified);
             UI_FloatRange Ammo = (UI_FloatRange)Fields["ammoCount"].uiControlEditor;
             Ammo.maxValue = maxAmmo;
@@ -85,16 +87,16 @@ UI_FloatRange(minValue = 1f, maxValue = 4, stepIncrement = 1f, scene = UI_Scene.
         {
             if (part.parent)
             {
-
+                /*
                 if (part.parent.FindModuleImplementing<MissileTurret>()) //turrets work... sorta. Missiles are reloading where they should be, but there's some massive force being imparted on the turret every launch
                 {// test UpdateMissileChildren fix used for rotary rails?
                     ammoCount = 1;
                     Fields["ammoCount"].guiActiveEditor = false;
                 }
                 else
-                {
-                    Fields["ammoCount"].guiActiveEditor = true;
-                }
+                {*/
+                Fields["ammoCount"].guiActiveEditor = true;
+                //}
 
             }
         }
@@ -115,20 +117,16 @@ UI_FloatRange(minValue = 1f, maxValue = 4, stepIncrement = 1f, scene = UI_Scene.
                         continue;
                     if (parts.Current.partPrefab.partInfo.name != MissileName) continue;
                     missilePart = parts.Current;
-                    //Debug.Log($"[BDArmory.ModuleMissileRearm]: found {missilePart.partPrefab.partInfo.name}");
+                    if (BDArmorySettings.DEBUG_MISSILES) Debug.Log($"[BDArmory.ModuleMissileRearm]: found {missilePart.partPrefab.partInfo.name}");
                     break;
                 }
             if (missilePart == null)
             {
                 Debug.LogWarning($"[BDArmory.ModuleMissileRearm]: Failed to find missile part on {part.partInfo.name}");
-                tntmass = 0;
                 missileCost = 0;
                 missileMass = 0;
                 yield break;
             }
-            var explosivePart = missilePart.partPrefab.FindModuleImplementing<BDExplosivePart>();
-            if (explosivePart != null) tntmass = explosivePart.tntMass;
-            else tntmass = 0;
             if (AccountForAmmo)
             {
                 missileCost = missilePart.partPrefab.partInfo.cost;

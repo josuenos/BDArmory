@@ -29,9 +29,13 @@ namespace BDArmory.Control
 
         bool controlEnabled;
 
+        float possibleAccel;
         private float smoothedAccel = 0; // smoothed acceleration, prevents super fast toggling of afterburner
         bool shouldSetAfterburners = false;
         bool setAfterburnersEnabled = false;
+        float geeForce = 9.81f;
+        float gravAccel = 0;
+        public float TWR { get; private set; } = 1; // Maximum TWR for the current engine modes.
 
         //[KSPField(guiActive = true, guiName = "Thrust")]
         public float debugThrust;
@@ -96,13 +100,12 @@ namespace BDArmory.Control
 
         void SetAcceleration(float accel, FlightCtrlState s)
         {
-            float gravAccel = GravAccel();
+            gravAccel = GravAccel();
             float requestEngineAccel = accel - gravAccel;
 
             possibleAccel = 0; //gravAccel;
 
-            float dragAccel = 0;
-            float engineAccel = MaxEngineAccel(requestEngineAccel, out dragAccel);
+            float engineAccel = MaxEngineAccel(requestEngineAccel, out float dragAccel);
 
             if (throttleOverride >= 0)
             {
@@ -184,12 +187,13 @@ namespace BDArmory.Control
             float vesselMass = vessel.GetTotalMass();
 
             float accel = maxThrust / vesselMass; // This assumes that all thrust is in the same direction.
+            TWR = accel / geeForce; // GravAccel gets called before this.
 
             float alpha = 0.05f; // Approx 25 frame (0.5s) lag (similar to 50 frames moving average, but with more weight on recent values and much faster to calculate).
             smoothedAccel = smoothedAccel * (1f - alpha) + alpha * accel;
 
             //estimate drag
-            float estimatedCurrentAccel = finalThrust / vesselMass - GravAccel();
+            float estimatedCurrentAccel = finalThrust / vesselMass - gravAccel;
             Vector3 vesselAccelProjected = Vector3.Project(vessel.acceleration_immediate, vessel.velocityD.normalized);
             float actualCurrentAccel = vesselAccelProjected.magnitude * Mathf.Sign(Vector3.Dot(vesselAccelProjected, vessel.velocityD.normalized));
             float accelError = (actualCurrentAccel - estimatedCurrentAccel); // /2 -- why divide by 2 here?
@@ -215,11 +219,18 @@ namespace BDArmory.Control
                 while (mmes.MoveNext())
                 {
                     if (mmes.Current == null) continue;
-                    if (enable)
+
+                    bool afterburnerHasFuel = true;
+                    using (var fuel = mmes.Current.SecondaryEngine.propellants.GetEnumerator())
+                        while (fuel.MoveNext())
+                        {
+                            if (!GetABresources(fuel.Current.id)) afterburnerHasFuel = false;
+                        }
+                    if (enable && afterburnerHasFuel)
                     {
                         if (mmes.Current.runningPrimary)
                         {
-                            mmes.Current.Events["ModeEvent"].Invoke();
+                            if (afterburnerHasFuel) mmes.Current.Events["ModeEvent"].Invoke();
                         }
                     }
                     else
@@ -229,9 +240,14 @@ namespace BDArmory.Control
                             mmes.Current.Events["ModeEvent"].Invoke();
                         }
                     }
+
                 }
         }
-
+        public bool GetABresources(int fuelID)
+        {
+            vessel.GetConnectedResourceTotals(fuelID, out double fuelCurrent, out double fuelMax);
+            return fuelCurrent > 0;
+        }
         private static bool IsAfterBurnerEngine(MultiModeEngine engine)
         {
             if (engine == null)
@@ -246,11 +262,9 @@ namespace BDArmory.Control
         float GravAccel()
         {
             Vector3 geeVector = FlightGlobals.getGeeForceAtPosition(vessel.CoM);
-            float gravAccel = geeVector.magnitude * Mathf.Cos(Mathf.Deg2Rad * Vector3.Angle(-geeVector, vessel.velocityD)); // -g.v/|v| ???
-            return gravAccel;
+            geeForce = geeVector.magnitude;
+            return geeForce * Mathf.Cos(Mathf.Deg2Rad * Vector3.Angle(-geeVector, vessel.velocityD)); // -g.v/|v| ???
         }
-
-        float possibleAccel;
 
         public float GetPossibleAccel()
         {

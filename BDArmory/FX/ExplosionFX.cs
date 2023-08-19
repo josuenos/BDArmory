@@ -201,7 +201,7 @@ namespace BDArmory.FX
                 {
                     case ExplosionSourceType.Missile:
                         var explosivePart = ExplosivePart ? ExplosivePart.FindModuleImplementing<BDExplosivePart>() : null; //isn't this already set in the explosion setup?
-                        sourceVesselName = explosivePart ? explosivePart.sourcevessel.GetName() : SourceVesselName;
+                        sourceVesselName = explosivePart ? explosivePart.SourceVesselName : SourceVesselName;
                         break;
                     default: // Everything else.
                         sourceVesselName = SourceVesselName;
@@ -318,9 +318,13 @@ namespace BDArmory.FX
                         if (partHit != null)
                         {
                             if (ProjectileUtils.IsIgnoredPart(partHit)) continue; // Ignore ignored parts.
-                            if (ExplosivePart != null && partHit.name == ExplosivePart.name) continue; //don't fratricide fellow missiles/bombs in a launched salvo when the first detonates
+                            if (ExplosivePart != null && partHit.name == ExplosivePart.name)
+                            {
+                                var partHitExplosivePart = partHit.GetComponent<BDExplosivePart>();
+                                if (partHitExplosivePart != null && sourceVesselName == partHitExplosivePart.SourceVesselName) continue; //don't fratricide fellow missiles/bombs in a launched salvo when the first detonates
+                            }
                             if (partHit.mass > 0 && !explosionEventsPartsAdded.Contains(partHit))
-                            {   
+                            {
                                 var damaged = ProcessPartEvent(partHit, Vector3.Distance(hitCollidersEnu.Current.ClosestPoint(Position), Position), sourceVesselName, explosionEventsPreProcessing, explosionEventsPartsAdded);
                                 // If the explosion derives from a missile explosion, count the parts damaged for missile hit scores.
                                 if (damaged && BDACompetitionMode.Instance)

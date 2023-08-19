@@ -44,6 +44,7 @@ namespace BDArmory.Weapons.Missiles
         public static MissileLaunchParams GetDynamicLaunchParams(MissileBase missile, Vector3 targetVelocity, Vector3 targetPosition, float maxAngleOffTarget = -1, bool unguidedGuidedMissile = false)
         {
             if (missile == null || missile.part == null) return new MissileLaunchParams(0, 0); // Safety check in case the missile part is being destroyed at the same time.
+            if (!BDArmorySettings.USE_DLZ_LAUNCH_RANGE) return new MissileLaunchParams(missile.engageRangeMin, missile.engageRangeMax);
             Vector3 launcherVelocity = missile.vessel.Velocity();
             Vector3 launcherPosition = missile.part.transform.position;
             Vector3 vectorToTarget = targetPosition - launcherPosition;

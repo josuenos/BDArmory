@@ -232,11 +232,14 @@ namespace BDArmory.VesselSpawning
 
                     foreach (var craftUrl in team)
                     {
-                        // Figure out spawn point and orientation
-                        var position = teamSpawnPosition + intraTeamSeparation * (teamSpawnCount - (team.Count - 1) / 2) * spreadDirection;
-                        vesselSpawnConfigs.Add(new VesselSpawnConfig(craftUrl, position, facingDirection, (float)spawnConfig.altitude, -80f, spawnAirborne));
-                        ++spawnedVesselCount;
+                        // Figure out spawn point and orientation (staggered similarly to formation and slightly spread depending on how closely starting to each other).
                         ++teamSpawnCount;
+                        var position = teamSpawnPosition
+                            + intraTeamSeparation * (teamSpawnCount % 2 == 1 ? -teamSpawnCount / 2 : teamSpawnCount / 2) * spreadDirection
+                            + intraTeamSeparation / 3f * (team.Count / 2 - teamSpawnCount / 2) * facingDirection;
+                        var individualFacingDirection = Quaternion.AngleAxis((teamSpawnCount % 2 == 1 ? -teamSpawnCount / 2 : teamSpawnCount / 2) * 200f / (20f + intraTeamSeparation), radialUnitVector) * facingDirection;
+                        vesselSpawnConfigs.Add(new VesselSpawnConfig(craftUrl, position, individualFacingDirection, (float)spawnConfig.altitude, -80f, spawnAirborne));
+                        ++spawnedVesselCount;
                     }
                     ++spawnedTeamCount;
                 }

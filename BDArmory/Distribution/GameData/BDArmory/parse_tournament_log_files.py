@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
-VERSION = "1.22.0"
+VERSION = "1.22.1"
 
 parser = argparse.ArgumentParser(description="Tournament log parser", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('tournament', type=str, nargs='*', help="Tournament folder to parse.")
@@ -297,7 +297,7 @@ for tournamentNumber, tournamentDir in enumerate(tournamentDirs):
         },
         'craft': {
             craft: {
-                'wins': len([1 for round in tournamentData.values() for heat in round.values() if heat['result']['result'] == "Win" and craft in next(iter(heat['result']['teams'].values())).split(", ")]),
+                'wins': len([1 for round in tournamentData.values() for heat in round.values() if heat['result']['result'] == "Win" and json.dumps(craft)[1:-1] in next(iter(heat['result']['teams'].values())).split(", ")]),
                 'survivedCount': len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'ALIVE']),
                 'miaCount': len([1 for round in tournamentData.values() for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'MIA']),
                 'deathCount': (
@@ -365,7 +365,7 @@ for tournamentNumber, tournamentDir in enumerate(tournamentDirs):
     per_round_summary = {  # Compute this here, since we need the per-round waypoint info to avoid negative scores.
         craft: [
             {
-                'wins': len([1 for heat in round.values() if heat['result']['result'] == "Win" and craft in next(iter(heat['result']['teams'].values())).split(", ")]),
+                'wins': len([1 for heat in round.values() if heat['result']['result'] == "Win" and json.dumps(craft)[1:-1] in next(iter(heat['result']['teams'].values())).split(", ")]),
                 'survivedCount': len([1 for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'ALIVE']),
                 'miaCount': len([1 for heat in round.values() if craft in heat['craft'] and heat['craft'][craft]['state'] == 'MIA']),
                 'deathCount': (

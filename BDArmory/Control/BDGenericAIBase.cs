@@ -383,7 +383,7 @@ namespace BDArmory.Control
             debugString.AppendLine(text);
         }
 
-        protected void SetStatus(string text)
+        protected virtual void SetStatus(string text)
         {
             currentStatus = text;
             // DebugLine(text);

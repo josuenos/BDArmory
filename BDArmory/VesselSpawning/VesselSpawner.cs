@@ -125,6 +125,11 @@ namespace BDArmory.VesselSpawning
             if (!string.IsNullOrEmpty(vesselData.craftURL))
             {
                 var craftNode = ConfigNode.Load(vesselData.craftURL);
+                if (craftNode == null)
+                {
+                    Debug.LogError($"[BDArmory.VesselSpawner]: Failed to load {vesselData.craftURL}.");
+                    return null;
+                }
                 shipConstruct = new ShipConstruct();
                 if (!shipConstruct.LoadShip(craftNode))
                 {
