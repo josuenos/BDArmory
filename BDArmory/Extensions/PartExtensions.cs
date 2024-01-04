@@ -417,6 +417,7 @@ namespace BDArmory.Extensions
 
         public static bool IsMissile(this Part part)
         {
+            if (part == null) return false;
             if (part.Modules.Contains("BDModularGuidance")) return true;
             if (part.Modules.Contains("MissileBase") || part.Modules.Contains("MissileLauncher"))
             {
@@ -520,7 +521,7 @@ namespace BDArmory.Extensions
         }
         public static bool IsMotor(this Part part)
         {
-            if (part.GetComponent<ModuleEngines>() != null || part.GetComponent<ModuleEnginesFX>() != null)
+            if (part.GetComponent<ModuleEngines>() != null)
                 return true;
             else return false;
         }

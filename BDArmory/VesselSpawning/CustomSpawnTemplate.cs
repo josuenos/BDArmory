@@ -118,7 +118,12 @@ namespace BDArmory.VesselSpawning
             #region Initialisation and sanity checks
             // Tally up the craft to spawn and figure out teams.
             spawnConfig.craftFiles = spawnConfig.customVesselSpawnConfigs.SelectMany(team => team).Select(config => config.craftURL).Where(craftURL => !string.IsNullOrEmpty(craftURL)).ToList();
-            LogMessage("Spawning " + spawnConfig.craftFiles.Count + " vessels at an altitude of " + spawnConfig.altitude.ToString("G0") + "m" + (spawnConfig.craftFiles.Count > 8 ? ", this may take some time..." : "."));
+            var spawnAirborne = spawnConfig.altitude > 10f;
+            var spawnBody = FlightGlobals.Bodies[spawnConfig.worldIndex];
+            var spawnInOrbit = spawnConfig.altitude >= spawnBody.MinSafeAltitude(); // Min safe orbital altitude
+            var withInitialVelocity = spawnAirborne && BDArmorySettings.VESSEL_SPAWN_INITIAL_VELOCITY;
+            var spawnPitch = withInitialVelocity ? 0f : -80f;
+            LogMessage($"Spawning {spawnConfig.craftFiles.Count} vessels at an altitude of {spawnConfig.altitude.ToString("G0")}m ({(spawnInOrbit ? "in orbit" : spawnAirborne ? "airborne" : "landed")}).");
             #endregion
 
             yield return AcquireSpawnPoint(spawnConfig, 100f, false);
@@ -145,8 +150,9 @@ namespace BDArmory.VesselSpawning
                     vesselSpawnPoint,
                     (Quaternion.AngleAxis(customVesselSpawnConfig.heading, radialUnitVector) * refDirection).ProjectOnPlanePreNormalized(radialUnitVector).normalized,
                     (float)spawnConfig.altitude,
-                    0,
-                    false,
+                    spawnPitch,
+                    spawnAirborne,
+                    spawnInOrbit,
                     customVesselSpawnConfig.teamIndex,
                     false,
                     crew
@@ -169,7 +175,7 @@ namespace BDArmory.VesselSpawning
             SpawnUtils.RevertSpawnLocationCamera(true);
 
             // Spawning has succeeded, vessels have been renamed where necessary and vessels are ready. Time to assign teams and any other stuff.
-            yield return PostSpawnMainSequence(spawnConfig, false, !startCompetitionAfterSpawning);
+            yield return PostSpawnMainSequence(spawnConfig, spawnAirborne, withInitialVelocity, !startCompetitionAfterSpawning);
             if (spawnFailureReason != SpawnFailureReason.None)
             {
                 LogMessage("Vessel spawning FAILED! " + spawnFailureReason);
@@ -384,7 +390,7 @@ namespace BDArmory.VesselSpawning
             }
 
             // Set the locally settable config values.
-            customSpawnConfig.altitude = Mathf.Clamp(BDArmorySettings.VESSEL_SPAWN_ALTITUDE, 2f, 10f);
+            customSpawnConfig.altitude = Mathf.Max(BDArmorySettings.VESSEL_SPAWN_ALTITUDE, 2f);
             customSpawnConfig.killEverythingFirst = true;
 
             this.startCompetitionAfterSpawning = startCompetitionAfterSpawning;

@@ -16,6 +16,8 @@ namespace BDArmory.ModIntegration
         object mouseAimFlightInstance = null;
         Func<object, bool> mouseAimFlightActiveFieldGetter = null;
         bool mouseAimActive = false;
+        Func<object, Vector3> targetPositionFieldGetter = null;
+        Vector3 lastTarget = default;
         float lastChecked = 0;
         Vessel activeVessel = null;
 
@@ -43,6 +45,8 @@ namespace BDArmory.ModIntegration
         {
             try
             {
+                bool foundMouseAimActive = false;
+                bool foundMouseAimTarget = false;
                 foreach (var assy in AssemblyLoader.loadedAssemblies)
                 {
                     if (assy.assembly.FullName.Contains("MouseAimFlight"))
@@ -59,12 +63,23 @@ namespace BDArmory.ModIntegration
                                     if (fieldInfo != null && fieldInfo.Name == "mouseAimActive")
                                     {
                                         mouseAimFlightActiveFieldGetter = ReflectionUtils.CreateGetter<object, bool>(fieldInfo);
-                                        return;
+                                        foundMouseAimActive = true;
                                     }
+                                    else if (fieldInfo.Name == "targetPosition")
+                                    {
+                                        targetPositionFieldGetter = ReflectionUtils.CreateGetter<object, Vector3>(fieldInfo);
+                                        foundMouseAimTarget = true;
+                                    }
+                                    if (foundMouseAimActive && foundMouseAimTarget) return;
                                 }
                             }
                         }
                     }
+                }
+                if (hasMouseAimFlight && (!foundMouseAimActive || !foundMouseAimTarget))
+                {
+                    Debug.LogWarning($"[BDArmory.ModIntegration.MouseAimFlight]: MouseAimFlight mod found, but failed to locate the required fields: mouseAimActive: {foundMouseAimActive}, : targetPosition: {foundMouseAimTarget}");
+                    hasMouseAimFlight = false;
                 }
             }
             catch (Exception e)
@@ -101,6 +116,14 @@ namespace BDArmory.ModIntegration
             return mouseAimActive;
         }
 
+        public Vector3 GetCurrentMouseAimTarget()
+        {
+            if (!IsMouseAimActive) return lastTarget;
+            lastTarget = targetPositionFieldGetter(mouseAimFlightInstance);
+            return lastTarget;
+        }
+
         public static bool IsMouseAimActive => hasMouseAimFlight && Instance != null && Instance.IsMouseAimFlightActive();
+        public static Vector3 GetMouseAimTarget => Instance.GetCurrentMouseAimTarget();
     }
 }

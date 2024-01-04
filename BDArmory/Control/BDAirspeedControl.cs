@@ -158,7 +158,7 @@ namespace BDArmory.Control
             float finalThrust = 0;
             multiModeEngines.Clear();
 
-            using (var engines = VesselModuleRegistry.GetModules<ModuleEngines>(vessel).GetEnumerator())
+            using (var engines = VesselModuleRegistry.GetModuleEngines(vessel).GetEnumerator())
                 while (engines.MoveNext())
                 {
                     if (engines.Current == null) continue;
@@ -275,6 +275,7 @@ namespace BDArmory.Control
     public class BDLandSpeedControl : MonoBehaviour
     {
         public float targetSpeed;
+        public float signedSrfSpeed;
         public Vessel vessel;
         public bool preventNegativeZeroPoint = false;
 
@@ -317,12 +318,12 @@ namespace BDArmory.Control
             }
             else
             {
-                float throttle = zeroPoint + (targetSpeed - (float)vessel.srfSpeed) * gain;
+                float throttle = zeroPoint + (targetSpeed - signedSrfSpeed) * gain; 
                 lastThrottle = Mathf.Clamp(throttle, -1, 1);
                 zeroPoint = (zeroPoint + lastThrottle * zeroMult) * (1 - zeroMult);
                 if (preventNegativeZeroPoint && zeroPoint < 0) zeroPoint = 0;
                 SetThrottle(s, lastThrottle);
-                vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, throttle < -5f);
+                vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, (targetSpeed * signedSrfSpeed < -5)); 
             }
         }
 
@@ -410,5 +411,182 @@ namespace BDArmory.Control
                 axisGroupsModule.UpdateAxisGroup(KSPAxisGroup.MainThrottle, 2f * value - 1f); // Throttle is full-axis: 0—1 throttle maps to -1—1 axis.
             }
         }
+    }
+
+    public class BDOrbitalControl : MonoBehaviour //: PartModule
+    {
+
+        // /////////////////////////////////////////////////////
+        public Vessel vessel;
+        public Vector3 attitude = Vector3.zero;
+        private Vector3 attitudeLerped;
+        private float error;
+        private float angleLerp;
+        public bool lerpAttitude = true;
+        private float lerpRate;
+        private bool lockAttitude = false;
+
+        private bool facingDesiredRotation;
+        public float throttle;
+        public float throttleActual;
+        internal float throttleLerped;
+        public float throttleLerpRate = 1;
+        public float rcsLerpRate = 5;
+        public bool rcsRotate = false;
+        public float alignmentToleranceforBurn = 5;
+
+        AxisGroupsModule axisGroupsModule;
+        bool hasAxisGroupsModule = false; // To avoid repeated null checks
+
+        public Vector3 RCSVector;
+        public Vector3 RCSVectorLerped = Vector3.zero;
+        public float RCSPower = 3f;
+        private Vector3 RCSThrust;
+        private Vector3 up, right, forward;
+        private float RCSThrottle;
+        
+        //[KSPEvent(guiActive = true, guiActiveEditor = false, guiName = "ToggleAC")]
+
+        void Start()
+        {
+            if (!vessel.IsMissile())
+            {
+                axisGroupsModule = vessel.FindVesselModuleImplementingBDA<AxisGroupsModule>(); // Look for an axis group module.
+                if (axisGroupsModule != null) hasAxisGroupsModule = true;
+            }
+        }
+
+        public void Activate()
+        {
+            vessel.OnFlyByWire -= OrbitalControl;
+            vessel.OnFlyByWire += OrbitalControl;
+        }
+
+        public void Deactivate()
+        {
+            vessel.OnFlyByWire -= OrbitalControl;
+        }
+
+        void OrbitalControl(FlightCtrlState s)
+        {
+            error = Vector3.Angle(vessel.ReferenceTransform.up, attitude);
+
+            UpdateSAS(s);
+            UpdateThrottle(s);
+            UpdateRCS(s);
+        }
+
+        private void UpdateThrottle(FlightCtrlState s)
+        {
+            facingDesiredRotation = error < alignmentToleranceforBurn;
+            throttleActual = facingDesiredRotation ? throttle : 0;
+
+            // Move actual throttle towards throttle target gradually.
+            throttleLerped = Mathf.MoveTowards(throttleLerped, throttleActual, throttleLerpRate * Time.fixedDeltaTime);
+
+            SetThrottle(s, throttleLerped);
+
+        }
+
+        /// <summary>
+        /// Set the main throttle and the corresponding axis group.
+        /// </summary>
+        /// <param name="s">The flight control state</param>
+        /// <param name="value">The throttle value</param>
+        public void SetThrottle(FlightCtrlState s, float value)
+        {
+            s.mainThrottle = value;
+            if (hasAxisGroupsModule)
+            {
+                axisGroupsModule.UpdateAxisGroup(KSPAxisGroup.MainThrottle, 2f * value - 1f); // Throttle is full-axis: 0—1 throttle maps to -1—1 axis.
+            }
+        }
+
+        void UpdateRCS(FlightCtrlState s)
+        {
+            if (RCSVector == Vector3.zero) return;
+
+            if (RCSVectorLerped == Vector3.zero)
+                RCSVectorLerped = RCSVector;
+
+            float rcsLerpMag = RCSVectorLerped.magnitude;
+            float rcsLerpT = rcsLerpRate * Time.fixedDeltaTime * Mathf.Clamp01(rcsLerpMag / RCSPower);
+
+            if (rcsRotate) // Quickly rotate RCS thrust towards commanded RCSVector
+                RCSVectorLerped = Vector3.Slerp(RCSVectorLerped, RCSVector, rcsLerpT);
+            else // Gradually lerp RCS thrust towards commanded RCSVector
+                RCSVectorLerped = Vector3.Lerp(RCSVectorLerped, RCSVector, rcsLerpT);
+            RCSThrottle = Mathf.Lerp(0, 1.732f, Mathf.InverseLerp(0, RCSPower, rcsLerpMag));
+            RCSThrust = RCSVectorLerped.normalized * RCSThrottle;
+
+            up = -vessel.ReferenceTransform.forward;
+            forward = -vessel.ReferenceTransform.up;
+            right = Vector3.Cross(up, forward);
+
+            SetAxisControlState(s,
+                Mathf.Clamp(Vector3.Dot(RCSThrust, right), -1, 1),
+                Mathf.Clamp(Vector3.Dot(RCSThrust, up), -1, 1),
+                Mathf.Clamp(Vector3.Dot(RCSThrust, forward), -1, 1));
+
+        }
+
+        void UpdateSAS(FlightCtrlState s)
+        {
+            if (attitude == Vector3.zero || lockAttitude) return;
+
+            // SAS must be turned off. Don't know why.
+            if (vessel.ActionGroups[KSPActionGroup.SAS])
+                vessel.ActionGroups.SetGroup(KSPActionGroup.SAS, false);
+
+            var ap = vessel.Autopilot;
+            if (ap == null) return;
+
+            // The offline SAS must not be on stability assist. Normal seems to work on most probes.
+            if (ap.Mode != VesselAutopilot.AutopilotMode.Normal)
+                ap.SetMode(VesselAutopilot.AutopilotMode.Normal);
+
+            // Lerp attitude while burning to reduce instability.
+            if (lerpAttitude)
+            {
+                angleLerp = Mathf.InverseLerp(0, 10, error);
+                lerpRate = Mathf.Lerp(1, 10, angleLerp);
+                attitudeLerped = Vector3.Lerp(attitudeLerped, attitude, lerpRate * Time.deltaTime);
+            }
+
+            ap.SAS.SetTargetOrientation(throttleLerped > 0 && lerpAttitude ? attitudeLerped : attitude, false);
+        }
+
+        public void Stability(bool enable)
+        {
+            if (lockAttitude == enable) return;
+            lockAttitude = enable;
+
+            var ap = vessel.Autopilot;
+            if (ap == null) return;
+
+            vessel.ActionGroups.SetGroup(KSPActionGroup.SAS, enable);
+            ap.SetMode(enable ? VesselAutopilot.AutopilotMode.StabilityAssist : VesselAutopilot.AutopilotMode.Normal);
+        }
+
+        /// <summary>
+        /// Set the axis control state and also the corresponding axis groups.
+        /// </summary>
+        /// <param name="s">The flight control state</param>
+        /// <param name="X">x</param>
+        /// <param name="Y">y</param>
+        /// <param name="Z">z</param>
+        protected virtual void SetAxisControlState(FlightCtrlState s, float X, float Y, float Z)
+        {
+            s.X = X;
+            s.Y = Y;
+            s.Z = Z;
+            if (hasAxisGroupsModule)
+            {
+                axisGroupsModule.UpdateAxisGroup(KSPAxisGroup.TranslateX, X);
+                axisGroupsModule.UpdateAxisGroup(KSPAxisGroup.TranslateY, Y);
+                axisGroupsModule.UpdateAxisGroup(KSPAxisGroup.TranslateZ, Z);
+            }
+        }
+
     }
 }

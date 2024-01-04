@@ -23,7 +23,7 @@ namespace BDArmory.Utils
             foreach (var missileFire in VesselModuleRegistry.GetModules<MissileFire>(v))
             {
                 PartExploderSystem.AddPartToExplode(missileFire.part);
-                ExplosionFx.CreateExplosion(missileFire.part.transform.position, 1f, explModelPath, explSoundPath, ExplosionSourceType.Other, 0, missileFire.part);
+                ExplosionFx.CreateExplosion(missileFire.part.transform.position, 1f, explModelPath, explSoundPath, ExplosionSourceType.Other, 0, missileFire.part, sourceVelocity:v.Velocity());
                 TargetInfo tInfo;
                 v.vesselType = VesselType.Debris;
                 if (tInfo = v.gameObject.GetComponent<TargetInfo>())

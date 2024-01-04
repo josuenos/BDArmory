@@ -1,4 +1,6 @@
-﻿namespace BDArmory.Radar
+﻿using BDArmory.Extensions;
+
+namespace BDArmory.Radar
 {
     public class ModuleSpaceRadar : ModuleRadar
     {
@@ -12,7 +14,7 @@
         void UpdateRadar()
         {
             if (!radarEnabled) return;
-            if (vessel.atmDensity >= 0.007) // above an atm density of 0.007 the radar will not work
+            if (!vessel.InVacuum()) // above an atm density of 0.007 the radar will not work
             {
                 DisableRadar(); // disable the radar
             }

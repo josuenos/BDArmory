@@ -13,6 +13,7 @@ using BDArmory.Settings;
 using BDArmory.UI;
 using BDArmory.Utils;
 using BDArmory.Weapons.Missiles;
+using BDArmory.Weapons;
 
 namespace BDArmory.VesselSpawning
 {
@@ -26,11 +27,11 @@ namespace BDArmory.VesselSpawning
             VesselSpawnerStatus.spawnFailureReason = SpawnFailureReason.Cancelled;
 
             // Single spawn
-            if (CircularSpawning.Instance.vesselsSpawning || CircularSpawning.Instance.vesselsSpawningOnceContinuously)
+            if (CircularSpawning.Instance && CircularSpawning.Instance.vesselsSpawning || CircularSpawning.Instance.vesselsSpawningOnceContinuously)
             { CircularSpawning.Instance.CancelSpawning(); }
 
             // Continuous spawn
-            if (ContinuousSpawning.Instance.vesselsSpawningContinuously)
+            if (ContinuousSpawning.Instance && ContinuousSpawning.Instance.vesselsSpawningContinuously)
             { ContinuousSpawning.Instance.CancelSpawning(); }
 
             SpawnUtils.RevertSpawnLocationCamera(true);
@@ -101,8 +102,8 @@ namespace BDArmory.VesselSpawning
         static Dictionary<string, int> _partCrewCounts;
 
         #region Camera
-        public static void ShowSpawnPoint(int worldIndex, double latitude, double longitude, double altitude = 0, float distance = 0, bool spawning = false) => SpawnUtilsInstance.Instance.ShowSpawnPoint(worldIndex, latitude, longitude, altitude, distance, spawning); // Note: this may launch a coroutine when not spawning and there's no active vessel!
-        public static void RevertSpawnLocationCamera(bool keepTransformValues = true, bool revertIfDead = false) => SpawnUtilsInstance.Instance.RevertSpawnLocationCamera(keepTransformValues, revertIfDead);
+        public static void ShowSpawnPoint(int worldIndex, double latitude, double longitude, double altitude = 0, float distance = 0, bool spawning = false) { if (SpawnUtilsInstance.Instance) SpawnUtilsInstance.Instance.ShowSpawnPoint(worldIndex, latitude, longitude, altitude, distance, spawning); } // Note: this may launch a coroutine when not spawning and there's no active vessel!
+        public static void RevertSpawnLocationCamera(bool keepTransformValues = true, bool revertIfDead = false) { if (SpawnUtilsInstance.Instance) SpawnUtilsInstance.Instance.RevertSpawnLocationCamera(keepTransformValues, revertIfDead); }
         #endregion
 
         #region Teams
@@ -118,16 +119,16 @@ namespace BDArmory.VesselSpawning
         #endregion
 
         #region Engine Activation
-        public static int CountActiveEngines(Vessel vessel)
+        public static int CountActiveEngines(Vessel vessel, bool andOperational = false)
         {
-            return VesselModuleRegistry.GetModules<ModuleEngines>(vessel).Where(engine => engine.EngineIgnited).ToList().Count + FireSpitter.CountActiveEngines(vessel);
+            return VesselModuleRegistry.GetModuleEngines(vessel).Where(engine => engine.EngineIgnited && (!andOperational || engine.isOperational)).ToList().Count + FireSpitter.CountActiveEngines(vessel);
         }
 
         public static void ActivateAllEngines(Vessel vessel, bool activate = true, bool ignoreModularMissileEngines = true)
         {
-            foreach (var engine in VesselModuleRegistry.GetModules<ModuleEngines>(vessel))
+            foreach (var engine in VesselModuleRegistry.GetModuleEngines(vessel))
             {
-                if (ignoreModularMissileEngines && IsModularMissileEngine(engine)) continue; // Ignore modular missile engines.
+                if (ignoreModularMissileEngines && IsModularMissilePart(engine.part)) continue; // Ignore modular missile engines.
                 if (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55) engine.independentThrottle = false;
                 var mme = engine.part.FindModuleImplementing<MultiModeEngine>();
                 if (mme == null)
@@ -164,9 +165,8 @@ namespace BDArmory.VesselSpawning
             FireSpitter.ActivateFSEngines(vessel, activate);
         }
 
-        public static bool IsModularMissileEngine(ModuleEngines engine)
+        public static bool IsModularMissilePart(Part part)
         {
-            var part = engine.part;
             if (part is not null)
             {
                 var firstDecoupler = BDModularGuidance.FindFirstDecoupler(part.parent, null);
@@ -219,7 +219,7 @@ namespace BDArmory.VesselSpawning
         {
             var message = "";
             List<string> failureStrings = new List<string>();
-            var AI = VesselModuleRegistry.GetBDModulePilotAI(vessel, true);
+            var AI = VesselModuleRegistry.GetModule<BDGenericAIBase>(vessel, true);
             var WM = VesselModuleRegistry.GetMissileFire(vessel, true);
             if (AI == null) message = " has no AI";
             if (WM == null) message += (AI == null ? " or WM" : " has no WM");
@@ -252,7 +252,7 @@ namespace BDArmory.VesselSpawning
 
         public static void CheckAIWMCounts(Vessel vessel)
         {
-            var numberOfAIs = VesselModuleRegistry.GetModuleCount<BDModulePilotAI>(vessel);
+            var numberOfAIs = VesselModuleRegistry.GetModuleCount<BDGenericAIBase>(vessel);
             var numberOfWMs = VesselModuleRegistry.GetModuleCount<MissileFire>(vessel);
             string message = null;
             if (numberOfAIs != 1 && numberOfWMs != 1) message = $"{vessel.vesselName} has {numberOfAIs} AIs and {numberOfWMs} WMs";
@@ -388,6 +388,7 @@ namespace BDArmory.VesselSpawning
         /// <returns></returns>
         public IEnumerator RemoveAllVessels()
         {
+            DisableAllBulletsAndRockets(); // First get rid of any bullets and rockets flying around (missiles count as vessels).
             var vesselsToKill = FlightGlobals.Vessels.ToList();
             // Spawn in the SpawnProbe at the camera position.
             var spawnProbe = VesselSpawner.SpawnSpawnProbe();
@@ -412,12 +413,28 @@ namespace BDArmory.VesselSpawning
             SpawnUtils.originalTeams.Clear();
             yield return new WaitWhile(() => removeVesselsPending > 0);
         }
+
+        public void DisableAllBulletsAndRockets()
+        {
+            if (ModuleWeapon.bulletPool != null)
+                foreach (var bullet in ModuleWeapon.bulletPool.pool)
+                    bullet.SetActive(false);
+            if (ModuleWeapon.shellPool != null)
+                foreach (var shell in ModuleWeapon.shellPool.pool)
+                    shell.SetActive(false);
+            if (ModuleWeapon.rocketPool != null)
+                foreach (var rocketPool in ModuleWeapon.rocketPool.Values)
+                    if (rocketPool != null)
+                        foreach (var rocket in rocketPool.pool)
+                            rocket.SetActive(false);
+        }
         #endregion
 
         #region Camera Adjustment
         GameObject spawnLocationCamera;
         Transform originalCameraParentTransform;
         float originalCameraNearClipPlane;
+        float originalCameraDistance;
         Coroutine delayedShowSpawnPointCoroutine;
         private readonly WaitForFixedUpdate waitForFixedUpdate = new WaitForFixedUpdate();
         /// <summary>
@@ -434,6 +451,7 @@ namespace BDArmory.VesselSpawning
         /// <param name="recurse">State parameter for when we need to spawn a probe first.</param>
         public void ShowSpawnPoint(int worldIndex, double latitude, double longitude, double altitude = 0, float distance = 0, bool spawning = false, bool recurse = true)
         {
+            if (BDArmorySettings.DEBUG_SPAWNING) Debug.Log($"[BDArmory.SpawnUtils]: Showing spawn point ({latitude:G3}, {longitude:G3}, {altitude:G3}) on {FlightGlobals.Bodies[worldIndex].name}");
             if (BDArmorySettings.ASTEROID_RAIN) { AsteroidRain.Instance.Reset(); }
             if (BDArmorySettings.ASTEROID_FIELD) { AsteroidField.Instance.Reset(); }
             if (!spawning && (FlightGlobals.ActiveVessel == null || FlightGlobals.ActiveVessel.state == Vessel.State.DEAD))
@@ -473,6 +491,7 @@ namespace BDArmory.VesselSpawning
                     spawnLocationCamera.SetActive(true);
                     originalCameraParentTransform = flightCamera.transform.parent;
                     originalCameraNearClipPlane = GUIUtils.GetMainCamera().nearClipPlane;
+                    originalCameraDistance = flightCamera.Distance;
                 }
                 spawnLocationCamera.transform.position = Vector3.zero;
                 spawnLocationCamera.transform.rotation = Quaternion.LookRotation(-cameraPosition, radialUnitVector);
@@ -482,7 +501,7 @@ namespace BDArmory.VesselSpawning
                 flightCamera.transform.localRotation = Quaternion.identity;
                 flightCamera.ActivateUpdate();
             }
-            flightCamera.SetDistance(distance);
+            flightCamera.SetDistanceImmediate(distance);
             FlightCamera.CamHdg = cameraHeading;
             FlightCamera.CamPitch = cameraPitch;
         }
@@ -513,14 +532,17 @@ namespace BDArmory.VesselSpawning
             var flightCamera = FlightCamera.fetch;
             if (originalCameraParentTransform != null)
             {
+                var mainCamera = GUIUtils.GetMainCamera();
                 if (keepTransformValues && flightCamera.transform != null && flightCamera.transform.parent != null)
                 {
                     originalCameraParentTransform.position = flightCamera.transform.parent.position;
                     originalCameraParentTransform.rotation = flightCamera.transform.parent.rotation;
-                    originalCameraNearClipPlane = GUIUtils.GetMainCamera().nearClipPlane;
+                    if (mainCamera) originalCameraNearClipPlane = mainCamera.nearClipPlane;
+                    originalCameraDistance = flightCamera.Distance;
                 }
                 flightCamera.transform.parent = originalCameraParentTransform;
-                GUIUtils.GetMainCamera().nearClipPlane = originalCameraNearClipPlane;
+                if (mainCamera) mainCamera.nearClipPlane = originalCameraNearClipPlane;
+                flightCamera.SetDistanceImmediate(originalCameraDistance);
                 flightCamera.SetTargetNone();
                 flightCamera.EnableCamera();
             }

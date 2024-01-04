@@ -64,23 +64,25 @@ namespace BDArmory.Utils
         Vector3 S2;
         float alpha;
         float beta;
-        float rate;
+        readonly float rate;
         public Vector3 Value => 2f * S1 - S2; // The value at the current time.
 
         /// <summary>
         /// Constructor for Brown's double exponential smoothing.
         /// </summary>
-        /// <param name="beta">Smoothing factor.</param>
-        public SmoothingV3(float beta, Vector3 initialValue = default, float rate = 0)
+        /// <param name="beta">Smoothing factor. 0 = no smoothing.</param>
+        /// <param name="initialValue">The initial value to use.</param>
+        /// <param name="rate">The constant rate at which the values are updated. Time.fixedDeltaTime is used if this is 0.</param
+        public SmoothingV3(float beta = 0, Vector3 initialValue = default, float rate = 0)
         {
-            this.alpha = 1f - beta;
-            this.beta = beta;
-            this.rate = rate > 0 ? rate : Time.fixedDeltaTime;
+            this.rate = rate;
+            SetAlpha(1f - beta);
             Reset(initialValue);
         }
 
-        public void Update(Vector3 value)
+        public void Update(Vector3 value, float newAlpha = -1)
         {
+            if (newAlpha >= 0) SetAlpha(newAlpha);
             S1 = alpha * value + beta * S1;
             S2 = alpha * S1 + beta * S2;
         }
@@ -91,8 +93,15 @@ namespace BDArmory.Utils
             S2 = initialValue;
         }
 
+        void SetAlpha(float alpha)
+        {
+            this.alpha = Mathf.Clamp01(alpha);
+            beta = 1f - alpha;
+        }
+
         /// <summary>
         /// Estimate the value at a time later than the most recent update.
+        /// For the value at the current time, use Value instead.
         /// </summary>
         /// <param name="delta">The time difference from now to estimate the value at.</param>
         /// <returns>The estimated value.</returns>
@@ -100,7 +109,7 @@ namespace BDArmory.Utils
         {
             var a = 2f * S1 - S2;
             var b = alpha / beta * (S1 - S2);
-            return a + delta / rate * b;
+            return a + delta / (rate > 0 ? rate : Time.fixedDeltaTime) * b;
         }
     }
 }

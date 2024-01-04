@@ -4,15 +4,21 @@
 - Changing the slider resolution sometimes triggers clamping of unclamped values
 - HP of asteroids in the SPH is wrong.
 - Taking off with the global 'P' button for two VTOL craft on the runway disables their engines!
+- WM without AI or with stationary ground AI sometimes just sits there without attacking valid targets.
 
 
 ### TODO (smaller items and specific requests / higher priority)
 - Fix bugs
 
+- Add tooltips to settings.
+- Add thumbnails to the craft browser.
+- Figure out how to add a 0 value to UI_FloatSemiLogRange sliders.
+- Stability of the targeting cam when slewing with the mouse (jitter).
+
 - Wiki entries
 	- Auto-Tuning
 
-- Requests from #tea
+- Requests from discord:
 	- ? Add an action group trigger to the WM based on the current target being an enemy vessel within a custom distance. - Make it a collapsable section of custom triggers to include other conditions later.
 	- Artillery aiming support
 	- Lift stacking improvements with logical wing segments
@@ -23,6 +29,7 @@
 		- Entering evasion.
 	- Smart part that can trigger an action group when one of the specified parts gets below X% HP.
 		- Would have to work similarly to the KAL to remember which parts it should affect/monitor.
+	- Scope view for aiming tank turrets (similar to the targeting pod, but more direct), maybe holding a button adjusts the camera zoom based on the distance to the target?
 
 - Ilya_G requests:
 	- Omni-radars to include a radiation pattern so that they don't see well along the dipole axis.
@@ -37,7 +44,7 @@
 		- Precision reduction option in aiming guns/guiding missiles.
 		- Laser turrets will still be deadly accurate (increasing maxDeviation would amount to the same thing as targeting jitter).
 		- Add noise (fn of game time, not proper random) to targeting info.
-		- Multiply pos, vel, acc by 1+sin(t)/X for X=10, 100, etc. to simulate sampling noise. t doesn't need to be game time, but something related to the vessel (e.g., speed + time)
+		- Multiply pos, vel, acc by 1+sin(t)/X for X=10, 100, etc. to simulate sampling noise. It doesn't need to be game time, but something related to the vessel (e.g., speed + time)
 	- Multiple ammo types used per shot for weapons (other than just EC).
 
 - Reset things that the RWP slider changes when switching away from the rounds.

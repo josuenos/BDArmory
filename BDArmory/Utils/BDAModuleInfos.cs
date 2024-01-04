@@ -16,6 +16,8 @@ namespace BDArmory.Utils
             //{"WeaponModule", "Weapon"},
             { "BDModuleSurfaceAI", "BDModule Surface AI"},
             { "BDModulePilotAI", "BDModule Pilot AI"},
+            { "BDModuleVTOLAI", "BDModule VTOL AI"},
+            { "BDModuleOrbitalAI", "BDModule Orbital AI"},
         };
 
         public void Start()

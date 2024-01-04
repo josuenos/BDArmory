@@ -518,6 +518,7 @@ namespace BDArmory.WeaponMounts
                         return;
                     }
                 }
+                UpdateMissileChildren(); //missile destroyed before it could be fired, remove from count
                 Debug.LogError("[BDArmory.BDRotaryRail]: No missiles found, but missile count is non-zero.");
             }
         }

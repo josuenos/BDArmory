@@ -30,6 +30,7 @@ Outdated, probably to be deleted:
 - Avoid Linq expressions in critical areas. However, some Linq queries can be parallelised (PLINQ) with ".AsParallel()" and sequentialised with ".AsSequential()". Also, ".ForEach()" does a merge to sequential, while ".ForAll()" doesn't.
 - Avoid excessive object references in structs and classes and prefer identifiers instead — affects GC checks.
 - Trigger GC manually at appropriate times (System.GC.Collect()) when it won't affect gameplay, e.g., when resetting competition stuff.
+- Intel and AMD have hardware support for sqrt, but M1 Macs don't, so we do need to avoid using sqrt in frequently used functions.
 
 - Bad GC routines:
     - part.explode when triggering new vessels causes massive GC alloc, but it's in base KSP, so there's not much that can be done.

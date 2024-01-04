@@ -23,13 +23,58 @@ namespace BDArmory.Utils
     public class BDKrakensbaneSingleton : MonoBehaviour
     {
         public static BDKrakensbaneSingleton Instance;
+
         void Awake()
         {
             if (Instance != null) Destroy(this);
             Instance = this;
         }
+
+        void Start()
+        {
+            TimingManager.FixedUpdateAdd(TimingManager.TimingStage.Earlyish, CheckActiveVessel); // Check for there being an active vessel before the Normal timing phase.
+            TimingManager.FixedUpdateAdd(TimingManager.TimingStage.BetterLateThanNever, Reset); // Reset the flags at the end of the frame.
+            GameEvents.onVesselChange.Add(OnVesselSwitch);
+            GameEvents.onVesselWillDestroy.Add(OnVesselWillDestroy);
+        }
+
         void OnDestroy()
-        { TimingManager.FixedUpdateRemove(TimingManager.TimingStage.BetterLateThanNever, Reset); }
+        {
+            TimingManager.FixedUpdateRemove(TimingManager.TimingStage.Earlyish, CheckActiveVessel); // Check for there being an active vessel before the Normal timing phase.
+            TimingManager.FixedUpdateRemove(TimingManager.TimingStage.BetterLateThanNever, Reset);
+            GameEvents.onVesselChange.Remove(OnVesselSwitch);
+            GameEvents.onVesselWillDestroy.Remove(OnVesselWillDestroy);
+        }
+
+        void Reset()
+        {
+            _frameVelocityCheckedThisFrame = false;
+            _floatingOriginOffsetCheckedThisFrame = false;
+            _floatingOriginOffsetNonKrakensbaneCheckedThisFrame = false;
+            _isActiveCheckedThisFrame = false;
+            _vesselSwitchedThisFrame = false;
+            _activeVesselDied = false;
+        }
+
+        void OnVesselSwitch(Vessel v)
+        {
+            Reset();
+            _vesselSwitchedThisFrame = true;
+        }
+        bool _vesselSwitchedThisFrame = false;
+
+        void OnVesselWillDestroy(Vessel v)
+        {
+            if (!v.isActiveVessel) return;
+            _activeVesselDied = true;
+        }
+        bool _activeVesselDied = false;
+
+        void CheckActiveVessel()
+        {
+            _haveActiveVessel = FlightGlobals.ActiveVessel != null && FlightGlobals.ActiveVessel.gameObject.activeInHierarchy;
+        }
+        bool _haveActiveVessel = false;
 
         public Vector3 GetFrameVelocityV3f
         {
@@ -79,24 +124,13 @@ namespace BDArmory.Utils
             get
             {
                 if (_isActiveCheckedThisFrame) return isActive;
-                isActive = !FloatingOriginOffset.IsZero() || !GetFrameVelocityV3f.IsZero();
+                // If KSP doesn't have an active vessel, it doesn't set the frame velocity to zero immediately. Similarly, the frame velocity isn't immediately set once KSP has an active vessel again.
+                isActive = _haveActiveVessel && !_activeVesselDied && (!FloatingOriginOffset.IsZero() || !GetFrameVelocityV3f.IsZero() || _vesselSwitchedThisFrame);
                 _isActiveCheckedThisFrame = true;
                 return isActive;
             }
         }
         bool isActive = false;
         bool _isActiveCheckedThisFrame = false;
-
-        void Start()
-        {
-            TimingManager.FixedUpdateAdd(TimingManager.TimingStage.BetterLateThanNever, Reset); // Reset the flags before anything else runs.
-        }
-        void Reset()
-        {
-            _frameVelocityCheckedThisFrame = false;
-            _floatingOriginOffsetCheckedThisFrame = false;
-            _floatingOriginOffsetNonKrakensbaneCheckedThisFrame = false;
-            _isActiveCheckedThisFrame = false;
-        }
     }
 }

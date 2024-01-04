@@ -1,4 +1,249 @@
-﻿v1.6.5.0
+v1.6.9.0
+﻿IMPROVEMENTS / FIXES
+- General:
+	- Fix part filtering by search terms in the editors.
+	- Fix Krakensbane adjustments when the active vessel dies.
+	- Fix tracer visuals when the active vessel dies.
+	- Adjust timing and conditions for auto-camera switching to and away from missiles.
+- AI / WM:
+	- Invert the roll target when the fly-to direction is below and behind the craft within the Immelmann turn angle.
+	- Fix automatic gun range adjustments in the WM again.
+	- Prevent Orbital AI from changing attitude while launched missile is still near spacecraft.
+- Weapons:
+  	- Corrections to penetration and ricochet velocity changes and ricochet positions.
+    - Stop APS firing at dead missiles.
+  	- 'subProjectileCount' has been deprecated and replaced with 'projectileCount'; this specifies number of pellets per shot (for shotguns, etc) to make it more intuitive. Existing shotgun-type weapons will need to update their bulletDefs.
+ 	  - The subMunitionType field for beehive ammo now uses the syntax of "ammotype; quantity" (e.g. subMunitionType = 35x228AHEADPellet; 30) with number of projectiles released on detonation set here instead of the subMunition's bulletDef.
+  	- Missiles:
+    		- Fix issue with Rotary Rails trying to use missiles that have previously been blown off from combat damage.
+    		- Fix issue with MultiMissilelauncher Turrets throwing an NRE when AI firing.
+       	- Fix mass changes of missiles that decouple boosters and add missile mass debug telemetry.
+		    - Fix radar and heat targeting leading targets excessively (most apparent in orbit)
+	    	- Change spacing missiles with continous rod warheads from Detonation Distance / 3 to  Min(Blast Radius / 3, Detonation Distance / 3)
+        - Fix missile RCS FX constantly displaying.
+		    - Missiles with RCS/Orbital homing types (i.e. HEKV) in vacuum now perform turn maneuver after launch to face target and only throttle up once facing target.
+
+IMPROVEMENTS / FIXES
+- UI:
+	- Fix the alternate (hidden UI) window locations (for scores and vessel switcher) not being saved correctly.
+- General:
+	- New texture for 1.25m radomes.
+	- Add a max distance threshold setting to Team Icons.
+	- Fix "Camera Switch: Incl. Missiles" not switching to missiles about to hit their target.
+- AI / WM:
+	- Add new Orbital AI part for spacecraft in orbit:
+		- The Orbital AI will use orbital maneuvers to close within gun range of the target to fire weapons. It will also automatically fire missiles when able.
+		- The AI will maneuver at the Maneuver Speed setting and once within gun range try to fire guns while at the Strafe Speed setting.
+		- It will evade missiles based on the countermeasure settings on the Weapons Manager and evade gunfire using AI settings similar to those on the Pilot AI.
+		- When spawned at orbital altitudes using the BDA Vessel Spawner, craft with the Orbital AI will be automatically spawned into orbit (other options for orbital spawning are cheat menu and HyperEdit mod).
+		- Orbital AI is adapted from the StockCombatAI (KCS) mod, check it out here https://github.com/Halbann/StockCombatAI/releases!
+	- Base the Immelmann turn pitch direction on the local pitch angular velocity (i.e., pitch down if already rotating that way — fixes the pitch oscillation behaviour when targeting an opponent behind the craft while inverted near terrain).
+	- Don't summon the NaN-Kraken when the post-terrain avoidance cool-down is 0.
+	- Tightened up 'on target' threshold for dumbfiring missiles.
+	- Perform banked turns when the target is behind us at long range and extending is allowed instead of Immelmann turns or turning directly to target. Threshold is clamp(8 * max speed, 1000, 4000).
+	- Pilot AI turns will now turn harder (using Max AoA setting) towards the notch direction the closer the missile is to impact.
+	- Factor the user-defined steer limit into the turn radius calculations.
+	- Use a more gentle take-off slope for the initial take-off.
+	- Add an Evasion Min Range Threshold option to only trigger evasion from an attacker using guns when they're beyond that distance.
+	- If enemies are detected nearby but beyond gun range and we're not aiming, perform nonlinear (evasive) weaving to avoid long-range sniping.
+	- Make the gun range slider more tolerant to following increases in the max gun range.
+- Detectors:
+	- Can now set targeting camera slew speed using "traverseRate" field in ModuleTargetingCamera.
+	- Improve Targeting Camera ability to track moving/flying targets.
+- Weapons:
+	- Fixes for initial bullet placement and simulated hit position when Krakensbane is not active.
+	- Account for the initial bullet placement in the bullet traveled distance.
+	- Fixes for aiming reticles of guns (both fixed and turrets) when using MouseAimFlight.
+	- Show where aimer lines in the SPH are blocked and by what.
+	- Add Deploy toggle to see where weapons with deploy animations will point when deployed vs retracted (e.g. M230 chaingun).
+	- Fix lasers using wrong armor thickness value for damage reduction calcs.
+	- Fixes point defense/APS turrets not engaging incoming missiles.
+	- Fix proximity/flak/beehive ammo detonation timing when used in orbit.
+	- Missiles:
+		- Add new Orbital guidance option for Modular Missiles.
+			- Missile will attempt to intercept orbital target at the user-set Max Speed value.
+			- homingType = orbital replaces homingType = RCS in missile configuration files (BDA is still backwards-compatible with homingType = RCS).
+		- Improvements to modular missile AAM guidance types so that they work in orbit.
+		- Fix for HEKV launching unguided in non-ideal situations.
+		- Fix clustermissiles launching copies of themselves instead of submunitions.
+		- Fix clustermissiles not respecting submunition trigger distance.
+		- Fix clustermissiles acting like reloadable missiles when not set up for reloading.
+		- Fix Guidance Type None missiles not holding course.
+		- GPS missiles now require a target cam or radar lock for GPS coords.
+		- INS missiles can now use either radar or IRST tracking.
+		- INS missiles now have datalink capability for mid-flight target coordinate updates (uses gpsUpdates field), update rate clamped to Radar/IRST scan speed.
+		- ECM can now jam GPS/INS datalink if missile within hostile ECM AoE.
+		- Fix error with Inertial guidance target prediction for non-updating missiles.
+		- Fix Missiles having 10 armor instead of 2.
+		- Fix SARH missiles that relock to a new target not updating their target vessel.
+		- Changed missile missed check, missiles now check if they have come within 400m, are post-thrust, or are more than 1km behind target, and have exceeded a grace period of maxTurnRateDPS/15.
+- Countermeasures:
+	- Add vessel's velocity to chaff ejection particle effect.
+	- Use vessel acceleration instead of velocity for chaff decoy factor calculation when in space.
+	- Add option in WM's CM settings for auto-deploying CMs when not in guard mode (e.g., for manual combat).
+- Vessel Mover / Spawning:
+	- Check for outdated loadMeta files when refreshing the craft list in the vessel selection window and update them since KSP doesn't update them when you save your craft!
+	- Fix the spawn point selection sometimes not registering.
+	- Vessels with an orbital AI that are spawned at safe orbital altitudes are spawned into circular orbits. Vessels are spawned pointing away from each other.
+	- Increase maximum spawn distance to 200km.
+	- Add a "bubble shuffle" to the waiting craft in continuous spawning to increase the randomness of the spawn order.
+- ModIntegration:
+	- Fixes for inhibiting CameraTools when initial spawning during continuous spawning and disable auto-switching to newly spawned craft joining the competition.
+	- Provide helpers for CameraTools so that the camera can aim at missiles' targets (requires CameraTools v1.31.0).
+
+v1.6.8.0
+IMPROVEMENTS / FIXES
+- General:
+	- Add tracking of 'named modules' (from non-dependency DLLs) to the VesselModuleRegistry.
+	- Optimise "Vector3.Distance(from, to) < dist" type checks.
+- UI:
+	- rcsOverride enabled ECMJammers now properly affect RCS in the SPH/VAB RCS GUI.
+	- Fix Equivalent Armor Thickness readout in the Armor GUI.
+	- Fix custom ammobelt UI overwriting belts on heterogeneous weapon groups.
+- AI / WM:
+	- AI GUI fixes for surface AI.
+	- Fix AI disengagement from launched nuclear/EMP ordinance if within projected blast radius.
+	- Expose the weave strength factor as a tunable parameter for the surface and VTOL AI.
+	- AI will now toggle/disable ECM Jammers if under fire from GPS/antiradiation ordinance.
+	- Adjust the off-boresight angles for DLZ checks for extending to prevent super long-range extends.
+	- Fix FSM not being started when initially deploying landing gear.
+- Weapons:
+	- Fix BurstFirelength and FireAngleOverride toggles not working in flight.
+	- Fix APS parts getting mixed in with global weapon shortnaming and overriding barrage settings.
+	- Anti-Ballistic APS no longer assigns multiple turrets to a single incoming shell, now respects reloading/overheated state of the weapon during target assignment.
+	- Guns now properly respect crossfeed.
+	- Don't apply the unity integrator correction to the unsupported gravity component of the aiming (improves on-orbit aiming).
+	- Improve the estimate of the required OverlapSphere for Vessel-Relative Bullet Checks for hypervelocity craft.
+	- Abrams Turret maxDeviation decreased to 0.1; Abrams bullet spread should reliably hit a tank-sized target from 2km again.
+	- Missiles:
+		- Add new Inertial guidance mode.
+			- Add new 'inertialDrift' missileLauncher field for INS drift, in meters/sec.
+		- Have torpedoes head to last known contact point and start circling it, instead of current sink to bottom behavior.
+		- MultiMissileLauncher deploy anim toggle now affects symmetry twins.
+		- Fix various NullReferenceExceptions when trying to use Modular Missiles.
+		- Antirad missiles using antiRadTypes = 9 now properly home in on active ECM jammers.
+		- Craft without Radar/radarlock will now wait to fire radar LOAL missiles until target distance is close enough that radarTimeout < (tgtDist - activeRadarRange) / optimalAirspeed.
+		- Fix NRE when trying to fire laser-guided missiles from a turret with no targeting cam.
+		- Single stage Modular Missiles now activate their engine on launch without needing an AG setup.
+		- Continuously-updating GPS-guided ordinance can now be jammed by a ECM jammer if within the jammer's garble radius.
+		- Missile Interception reworked, tied to PD logic. Missiles set to engage missiles will automatically launch to intercept incoming missiles (assuming viable launch geometry).
+		- Hopefully fix the Missile Turret phantom force issue.
+		- Fix GPS missiles fired from a cargo/custom bay losing lock immediately on firing.
+		- Fix typo in Dynamic Launch Zone calculation that was preventing some missiles from launching.
+		- Remove global toggle to use Dynamic or Static launch range for missiles and replace it with a per-missile toggle. When toggled on, the missile will launch missiles at their max engagement range without taking into account craft velocities.
+		- Incorporate missile frontAspectHeatModifier value into missile selection logic so rear-aspect missiles are not selected if they cannot be fired.
+- Competition:
+	- Include last-damaged-by tracking for bullet explosions that damage vessels, not just hits.
+	- GM kill when weaponless now looks for no weapons with ammo instead of no weapons.
+
+v1.6.7.0
+IMPROVEMENTS / FIXES
+- General:
+	- Kerbal Foundries wheel and track HP now properly scales with wheel size.
+	- ProcArmor now has symmetry attach.
+	- Fix Armor panels < 10mm thick resetting to 25mm.
+	- Toggling Battle Damage will disable Paintball Mode, if enabled.
+- UI:
+	- Windows that show despite the UI being disabled (i.e., Vessel Switcher and Score windows) store a separate size and location for that mode.
+	- Use a resize handle instead of buttons for horizontally resizing the Vessel Switcher window.
+- AI / WM:
+	- When ramming, if the target is also trying to ram us, aim more directly at them (avoids unstable dynamics).
+	- Fix some depth-keeping logic with Submarine AI.
+	- Guard Mode toggles off if enabled when loading into a battle site from the KSC that had active combatants at the time player previously exited to Space Center.
+	- Fix secondary target assignment logic assigning targets irrespective of target priority settings.
+	- Add UNDERWATER_VISION view distance option so ships require sonar to detect submerged subs, and submerged subs require sonar to detect other vessels vs being able to see them as long as they are within guard range.
+	- Add attack logic for gun-armed submarines when BULLET_WATER_DRAG is disabled.
+	- AI now respect target priority settings when looking at landed or splashed targets.
+	- Fix issue with ground vehicle AIs not selecting missiles against ground targets in some circumstances.
+	- AI now less jittery when doing bombing runs.
+	- Add new 'Maintain Min Range' toggle for Land AI; if enabled Vees will stop/reverse to maintain minimum engage distance to target.
+	- Change Surface AI cruise behavior; if MaintainMinRange, craft will slow as before until minRange reached; if disabled, Vees will maintain flank speed regardless of target distance.
+	- Add missing combat Depth slider to AI GUI for Subs.
+	- AI now has longer object permanence for stationary/slow land targets it has lost sight of.
+	- VTOL AI makes sure Landed status is disabled during take-off.
+- Countermeasures:
+	- Add missing Active Sonar countermeasure.
+- Detectors:
+	- Fix Radars utilizing a max of 3 locks, regardless of radar-lock capable radars present on a vessel.
+	- Enemy passive sonars no longer show up on the Radar Warning Reciever.
+	- IRSTs now return the hottest enemy target they detect, rather than whatever is first on the targets list when using it for manually firing heatseeking missiles.
+	- Fix multiple radars locking the same targets; radars will now properly distribute targets to lock amongst themselves.
+	- Fix Radar GUI not properly displaying radars using custom radarTransforms.
+- Weapons:
+	- Bullets now take relative velocity into account when calculating damage.
+	- Fix Dual-mode APS turrets getting slaved to radar when firing on standard targets and not subsequently engaging incoming missile targets.
+	- Fix APS occasionally getting stuck on phantom targets.
+	- Rework aiming logic for improved long-range aiming for vessels moving at orbital speeds (still not entirely correct for low Kerbin orbit at longer ranges, but significantly better).
+	- Missiles:
+		- Fix missiles not firing on surface ships.
+		- Missiles now properly receive explosive damage from point defense HE rounds/interceptor missiles in paintball mode.
+		- Fix missiles occasionally getting stuck when fired from VLS.
+		- Fix Missiles failing LOS check due to kerbins curvature for ship vs ship engagements.
+		- Fix for GPS missiles fired from multiMissileLaunchers losing lock when fired.
+		- Fix guidance type = none missiles detonating 5km from launcher.
+		- Fix NRE from manually firing GPS missiles from a multimissilelauncher.
+		- AIs attempting to dumbfire multimissileLaunchers will now take missile launch vector into account instead of vessel prograde.
+		- Adds new Settings option 'LIMITED_ORDINANCE' to clamp multimissilelaunchers and reloadable rails to a single salvo's worth of ammo. 
+		- Fixed GPS coords not updating for bombs.
+		- Fixed occasional NRE when using laser-guided missiles in a surface to surface role.
+		- AI can now aim unguided/dumbfired missiles with the missile turret.
+		- AI can now use JDAMs/other guided bombs as unguided bombs when lacking targeting cam instead of aborting.
+		- Improve Bomb lead calcs for better bombing accuracy against moving targets.
+		- Fix turrets spinning wildly about when AI loses track of target and target position goes stale.
+
+v1.6.6.0
+IMPROVEMENTS / FIXES
+- General:
+	- Procedural Wing max armor thickness now based on mean thickness of the wing.
+	- Adds new Acoustic Decoy CM dropper.
+- UI:
+	- Add Japanese localization files thanks to user Taka005.
+- AI / WM:
+	- Fix the cubic solver giving invalid results for nearly degenerate cubics (used in aiming).
+	- Fix the debug line trajectories not showing the final part of the trajectory.
+	- Add experimental Submarine AI option to Surface Driver AI.
+	- Various weapon selection logic tweaks to support sensible weapon selection/use when submerged and firing on non-submerged targets.
+	- Add torpedo bombing logic to pilot AI.
+	- AI will now lead moving ground targets when bombing.
+	- AI will start dropping bombs from reloadable rails/bomblet dispensers early for proper carpet bombing instead of dropping them behind a target.
+	- Fix AI dropping bombs several hundred meters behind target.
+- Detectors:
+	- Add new radarTransformName field to ModuleRadar/new irstTransformName field to ModuleIRST to allow setting custom radar direction/setting multiple radars to a part using custom radar models.
+	- Add new sonarType field to Radar for setting up Active or Passive sonars.
+- Countermeasures:
+	- Add Acoustic Decoy CM support via 'countermeasureType = decoy'.
+	- APS point defense target acquisition and assignment logic rewritten, APS will now semi-intelligently identify and distribute targets among guns in the PD network.
+	- APS weapons now respect Fire Interval and Burst Length settings.
+- Weapons:
+	- Missiles:
+		- Fix some NREs when manually firing missiles.
+		- Add new guidanceDelay field to allow setting a delay between missile launch and missile beginning to maneuver towards a target.
+		- Dynamic Launch Range now uses missile EngageRange max instead of static launch range.
+		- Improved launch behavior for missiles set to be fired at very short range.
+		- Add LineOfSight check when firing missiles.
+		- Fix torpedoes not working.
+		- Missile/Bomb fratricide prevention now based on team instead of sourcevessel.
+		- Add Salvo size slider to MultiMissile Launchers, enabled via the new MultiMissileLauncher .cfg 'setSalvoSize' bool.
+		- Improve launch of missiles from reloadable rails.
+		- Add new MultiMissileLauncher 'deploySpeed' field to set deploy animation duration.
+		- Add intrinsic scaling option to MultiMissileLauncher for missile pods and the like, use new fields 'scaleTransformName' and 'lengthTransformName'
+		- Fix issue with air-dropped torpedoes exploding on impact with the water despite being within their waterImpactTolearance.
+		- Fix torpedo behavior if trying to target something with a CoM above water level
+		- Tweaked weapon lead aim calcs for guns firing beehive shells, Oerlikon should hit more often now.
+		- MultiMissileLaunchers can now support GPS guided missiles launching at multiple simultaneous targets. 
+- Competition:
+	- Add new GM Kill conditions for planes that have lost engines/weapons/set percentage of their parts and LandedKillTimer conditions for surface AIs that have found themselves in water/water AIs that have beached themselves/sunk.
+	- Don't auto-resume tournaments when custom spawn templates are selected.
+- Vessel Spawning:
+	- Allow using custom spawn templates for airborne spawning too (with altitude >10m).
+	- Add option to immediately set airborne-spawned vessels (with a pilot AI) to their idle speeds.
+	- Tweaks to initial focussed vessel after circular spawning.
+	- Always perform vessel validity checks and wait for WMs to appear in the Vessel Switcher during post-spawning even when not immediately starting a competition.
+- Vessel Mover:
+	- Make the vessel selection more resilient to corrupted vessel files/loadmeta.
+	- Default the vessel selection window to using the VAB if the initial vessel is spawned through the launchpad.
+
+v1.6.5.0
 IMPROVEMENTS / FIXES
 - General: 
 	- Fix Pwing HP error with Pwing edges not contributing as much HP as they should.

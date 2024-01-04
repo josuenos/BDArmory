@@ -447,8 +447,7 @@ namespace BDArmory.Modules
             output.Append(Environment.NewLine);
             output.AppendLine($" Can outfit part with Fire Suppression Systems."); //localize this at some point, future me
             var engine = part.FindModuleImplementing<ModuleEngines>();
-            var engineFX = part.FindModuleImplementing<ModuleEnginesFX>();
-            if (engine == null || engineFX == null)
+            if (engine == null)
             {
                 output.AppendLine($" Can upgrade to Self-Sealing Tank.");
             }
@@ -539,7 +538,8 @@ namespace BDArmory.Modules
                         if (fuel != null || monoprop != null)
                         {
                             Events["ToggleTankOption"].guiActiveEditor = true;
-                            if (fuel != null) Events["ToggleInertOption"].guiActiveEditor = true; //I don't think inerting would work on something containing its own oxidizer...
+                            Events["ToggleInertOption"].guiActiveEditor = fuel != null; //I don't think inerting would work on something containing its own oxidizer...
+                            if (InertTank && !Events["ToggleInertOption"].guiActiveEditor) ToggleInertOption(); // If inerting was somehow enabled previously, but is now not valid, disable it.
                             if (!InertTank)
                             {
                                 Fields["FireBottles"].guiActiveEditor = true;

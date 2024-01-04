@@ -5,6 +5,7 @@ using System.Linq;
 
 using BDArmory.Competition;
 using BDArmory.Extensions;
+using BDArmory.Settings;
 using BDArmory.Utils;
 
 namespace BDArmory.VesselSpawning
@@ -54,13 +55,16 @@ namespace BDArmory.VesselSpawning
         public IEnumerator SpawnVessel(string craftUrl, double latitude, double longitude, double altitude, float initialHeading = 90f, float initialPitch = 0f)
         {
             // Convert the parameters to a VesselSpawnConfig.
-            var terrainAltitude = FlightGlobals.currentMainBody.TerrainAltitude(latitude, longitude);
-            var spawnPoint = FlightGlobals.currentMainBody.GetWorldSurfacePosition(latitude, longitude, terrainAltitude + altitude);
-            var radialUnitVector = (spawnPoint - FlightGlobals.currentMainBody.transform.position).normalized;
-            var north = VectorUtils.GetNorthVector(spawnPoint, FlightGlobals.currentMainBody);
+            var spawnBody = FlightGlobals.currentMainBody;
+            var terrainAltitude = spawnBody.TerrainAltitude(latitude, longitude);
+            var spawnPoint = spawnBody.GetWorldSurfacePosition(latitude, longitude, terrainAltitude + altitude);
+            var radialUnitVector = (spawnPoint - spawnBody.transform.position).normalized;
+            var north = VectorUtils.GetNorthVector(spawnPoint, spawnBody);
             var direction = (Quaternion.AngleAxis(initialHeading, radialUnitVector) * north).ProjectOnPlanePreNormalized(radialUnitVector).normalized;
             var airborne = altitude > 10;
-            VesselSpawnConfig vesselSpawnConfig = new VesselSpawnConfig(craftUrl, spawnPoint, direction, (float)altitude, initialPitch, airborne);
+            var spawnInOrbit = altitude >= spawnBody.MinSafeAltitude(); // Min safe orbital altitude
+            var withInitialVelocity = airborne && BDArmorySettings.VESSEL_SPAWN_INITIAL_VELOCITY;
+            VesselSpawnConfig vesselSpawnConfig = new VesselSpawnConfig(craftUrl, spawnPoint, direction, (float)altitude, initialPitch, airborne, spawnInOrbit);
 
             // Spawn vessel.
             yield return SpawnSingleVessel(vesselSpawnConfig);
@@ -74,7 +78,7 @@ namespace BDArmory.VesselSpawning
             var vesselName = vessel.vesselName;
 
             // Perform the standard post-spawn main sequence.
-            yield return PostSpawnMainSequence(vessel, airborne);
+            yield return PostSpawnMainSequence(vessel, airborne, withInitialVelocity);
             if (spawnFailureReason != SpawnFailureReason.None) yield break;
 
             // If a competition is active, add them to it.

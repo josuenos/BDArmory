@@ -37,8 +37,8 @@ namespace BDArmory.Utils
             return result;
         }
 
-        public static String AppPath = KSPUtil.ApplicationRootPath.Replace("\\", "/");
-        public static String PlugInDataPath = AppPath + "GameData/BDAcCategorynFS/Plugin/";
+        public static string AppPath = KSPUtil.ApplicationRootPath.Replace("\\", "/");
+        public static string PlugInDataPath = AppPath + "GameData/BDAcCategorynFS/Plugin/";
 
         public static FloatCurve stringToFloatCurve(string curveString)
         {

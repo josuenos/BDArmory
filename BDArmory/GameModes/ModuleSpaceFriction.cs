@@ -74,6 +74,19 @@ namespace BDArmory.GameModes
                 return VAI;
             }
         }
+
+        BDModuleOrbitalAI OAI;
+        public BDModuleOrbitalAI orbiter
+        {
+            get
+            {
+                if (OAI) return OAI;
+                OAI = VesselModuleRegistry.GetModule<BDModuleOrbitalAI>(vessel);
+
+                return OAI;
+            }
+        }
+
         ModuleEngines Engine;
         public ModuleEngines foundEngine
         {
@@ -113,7 +126,7 @@ namespace BDArmory.GameModes
             {
                 if (!RepulsorOverride) //MSF added via Spawn utilities for Space Hacks
                 {
-                    using (var engine = VesselModuleRegistry.GetModules<ModuleEngines>(vessel).GetEnumerator())
+                    using (var engine = VesselModuleRegistry.GetModuleEngines(vessel).GetEnumerator())
                         while (engine.MoveNext())
                         {
                             if (engine.Current == null) continue;

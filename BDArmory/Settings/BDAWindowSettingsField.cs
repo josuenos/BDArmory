@@ -25,7 +25,7 @@ namespace BDArmory.Settings
 
             ConfigNode settings = fileNode.GetNode("BDAWindows");
 
-            IEnumerator<FieldInfo> field = typeof(BDArmorySetup).GetFields().AsEnumerable().GetEnumerator();
+            IEnumerator<FieldInfo> field = typeof(BDArmorySetup).GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).AsEnumerable().GetEnumerator(); // Include both public and private fields.
             while (field.MoveNext())
             {
                 if (field.Current == null) continue;
@@ -44,7 +44,7 @@ namespace BDArmory.Settings
 
             ConfigNode settings = fileNode.GetNode("BDAWindows");
 
-            IEnumerator<FieldInfo> field = typeof(BDArmorySetup).GetFields().AsEnumerable().GetEnumerator();
+            IEnumerator<FieldInfo> field = typeof(BDArmorySetup).GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).AsEnumerable().GetEnumerator(); // Include both public and private fields.
             while (field.MoveNext())
             {
                 if (field.Current == null) continue;

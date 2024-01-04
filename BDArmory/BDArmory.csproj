@@ -152,14 +152,17 @@
     <Compile Include="Competition\TournamentCoordinator.cs" />
     <Compile Include="Control\BDAirspeedControl.cs" />
     <Compile Include="Control\BDGenericAIBase.cs" />
+    <Compile Include="Control\BDModuleOrbitalAI.cs" />
     <Compile Include="Control\BDModulePilotAI.cs" />
     <Compile Include="Control\BDModuleSurfaceAI.cs" />
     <Compile Include="Control\BDModuleVTOLAI.cs" />
     <Compile Include="Control\IBDAIControl.cs" />
     <Compile Include="Control\MissileFire.cs" />
     <Compile Include="Control\ModuleWingCommander.cs" />
+    <Compile Include="CounterMeasure\CMBubble.cs" />
     <Compile Include="CounterMeasure\CMChaff.cs" />
     <Compile Include="CounterMeasure\CMDropper.cs" />
+    <Compile Include="CounterMeasure\CMDecoy.cs" />
     <Compile Include="CounterMeasure\CMFlare.cs" />
     <Compile Include="CounterMeasure\CMSmoke.cs" />
     <Compile Include="CounterMeasure\ModuleCloakingDevice.cs" />
@@ -189,6 +192,7 @@
     <Compile Include="Extensions\BodyExtensions.cs" />
     <Compile Include="Extensions\ClawExtensions.cs" />
     <Compile Include="Extensions\CrewExtensions.cs" />
+    <Compile Include="Extensions\FloatExtensions.cs" />
     <Compile Include="Extensions\PartExtensions.cs" />
     <Compile Include="Extensions\VectorExtensions.cs" />
     <Compile Include="Extensions\VesselExtensions.cs" />
@@ -220,6 +224,7 @@
     <Compile Include="Initialization\Bootstrapper.cs" />
     <Compile Include="Initialization\Cleanup.cs" />
     <Compile Include="Initialization\Dependencies.cs" />
+    <Compile Include="ModIntegration\CameraTools.cs" />
     <Compile Include="ModIntegration\MouseAimFlight.cs" />
     <Compile Include="ModIntegration\ReflectionUtils.cs" />
     <Compile Include="Modules\CFEnable.cs" />
@@ -436,6 +441,7 @@
     <None Include="Distribution\GameData\BDArmory\Parts\aim-120\amraam_emp.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\aim-120\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\aiPilot\model.mu" />
+    <None Include="Distribution\GameData\BDArmory\Parts\aiPilot\orbital_ai.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\aiPilot\part.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\aiPilot\surface_ai.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\aiPilot\vtol_ai.cfg" />
@@ -496,6 +502,8 @@
     <None Include="Distribution\GameData\BDArmory\Parts\cmDropper\chaffDispenser.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\cmDropper\flareDispenser.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\cmDropper\model.mu" />
+    <None Include="Distribution\GameData\BDArmory\Parts\decoyDropper\model.mu" />
+    <None Include="Distribution\GameData\BDArmory\Parts\decoyDropper\part.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\ecmJammer\ecmj131.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\ecmJammer\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\EJ200\caesar_hone_60.cfg" />
@@ -702,6 +710,7 @@
     <Content Include="Distribution\GameData\BDArmory\Parts\adjustableRail\texture.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\AGM86-17\AGM86-17.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\aim-120\texture.png" />
+    <Content Include="Distribution\GameData\BDArmory\Parts\aiPilot\OAI1.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\aiPilot\SAI1.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\aiPilot\texture.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\aiPilot\VAI1.png" />
@@ -726,6 +735,7 @@
     <Content Include="Distribution\GameData\BDArmory\Parts\clusterBomb\texture.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\cmDropper\tex_chaffDispenser.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\cmDropper\tex_cmDispenser.png" />
+    <Content Include="Distribution\GameData\BDArmory\Parts\decoyDropper\CMAcousticDecoy.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\ecmJammer\tex_ecmj131.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\EJ200\Jet_Engines_Stardust.dds" />
     <Content Include="Distribution\GameData\BDArmory\Parts\F-86Launcher\F86Launcher.png" />

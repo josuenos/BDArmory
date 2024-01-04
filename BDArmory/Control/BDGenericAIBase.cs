@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
+using ModuleWheels;
+
 using BDArmory.Competition;
 using BDArmory.Extensions;
 using BDArmory.GameModes.Waypoints;
@@ -158,12 +160,18 @@ namespace BDArmory.Control
             assignedPositionWorld = vessel.ReferenceTransform.position;
             try // Sometimes the FSM breaks trying to set the gear action group
             {
+                // Make sure the FSM is started for deployable wheels. (This should hopefully fix the FSM errors.)
+                foreach (var part in VesselModuleRegistry.GetModules<ModuleWheelDeployment>(vessel).Where(part => part != null && part.fsm != null && !part.fsm.Started))
+                {
+                    if (BDArmorySettings.DEBUG_AI) Debug.Log($"[BDArmory.BDAGenericAIBase]: Starting FSM with state {(string.IsNullOrEmpty(part.fsm.currentStateName) ? "Retracted" : part.fsm.currentStateName)} on {part.name} of {part.vessel.vesselName}");
+                    part.fsm.StartFSM(part.fsm.CurrentState ?? new KFSMState("Retracted"));
+                }
                 // I need to make sure gear is deployed on startup so it'll get properly retracted.
                 vessel.ActionGroups.SetGroup(KSPActionGroup.Gear, true);
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[BDArmory.BDGenericAIBase]: Failed to set Gear action group: {e.Message}");
+                Debug.LogError($"[BDArmory.BDGenericAIBase]: Failed to set Gear action group on {vessel.vesselName}: {e.Message}");
             }
             RefreshPartWindow();
         }
@@ -273,7 +281,7 @@ namespace BDArmory.Control
             if (!pilotEnabled || !vessel.isActiveVessel) return;
             if (BDArmorySettings.DEBUG_TELEMETRY || BDArmorySettings.DEBUG_AI)
             {
-                GUI.Label(new Rect(200, Screen.height - 300, 600, 300), $"{vessel.name}\n{debugString.ToString()}");
+                GUI.Label(new Rect(200, Screen.height - 350, 600, 350), $"{vessel.name}\n{debugString.ToString()}");
             }
         }
 

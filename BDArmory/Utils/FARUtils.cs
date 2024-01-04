@@ -129,6 +129,27 @@ namespace BDArmory.Utils
             }
             return -1;
         }
+        public static float GetFARWingSweep(Part part)
+        {
+            if (!hasFARWing) return 0;
+
+            foreach (var module in part.Modules)
+            {
+                if (module.GetType() == FARWingModule)
+                {
+                    var sweep = (float)FARWingModule.GetField("MidChordSweep", BindingFlags.Public | BindingFlags.Instance).GetValue(module); //leading + trailing angle / 2
+                    if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.FARUtils]: Found mid chord sweep of {sweep} for {part.name}.");
+                    return sweep;
+                }
+                if (module.GetType() == FARControllableSurfaceModule)
+                {
+                    var sweep = (float)FARControllableSurfaceModule.GetField("MidChordSweep", BindingFlags.Public | BindingFlags.Instance).GetValue(module);
+                    if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.FARUtils]: Found ctrl. srf. mid chord sweep of {sweep} for {part.name}.");
+                    return sweep;
+                }
+            }
+            return 0;
+        }
     }
 
     public class ProceduralWing : MonoBehaviour
@@ -360,6 +381,19 @@ namespace BDArmory.Utils
                 }
             }
             return -1;
+        }
+        public static float getPwingThickness(Part part)
+        {
+            if (!hasPwingModule) return 20;
+            foreach (var module in part.Modules)
+            {
+                if (module.GetType() == PWType)
+                {
+                    float thickness = ((float)PWType.GetField("sharedBaseThicknessRoot", BindingFlags.Public | BindingFlags.Instance).GetValue(module) + (float)PWType.GetField("sharedBaseThicknessTip", BindingFlags.Public | BindingFlags.Instance).GetValue(module)) / 2;
+                    return Mathf.Max(thickness, 0.2f) * 100;
+                }
+            }
+            return 20;
         }
     }
 }

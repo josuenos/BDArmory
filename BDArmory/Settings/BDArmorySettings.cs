@@ -27,7 +27,6 @@ namespace BDArmory.Settings
         #region Window settings
         [BDAPersistentSettingsField] public static bool STRICT_WINDOW_BOUNDARIES = true;
         [BDAPersistentSettingsField] public static float REMOTE_ORCHESTRATION_WINDOW_WIDTH = 225f;
-        [BDAPersistentSettingsField] public static float VESSEL_SWITCHER_WINDOW_WIDTH = 500f;
         [BDAPersistentSettingsField] public static bool VESSEL_SWITCHER_WINDOW_SORTING = false;
         [BDAPersistentSettingsField] public static bool VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE = false;
         [BDAPersistentSettingsField] public static bool VESSEL_SWITCHER_PERSIST_UI = false;
@@ -42,6 +41,7 @@ namespace BDArmory.Settings
         [BDAPersistentSettingsField] public static bool VM_TOOLBAR_BUTTON = true;                 // Show or hide the BDA VM toolbar button.
         [BDAPersistentSettingsField] public static bool INFINITE_AMMO = false;              //infinite Bullets/rockets/laserpower
         [BDAPersistentSettingsField] public static bool INFINITE_ORDINANCE = false;         //infinite missiles/bombs (on ordinance w/ Reload Module)
+        [BDAPersistentSettingsField] public static bool LIMITED_ORDINANCE = false;         //MML ammo clamped to salvo size, no relaods
         [BDAPersistentSettingsField] public static bool INFINITE_FUEL = false;              //Infinite propellant
         [BDAPersistentSettingsField] public static bool INFINITE_EC = false;                          //Infinite electric charge
         [BDAPersistentSettingsField] public static bool BULLET_HITS = true;
@@ -81,7 +81,8 @@ namespace BDArmory.Settings
         [BDAPersistentSettingsField] public static bool DISPLAY_COMPETITION_STATUS = true;             //Display competition status
         [BDAPersistentSettingsField] public static bool DISPLAY_COMPETITION_STATUS_WITH_HIDDEN_UI = false; // Display the competition status when using the "hidden UI"
         [BDAPersistentSettingsField] public static bool SCROLL_ZOOM_PREVENTION = true;                 // Prevent scroll-zoom when over most BDA windows.
-        [BDAPersistentSettingsField] public static bool BULLET_WATER_DRAG = true;
+        [BDAPersistentSettingsField] public static bool BULLET_WATER_DRAG = true;                       // do bullets/rockets get slowed down if fired into/under water
+        [BDAPersistentSettingsField] public static bool UNDERWATER_VISION = false;                       //If false, Subs and other submerged vessels fully visible to surface/air craft and vice versa without detectors?
         [BDAPersistentSettingsField] public static bool PERSISTENT_FX = false;
         [BDAPersistentSettingsField] public static bool LEGACY_ARMOR = false;
         [BDAPersistentSettingsField] public static bool HACK_INTAKES = false;
@@ -114,6 +115,11 @@ namespace BDArmory.Settings
         [BDAPersistentSettingsField] public static float COMPETITION_ALTITUDE_LIMIT_HIGH = 55;         // Altitude (high) in km at which to kill off craft.
         [BDAPersistentSettingsField] public static float COMPETITION_ALTITUDE_LIMIT_LOW = -39;          // Altitude (low) in km at which to kill off craft.
         [BDAPersistentSettingsField] public static bool COMPETITION_ALTITUDE__LIMIT_ASL = false;       // Does Killer GM use ASL or AGL for latitide ceiling/floor?
+        [BDAPersistentSettingsField] public static bool COMPETITION_GM_KILL_WEAPON = false;             // Competition GM will kill weaponless craft?
+        [BDAPersistentSettingsField] public static bool COMPETITION_GM_KILL_ENGINE = false;             // Competition GM will kill engineless craft?
+        [BDAPersistentSettingsField] public static bool COMPETITION_GM_KILL_DISABLED = false;           // Competition GM will kill craft that are disabled (no weapons or ammo, no engine [Pilot/VTOL/Ship/Sub] or no wheels [Surface])
+        [BDAPersistentSettingsField] public static float COMPETITION_GM_KILL_HP = 0;                    // Competition GM will kill craft with low HP craft?
+        [BDAPersistentSettingsField] public static float COMPETITION_GM_KILL_TIME = 0;                  // CompetitionGM Kill time
         [BDAPersistentSettingsField] public static float COMPETITION_NONCOMPETITOR_REMOVAL_DELAY = 30; // Competition non-competitor removal delay in seconds.
         [BDAPersistentSettingsField] public static float COMPETITION_WAYPOINTS_GM_KILL_PERIOD = 60;    // Waypoint Competition GM kill period in seconds. Craft that don't pass a waypoint within this time are killed off.
         [BDAPersistentSettingsField] public static float COMPETITION_DISTANCE = 1000;                  // Competition distance.
@@ -136,7 +142,7 @@ namespace BDArmory.Settings
         [BDAPersistentSettingsField] public static bool LOGARITHMIC_RADAR_DISPLAY = true;                //NOTE: used ONLY for display range of radar windows! Actual radar range provided by part configs!
         [BDAPersistentSettingsField] public static float MAX_ENGAGEMENT_RANGE = 200000f;          //NOTE: used ONLY for missile dlz parameters!
         [BDAPersistentSettingsField] public static float IVA_LOWPASS_FREQ = 2500f;
-        [BDAPersistentSettingsField] public static float BALLISTIC_TRAJECTORY_SIMULATION_MULTIPLIER = 256f;      // Multiplier of fixedDeltaTime for the large scale steps of ballistic trajectory simulations.
+        [BDAPersistentSettingsField] public static float BALLISTIC_TRAJECTORY_SIMULATION_MULTIPLIER = 128f;      // Multiplier of fixedDeltaTime for the large scale steps of ballistic trajectory simulations. Large values at extreme ranges may cause small inaccuracies. 128 with 1km/s bullets at their max range seems reasonable in most cases.
         [BDAPersistentSettingsField] public static float FIRE_RATE_OVERRIDE = 10f;
         [BDAPersistentSettingsField] public static float FIRE_RATE_OVERRIDE_CENTER = 20f;
         [BDAPersistentSettingsField] public static float FIRE_RATE_OVERRIDE_SPREAD = 5f;
@@ -301,6 +307,7 @@ namespace BDArmory.Settings
         [BDAPersistentSettingsField] public static bool VESSEL_SPAWN_RANDOM_ORDER = true;          // Shuffle vessels before spawning them.
         [BDAPersistentSettingsField] public static bool SHOW_WAYPOINTS_OPTIONS = true;             // Waypoint section of Vessel Spawner Window.
         [BDAPersistentSettingsField] public static bool VESSEL_SPAWN_START_COMPETITION_AUTOMATICALLY = false; // Automatically start a competition after spawning succeeds.
+        [BDAPersistentSettingsField] public static bool VESSEL_SPAWN_INITIAL_VELOCITY = false;     // Set planes at their idle speed after dropping them at the start of a competition.
         #endregion
 
         #region Vessel Mover settings
@@ -427,7 +434,6 @@ namespace BDArmory.Settings
         [BDAPersistentSettingsField] public static float CHAFF_FACTOR = 0.65f;                       // Change this to make chaff more or less effective. Higher values will make chaff batter, lower values will make chaff worse.
         [BDAPersistentSettingsField] public static float SMOKE_DEFLECTION_FACTOR = 10f;
         [BDAPersistentSettingsField] public static int APS_THRESHOLD = 60;                           // Threshold caliber that APS will register for intercepting hostile shells/rockets
-        [BDAPersistentSettingsField] public static bool USE_DLZ_LAUNCH_RANGE = false;               //do missiles use static or DLZ max range for launching missiles under AI 
         #endregion
     }
 }

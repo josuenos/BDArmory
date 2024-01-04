@@ -229,7 +229,7 @@ namespace BDArmory.Utils
             string[] strings = color.Split(","[0]);
             for (int i = 0; i < 4; i++)
             {
-                outputColor[i] = Mathf.Clamp01(Single.Parse(strings[i]) / 255);
+                outputColor[i] = Mathf.Clamp01(float.Parse(strings[i]) / 255);
             }
 
             return outputColor;
@@ -448,7 +448,7 @@ namespace BDArmory.Utils
             bool isGUILayout = rect == default;
             if (fieldName != null) GUI.SetNextControlName(fieldName);
             var newText = isGUILayout ? GUILayout.TextField(text) : GUI.TextField(rect, text);
-            if (String.IsNullOrEmpty(text))
+            if (string.IsNullOrEmpty(text))
             {
                 var guiColor = GUI.color;
                 GUI.color = Color.grey;

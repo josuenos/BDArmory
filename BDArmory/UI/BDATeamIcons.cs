@@ -207,31 +207,31 @@ namespace BDArmory.UI
                                     if (ml.Current == null) continue;
                                     MissileLauncher launcher = ml.Current as MissileLauncher;
                                     //if (ml.Current.MissileState != MissileBase.MissileStates.Idle && ml.Current.MissileState != MissileBase.MissileStates.Drop)
-                                    
+
                                     bool multilauncher = false;
                                     if (launcher != null)
                                     {
                                         if (launcher.multiLauncher && !launcher.multiLauncher.isClusterMissile) multilauncher = true;
                                     }
-                                    if ((ml.Current.HasFired && !multilauncher) && !ml.Current.HasMissed && !ml.Current.HasExploded) //culling post-thrust missiles makes AGMs get cleared almost immediately after launch
+                                    if (ml.Current.HasFired && !multilauncher && !ml.Current.HasMissed && !ml.Current.HasExploded) //culling post-thrust missiles makes AGMs get cleared almost immediately after launch
                                     {
                                         Vector3 sPos = FlightGlobals.ActiveVessel.vesselTransform.position;
                                         Vector3 tPos = v.Current.vesselTransform.position;
-                                        Vector3 Dist = (tPos - sPos);
+                                        float Dist = (tPos - sPos).magnitude;
                                         Vector2 guiPos;
                                         string UIdist;
                                         string UoM;
-                                        if (Dist.magnitude > BDTISettings.DISTANCE_THRESHOLD)
+                                        if (Dist >= BDTISettings.DISTANCE_THRESHOLD && Dist <= BDTISettings.MAX_DISTANCE_THRESHOLD)
                                         {
-                                            if ((Dist.magnitude / 1000) >= 1)
+                                            if (Dist / 1000 >= 1)
                                             {
                                                 UoM = "km";
-                                                UIdist = (Dist.magnitude / 1000).ToString("0.00");
+                                                UIdist = (Dist / 1000).ToString("0.00");
                                             }
                                             else
                                             {
                                                 UoM = "m";
-                                                UIdist = Dist.magnitude.ToString("0.0");
+                                                UIdist = Dist.ToString("0.0");
                                             }
                                             GUIUtils.DrawTextureOnWorldPos(v.Current.CoM, BDTISetup.Instance.TextureIconMissile, new Vector2(20, 20), 0);
                                             if (GUIUtils.WorldToGUIPos(ml.Current.vessel.CoM, out guiPos))
@@ -264,8 +264,8 @@ namespace BDArmory.UI
 
                             Vector3 sPos = FlightGlobals.ActiveVessel.vesselTransform.position;
                             Vector3 tPos = v.Current.vesselTransform.position;
-                            Vector3 Dist = (tPos - sPos);
-                            if (Dist.magnitude > BDTISettings.DISTANCE_THRESHOLD)
+                            float Dist = (tPos - sPos).magnitude;
+                            if (Dist >= BDTISettings.DISTANCE_THRESHOLD && Dist <= BDTISettings.MAX_DISTANCE_THRESHOLD)
                             {
                                 GUIUtils.DrawTextureOnWorldPos(v.Current.CoM, BDTISetup.Instance.TextureIconDebris, new Vector2(20, 20), 0);
                             }
@@ -289,8 +289,8 @@ namespace BDArmory.UI
                                         if (wm.Current.currentTarget == null) continue;
                                         Vector3 sPos = FlightGlobals.ActiveVessel.CoM;
                                         Vector3 tPos = (wm.Current.currentTarget.Vessel.CoM);
-                                        Vector3 RelPos = (tPos - sPos);
-                                        if (RelPos.magnitude >= BDTISettings.DISTANCE_THRESHOLD)
+                                        float RelPos = (tPos - sPos).magnitude;
+                                        if (RelPos >= BDTISettings.DISTANCE_THRESHOLD && RelPos <= BDTISettings.MAX_DISTANCE_THRESHOLD)
                                         {
                                             DrawThreatIndicator(wm.Current.vessel.CoM, wm.Current.currentTarget.Vessel.CoM, Teamcolor);
                                         }
@@ -314,7 +314,6 @@ namespace BDArmory.UI
                                 }
                                 else
                                 {
-
                                     Vector3 selfPos = FlightGlobals.ActiveVessel.CoM;
                                     Vector3 targetPos = (wm.Current.vessel.CoM);
                                     Vector3 targetRelPos = (targetPos - selfPos);
@@ -323,10 +322,10 @@ namespace BDArmory.UI
                                     string UIdist;
                                     string UoM;
                                     string vName;
-                                    string selectedWeapon = String.Empty;
-                                    string AIstate = String.Empty;
+                                    string selectedWeapon = string.Empty;
+                                    string AIstate = string.Empty;
                                     distance = targetRelPos.magnitude;
-                                    if (distance >= BDTISettings.DISTANCE_THRESHOLD)
+                                    if (distance >= BDTISettings.DISTANCE_THRESHOLD && distance <= BDTISettings.MAX_DISTANCE_THRESHOLD) //TODO - look into having vessel icons be based on vesel visibility? (So don't draw icon for undetected stealth plane, etc?)
                                     {
                                         if ((distance / 1000) >= 1)
                                         {

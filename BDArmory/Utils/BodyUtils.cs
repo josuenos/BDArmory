@@ -63,7 +63,7 @@ namespace BDArmory.Utils
         {
             double latitudeAtPos = FlightGlobals.currentMainBody.GetLatitude(position);
             double longitudeAtPos = FlightGlobals.currentMainBody.GetLongitude(position);
-            float altitude = (float)(FlightGlobals.currentMainBody.GetAltitude(position));
+            float altitude = (float)FlightGlobals.currentMainBody.GetAltitude(position);
             if (clamped)
                 return Mathf.Clamp(altitude - (float)FlightGlobals.currentMainBody.TerrainAltitude(latitudeAtPos, longitudeAtPos), 0, altitude);
             else

@@ -193,7 +193,7 @@ namespace BDArmory.Weapons
         {
             ContactPoint contact = col.contacts[0];
             Vector3 pos = contact.point;
-            ExplosionFx.CreateExplosion(pos, blastForce, subExplModelPath, subExplSoundPath, ExplosionSourceType.Missile, 0, null, sourceVesselName, null, default, -1, false, rb.mass * 1000);
+            ExplosionFx.CreateExplosion(pos, blastForce, subExplModelPath, subExplSoundPath, ExplosionSourceType.Missile, 0, null, sourceVesselName, null, null, default, -1, false, rb.mass * 1000, Hitpart: col.gameObject.GetComponentInParent<Part>());
         }
 
         void FixedUpdate()
@@ -233,7 +233,7 @@ namespace BDArmory.Weapons
 
                     if (hitPart != null || CheckBuildingHit(hit))
                     {
-                        Detonate(hit.point);
+                        Detonate(hit.point, hitPart);
                     }
                     else if (hitPart == null)
                     {
@@ -249,9 +249,9 @@ namespace BDArmory.Weapons
             }
         }
 
-        void Detonate(Vector3 pos)
+        void Detonate(Vector3 pos, Part hitPart = null)
         {
-            ExplosionFx.CreateExplosion(pos, blastForce, subExplModelPath, subExplSoundPath, ExplosionSourceType.Missile, 0, null, sourceVesselName, null, default, -1, false, rb.mass * 1000);
+            ExplosionFx.CreateExplosion(pos, blastForce, subExplModelPath, subExplSoundPath, ExplosionSourceType.Missile, 0, null, sourceVesselName, null, null, default, -1, false, rb.mass * 1000, Hitpart: hitPart, sourceVelocity: rb.velocity + BDKrakensbane.FrameVelocityV3f);
             Destroy(gameObject);
         }
 

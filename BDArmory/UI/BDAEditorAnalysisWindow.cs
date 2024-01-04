@@ -22,6 +22,7 @@ namespace BDArmory.UI
 
         private bool takeSnapshot = false;
         private float rcsReductionFactor;
+        private float rcsOverride = -1;
         private float rcsGCF = 1.0f;
 
         private ModuleRadar[] radars;
@@ -190,7 +191,7 @@ namespace BDArmory.UI
             GUIStyle style = BDArmorySetup.BDGuiSkin.label;
             style.fontStyle = FontStyle.Bold;
             GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + string.Format("{0:0.00} m^2 (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
-            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
+            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
 
             style.fontStyle = FontStyle.Normal;
             GUI.Label(new Rect(10, 380, 600, 20), "** (Range evaluation not accounting for ECM/countermeasures)", style);
@@ -231,7 +232,7 @@ namespace BDArmory.UI
                         for (float distance = selected_radar.radarMaxDistanceDetect; distance >= 0; distance--)
                         {
                             text_detection = $"Detection: undetectable by this radar.";
-                            if (selected_radar.radarDetectionCurve.Evaluate(distance) <= (RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
+                            if (selected_radar.radarDetectionCurve.Evaluate(distance) <= (rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
                             {
                                 text_detection = $"Detection: detected at {distance} km and closer";
                                 break;
@@ -248,7 +249,7 @@ namespace BDArmory.UI
                         text_locktrack = $"Lock/Track: untrackable by this radar.";
                         for (float distance = selected_radar.radarMaxDistanceLockTrack; distance >= 0; distance--)
                         {
-                            if (selected_radar.radarLockTrackCurve.Evaluate(distance) <= (RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
+                            if (selected_radar.radarLockTrackCurve.Evaluate(distance) <= (rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
                             {
                                 text_locktrack = $"Lock/Track: tracked at {distance} km and closer";
                                 break;
@@ -307,7 +308,7 @@ namespace BDArmory.UI
             GUIStyle style = BDArmorySetup.BDGuiSkin.label;
             style.fontStyle = FontStyle.Bold;
             GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + string.Format("{0:0.00} m^2 (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
-            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
+            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
 
             style.fontStyle = FontStyle.Normal;
             GUI.Label(new Rect(10, 380, 600, 20), "** (Range evaluation not accounting for ECM/countermeasures)", style);
@@ -348,7 +349,7 @@ namespace BDArmory.UI
                         for (float distance = selected_radar.radarMaxDistanceDetect; distance >= 0; distance--)
                         {
                             text_detection = $"Detection: undetectable by this radar.";
-                            if (selected_radar.radarDetectionCurve.Evaluate(distance) <= (RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
+                            if (selected_radar.radarDetectionCurve.Evaluate(distance) <= (rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
                             {
                                 text_detection = $"Detection: detected at {distance} km and closer";
                                 break;
@@ -365,7 +366,7 @@ namespace BDArmory.UI
                         text_locktrack = $"Lock/Track: untrackable by this radar.";
                         for (float distance = selected_radar.radarMaxDistanceLockTrack; distance >= 0; distance--)
                         {
-                            if (selected_radar.radarLockTrackCurve.Evaluate(distance) <= (RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
+                            if (selected_radar.radarLockTrackCurve.Evaluate(distance) <= (rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF))
                             {
                                 text_locktrack = $"Lock/Track: tracked at {distance} km and closer";
                                 break;
@@ -402,6 +403,7 @@ namespace BDArmory.UI
 
             // get RCS reduction measures (stealth/low observability)
             rcsReductionFactor = 1.0f;
+
             int rcsCount = 0;
             List<Part>.Enumerator parts = EditorLogic.fetch.ship.Parts.GetEnumerator();
             while (parts.MoveNext())
@@ -413,6 +415,7 @@ namespace BDArmory.UI
                     {
                         rcsReductionFactor *= rcsJammer.rcsReductionFactor;
                         rcsCount++;
+                        if (rcsOverride < rcsJammer.rcsOverride) rcsOverride = rcsJammer.rcsOverride;
                     }
                 }
             }

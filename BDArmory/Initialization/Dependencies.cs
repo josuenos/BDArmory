@@ -30,8 +30,7 @@ namespace BDArmory.Initialization
         public static T Get<T>() where T : class
         {
             Type type = typeof(T);
-            Object instance;
-            Systems.TryGetValue(type, out instance);
+            Systems.TryGetValue(type, out object instance);
 
             if (instance == null)
             {

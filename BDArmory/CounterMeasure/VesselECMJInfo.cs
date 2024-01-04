@@ -189,7 +189,8 @@ namespace BDArmory.CounterMeasure
         void OnFixedUpdate()
         {
             if (UI.BDArmorySetup.GameIsPaused) return;
-            if (jEnabled && jammerStrength > 0)
+            //Debug.Log($"[ECMDebug]: jammer on {vessel.GetName()} active! Jammer strength: {jStrength}");
+            if (jEnabled && jStrength > 0)
             {
                 using (var loadedvessels = UI.BDATargetManager.LoadedVessels.GetEnumerator())
                     while (loadedvessels.MoveNext())
@@ -197,9 +198,10 @@ namespace BDArmory.CounterMeasure
                         // ignore null, unloaded
                         if (loadedvessels.Current == null || !loadedvessels.Current.loaded || loadedvessels.Current == vessel) continue;
                         float distance = (loadedvessels.Current.CoM - vessel.CoM).magnitude;
-                        if (distance < jammerStrength * 10)
+                        if (distance < jStrength * 10)
                         {
                             RadarWarningReceiver.PingRWR(loadedvessels.Current, vessel.CoM, RadarWarningReceiver.RWRThreatTypes.Jamming, 0.2f);
+                            //Debug.Log($"[ECMDebug]: jammer on {vessel.GetName()} active! Pinging RWR on {loadedvessels.Current.GetName()}");
                         }
                     }
             }

@@ -184,8 +184,20 @@ namespace BDArmory.Competition
             if (BDArmorySettings.DEBUG_OTHER)
                 Debug.Log($"[BDArmory.BDACompetitionMode.Scores]: {attacker} did {damage} damage to {victim} with a gun.");
 
+            var now = Planetarium.GetUniversalTime();
+
+            if (ScoreData[victim].lastPersonWhoDamagedMe != attacker)
+            {
+                ScoreData[victim].previousLastDamageTime = ScoreData[victim].lastDamageTime;
+                ScoreData[victim].previousPersonWhoDamagedMe = ScoreData[victim].lastPersonWhoDamagedMe;
+            }
             if (ScoreData[victim].damageFromGuns.ContainsKey(attacker)) { ScoreData[victim].damageFromGuns[attacker] += damage; }
             else { ScoreData[victim].damageFromGuns[attacker] = damage; }
+            ScoreData[victim].lastDamageTime = now;
+            ScoreData[victim].lastDamageWasFrom = DamageFrom.Guns;
+            ScoreData[victim].lastPersonWhoDamagedMe = attacker;
+            ScoreData[victim].everyoneWhoDamagedMe.Add(attacker);
+            ScoreData[victim].damageTypesTaken.Add(DamageFrom.Guns);
 
             if (BDArmorySettings.REMOTE_LOGGING_ENABLED)
             { BDAScoreService.Instance.TrackDamage(attacker, victim, damage); }
@@ -286,6 +298,7 @@ namespace BDArmory.Competition
 
             if (ScoreData[victim].damageFromRockets.ContainsKey(attacker)) { ScoreData[victim].damageFromRockets[attacker] += damage; }
             else { ScoreData[victim].damageFromRockets[attacker] = damage; }
+            // Last-damage tracking isn't needed here since RocketDamage and RocketHits are synchronous.
 
             if (BDArmorySettings.REMOTE_LOGGING_ENABLED)
             { BDAScoreService.Instance.TrackRocketDamage(attacker, victim, damage); }
@@ -437,6 +450,7 @@ namespace BDArmory.Competition
 
             if (ScoreData[victim].damageFromMissiles.ContainsKey(attacker)) { ScoreData[victim].damageFromMissiles[attacker] += damage; }
             else { ScoreData[victim].damageFromMissiles[attacker] = damage; }
+            // Last-damage tracking isn't needed here since MissileDamage and MissileHits are synchronous.
 
             if (BDArmorySettings.REMOTE_LOGGING_ENABLED)
             { BDAScoreService.Instance.TrackMissileDamage(attacker, victim, damage); }
@@ -671,7 +685,7 @@ namespace BDArmory.Competition
                     if (VesselModuleRegistry.GetModuleCount<ModuleEngines>(vessel) > 0)
                     {
                         int engineOut = 0;
-                        foreach (var engine in VesselModuleRegistry.GetModules<ModuleEngines>(vessel))
+                        foreach (var engine in VesselModuleRegistry.GetModuleEngines(vessel))
                         {
                             if (engine == null || engine.flameout || engine.finalThrust <= 0)
                                 engineOut++;

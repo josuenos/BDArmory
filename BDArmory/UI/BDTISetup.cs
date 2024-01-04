@@ -231,7 +231,7 @@ namespace BDArmory.UI
                 }
             }
         }
-        public Dictionary<String, Color> ColorAssignments = new Dictionary<string, Color>();
+        public Dictionary<string, Color> ColorAssignments = new Dictionary<string, Color>();
         private void UpdateList(bool fromModifiedEvent = false)
         {
             weaponManagers.Clear();
@@ -328,6 +328,7 @@ namespace BDArmory.UI
                 Debug.Log("[BDTeamIcons]=== Loading settings.cfg ===");
 
                 SettingsDataField.Load();
+                if (BDTISettings.MAX_DISTANCE_THRESHOLD < 1 || BDTISettings.MAX_DISTANCE_THRESHOLD > BDArmorySettings.MAX_GUARD_VISUAL_RANGE) BDTISettings.MAX_DISTANCE_THRESHOLD = BDArmorySettings.MAX_GUARD_VISUAL_RANGE;
             }
             catch (NullReferenceException)
             {
@@ -406,8 +407,10 @@ namespace BDArmory.UI
                 GUI.Label(new Rect(15, line++ * 25, toolWindowWidth - 20, 20), StringUtils.Localize("#LOC_BDArmory_Icon_scale") + " " + (BDTISettings.ICONSCALE * 100f).ToString("0") + "%");
                 BDTISettings.ICONSCALE = GUI.HorizontalSlider(new Rect(10, line++ * 25, toolWindowWidth - 40, 20), BDTISettings.ICONSCALE, 0.25f, 2f);
                 line -= 0.15f;
-                GUI.Label(new Rect(15, line++ * 25, toolWindowWidth - 20, 20), StringUtils.Localize("#LOC_BDArmory_Icon_distance_threshold") + " " + (BDTISettings.DISTANCE_THRESHOLD).ToString("0") + "m");
-                BDTISettings.DISTANCE_THRESHOLD = Mathf.Round(GUI.HorizontalSlider(new Rect(10, line++ * 25, toolWindowWidth - 40, 20), BDTISettings.DISTANCE_THRESHOLD, 10f, 250f) / 10f) * 10f;
+                GUI.Label(new Rect(15, line++ * 25, toolWindowWidth - 20, 20), $"{StringUtils.Localize("#LOC_BDArmory_Icon_distance_threshold")} {BDTISettings.DISTANCE_THRESHOLD:0}m");
+                BDTISettings.DISTANCE_THRESHOLD = BDAMath.RoundToUnit(GUI.HorizontalSlider(new Rect(10, line++ * 25, toolWindowWidth - 40, 20), BDTISettings.DISTANCE_THRESHOLD, 10f, 250f), 10f);
+                GUI.Label(new Rect(15, line++ * 25, toolWindowWidth - 20, 20), $"{StringUtils.Localize("#LOC_BDArmory_Icon_max_distance_threshold")} {(BDTISettings.MAX_DISTANCE_THRESHOLD < BDArmorySettings.MAX_GUARD_VISUAL_RANGE ? $"{BDTISettings.MAX_DISTANCE_THRESHOLD / 1000f:0}km" : "Unlimited")}");
+                BDTISettings.MAX_DISTANCE_THRESHOLD = UI_FloatSemiLogRange.ToSemiLogValue(Mathf.Round(GUI.HorizontalSlider(new Rect(10, line++ * 25, toolWindowWidth - 40, 20), UI_FloatSemiLogRange.FromSemiLogValue(BDTISettings.MAX_DISTANCE_THRESHOLD / 1000f, 1f), 1f, UI_FloatSemiLogRange.FromSemiLogValue(BDArmorySettings.MAX_GUARD_VISUAL_RANGE / 1000f, 1f))), 1f, 1) * 1000f;
                 GUI.EndGroup();
                 IconOptionsGroup.height = 25f * line;
 

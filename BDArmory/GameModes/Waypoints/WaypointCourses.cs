@@ -200,7 +200,7 @@ namespace BDArmory.GameModes.Waypoints
                 }
                 else if (type == typeof(bool))
                 {
-                    return Boolean.Parse(value);
+                    return bool.Parse(value);
                 }
                 else if (type == typeof(int))
                 {

@@ -57,20 +57,24 @@ namespace BDArmory.UI
             if (_guiCheckIndexScores < 0) _guiCheckIndexScores = GUIUtils.RegisterGUIRect(new Rect());
             if (_guiCheckIndexWeights < 0) _guiCheckIndexWeights = GUIUtils.RegisterGUIRect(new Rect());
             _ready = true;
-            AdjustWindowRect(new Vector2(BDArmorySetup.WindowRectScores.width, BDArmorySetup.WindowRectScores.height));
+            AdjustWindowRect(BDArmorySetup.WindowRectScores.size, true);
         }
 
         void ConfigureStyles()
         {
             stylesConfigured = true;
-            leftLabel = new GUIStyle();
-            leftLabel.alignment = TextAnchor.MiddleLeft;
+            leftLabel = new GUIStyle
+            {
+                alignment = TextAnchor.MiddleLeft,
+                wordWrap = true,
+                fontSize = BDArmorySettings.SCORES_FONT_SIZE
+            };
             leftLabel.normal.textColor = Color.white;
-            leftLabel.wordWrap = true;
-            leftLabel.fontSize = BDArmorySettings.SCORES_FONT_SIZE;
-            rightLabel = new GUIStyle(leftLabel);
-            rightLabel.alignment = TextAnchor.MiddleRight;
-            rightLabel.wordWrap = false;
+            rightLabel = new GUIStyle(leftLabel)
+            {
+                alignment = TextAnchor.MiddleRight,
+                wordWrap = false
+            };
         }
 
         void AdjustFontSize(bool up)
@@ -122,14 +126,13 @@ namespace BDArmory.UI
         }
 
         #region Scores
-        private void AdjustWindowRect(Vector2 size)
+        private void AdjustWindowRect(Vector2 size, bool force=false)
         {
-            if (!autoResizingWindow)
+            if (!autoResizingWindow && resizingWindow || force)
             {
-                size.x = Mathf.Max(size.x, 150);
-                size.y = Mathf.Max(size.y, 70); // The ScrollView won't let us go smaller than this.
-                BDArmorySetup.WindowRectScores.width = size.x;
-                BDArmorySetup.WindowRectScores.height = size.y;
+                size.x = Mathf.Clamp(size.x, 150, Screen.width - BDArmorySetup.WindowRectScores.x);
+                size.y = Mathf.Clamp(size.y, 70, Screen.height - BDArmorySetup.WindowRectScores.y); // The ScrollView won't let us go smaller than this.
+                BDArmorySetup.WindowRectScores.size = size;
             }
             GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectScores);
             windowSize = BDArmorySetup.WindowRectScores.size;

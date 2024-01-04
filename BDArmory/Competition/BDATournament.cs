@@ -1908,7 +1908,7 @@ namespace BDArmory.Competition
                 evolutionState = TryLoadEvolutionState();
                 resumingEvolution = evolutionState != null;
             }
-            if (!resumingEvolution && BDArmorySettings.AUTO_RESUME_TOURNAMENT)
+            if (!resumingEvolution && BDArmorySettings.AUTO_RESUME_TOURNAMENT && BDArmorySettings.VESSEL_SPAWN_NUMBER_OF_TEAMS != 11) // Don't resume when the teams mode is set to custom templates.
             {
                 resumingTournament = TryLoadTournamentState(out generateNewTournament);
             }

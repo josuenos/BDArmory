@@ -96,6 +96,25 @@ namespace BDArmory.Targeting
             IRSource = null;
         }
 
+        public TargetSignatureData(CMDecoy decoy, float _signalStrength)
+        {
+            velocity = decoy.velocity;
+            geoPos = VectorUtils.WorldPositionToGeoCoords(decoy.transform.position, FlightGlobals.currentMainBody);
+            exists = true;
+            acceleration = Vector3.zero;
+            timeAcquired = Time.time;
+            signalStrength = _signalStrength;
+            targetInfo = null;
+            vesselJammer = null;
+            Team = null;
+            pingPosition = Vector2.zero;
+            orbital = false;
+            orbit = null;
+            lockedByRadar = null;
+            vessel = null;
+            IRSource = null;
+        }
+
         public TargetSignatureData(Vector3 _velocity, Vector3 _position, Vector3 _acceleration, bool _exists, float _signalStrength)
         {
             velocity = _velocity;
@@ -145,6 +164,7 @@ namespace BDArmory.Targeting
             {
                 // chaff check
                 decoyFactor = (1f - RadarUtils.GetVesselChaffFactor(vessel));
+                Vector3 velOrAccel = (!vessel.InVacuum()) ? vessel.Velocity() : vessel.acceleration_immediate;
 
                 if (decoyFactor > 0f)
                 {
@@ -158,10 +178,10 @@ namespace BDArmory.Targeting
                     float distortionFactor = decoyFactor * UnityEngine.Random.Range(16f, 256f);
 
                     // Convert Float jammingFactor position bias and signatureFactor scaling to Vector3 position
-                    Vector3 signatureDistortion = distortionFactor * (vessel.GetSrfVelocity().normalized * -1f * jammingFactor + UnityEngine.Random.insideUnitSphere);
+                    Vector3 signatureDistortion = distortionFactor * (UnityEngine.Random.insideUnitSphere - jammingFactor * velOrAccel.normalized);
 
                     // Higher speed -> missile decoyed further "behind" where the chaff drops (also means that chaff is least effective for head-on engagements)
-                    posDistortion = (vessel.GetSrfVelocity() * -1f * Mathf.Clamp(decoyFactor * decoyFactor, 0f, 0.5f)) + signatureDistortion;
+                    posDistortion = signatureDistortion - Mathf.Clamp(decoyFactor * decoyFactor, 0f, 0.5f) * velOrAccel;
 
                     // Apply effects from global settings and individual missile chaffEffectivity
                     posDistortion *= Mathf.Max(BDArmorySettings.CHAFF_FACTOR, 0f) * chaffEffectivity;

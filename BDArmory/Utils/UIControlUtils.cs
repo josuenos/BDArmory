@@ -325,8 +325,35 @@ namespace BDArmory.Utils
             this.minValue = Mathf.Min(minValue, maxValue);
             this.maxValue = Mathf.Max(minValue, maxValue);
             if (sigFig > 0) this.sigFig = sigFig;
-            var partActionFieldItem = ((UIPartActionFloatSemiLogRange)this.partActionItem);
+            var partActionFieldItem = (UIPartActionFloatSemiLogRange)partActionItem;
             if (partActionFieldItem != null) partActionFieldItem.UpdateLimits();
+        }
+
+        /// <summary>
+        /// Static function for converting linear values to semi-log values.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <param name="minValue">The minimum value of the slider.</param>
+        /// <param name="sigFig">The number of significant figures (for integer rounding). Default=2.</param>
+        /// <returns>The semi-log value.</returns>
+        public static float ToSemiLogValue(float value, float minValue, int sigFig = 2)
+        {
+            var minStepSize = Mathf.Pow(10, Mathf.Floor(Mathf.Log10(minValue)));
+            value = Mathf.Pow(10f, Mathf.Floor((value - 1f) / 9f)) * (1f + (value - 1f) % 9f) * minStepSize;
+            if (Mathf.Log10(value) - (sigFig - 1) > 0) value = Mathf.Round(value); // Round whole numbers.
+            return value;
+        }
+        /// <summary>
+        /// Static function for converting semi-log values to linear values.
+        /// </summary>
+        /// <param name="value">The value to convert.</param>
+        /// <param name="minValue">The minimum value of the slider.</param>
+        /// <returns>The linear value.</returns>
+        public static float FromSemiLogValue(float value, float minValue)
+        {
+            var minStepSize = Mathf.Pow(10, Mathf.Floor(Mathf.Log10(minValue)));
+            value /= minStepSize;
+            return Mathf.Floor(Mathf.Log10(value)) * 9 + value / Mathf.Pow(10, Mathf.Floor(Mathf.Log10(value)));
         }
     }
 
@@ -469,8 +496,17 @@ namespace BDArmory.Utils
             // Debug.Log($"DEBUG SemiLog: value {value} -> {fromValue} -> {roundedValue} -> {toValue}");
             return toValue;
         }
-        float ToSemiLogValue(float value) => Mathf.Pow(10f, Mathf.Floor((value - 1f) / 9f)) * (1f + (value - 1f) % 9f) * minStepSize;
-        float FromSemiLogValue(float value) { value /= minStepSize; return Mathf.Floor(Mathf.Log10(value)) * 9 + value / Mathf.Pow(10, Mathf.Floor(Mathf.Log10(value))); }
+        float ToSemiLogValue(float value)
+        {
+            value = Mathf.Pow(10f, Mathf.Floor((value - 1f) / 9f)) * (1f + (value - 1f) % 9f) * minStepSize;
+            if (Mathf.Log10(value) - (semiLogFloatRange.sigFig - 1) > 0) value = Mathf.Round(value); // Round whole numbers.
+            return value;
+        }
+        float FromSemiLogValue(float value)
+        {
+            value /= minStepSize;
+            return Mathf.Floor(Mathf.Log10(value)) * 9 + value / Mathf.Pow(10, Mathf.Floor(Mathf.Log10(value)));
+        }
         private void UpdateDisplay(float value)
         {
             if (numericSliders != Window.NumericSliders)
@@ -482,10 +518,8 @@ namespace BDArmory.Utils
             blockSliderUpdate = true;
             lastDisplayedValue = value;
             fieldValue.text = value.ToString(fieldFormatString);
-            if (numericSliders)
-            { inputField.text = fieldValue.text; }
-            else
-            { slider.value = FromSemiLogValue(value); }
+            if (numericSliders) { inputField.text = fieldValue.text; }
+            else { slider.value = FromSemiLogValue(value); }
             blockSliderUpdate = false;
         }
         private void OnValueChanged(float obj)

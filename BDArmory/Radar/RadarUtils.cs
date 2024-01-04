@@ -13,6 +13,7 @@ using BDArmory.Utils;
 using BDArmory.Weapons;
 using BDArmory.Weapons.Missiles;
 
+
 namespace BDArmory.Radar
 {
     public static class RadarUtils
@@ -298,7 +299,7 @@ namespace BDArmory.Radar
         private static float RCSMatrixEval(float[,] rcsMatrix, float overallRCS, float azAngle, float elAngle)
         {
             float rcs;
-            
+
             if (elAngle > 90f)
                 elAngle = 180f - elAngle;
             else if (elAngle < -90f)
@@ -466,7 +467,15 @@ namespace BDArmory.Radar
 
             return chaffFactor;
         }
+        /// <summary>
+        /// Get the degree vessel's sonar return degraded by bubble screens between sonar and target, similar to lockBreakFactor
+        /// </summary>
+        public static float GetVesselBubbleFactor(Vector3 sensorPos, Vessel v)
+        {
+            float Factor = CMBubble.RaycastBubblescreen(new Ray(sensorPos, v.CoM - sensorPos));
 
+            return Factor;
+        }
         /// <summary>
         /// Get a vessel ecm jamming area (in m) where radar display garbling occurs
         /// </summary>
@@ -771,10 +780,10 @@ namespace BDArmory.Radar
         private static void SetHangarRender(bool renderEnabled)
         {
             if (!renderEnabled)
-                hangarHiddenExternally = false; 
+                hangarHiddenExternally = false;
             else if (renderEnabled && hangarHiddenExternally)
                 return;
-            
+
             string[] rcsNames = { "vabscenery", "sphscenery", "vablvl1", "vablvl2", "vablvl3", "vabmodern", "sphlvl1", "sphlvl2", "sphlvl3", "sphmodern", "vabcrew", "sphcrew" };
             List<Transform> rootNodes = new List<Transform>();
 
@@ -918,14 +927,14 @@ namespace BDArmory.Radar
             rcsMap.Apply();
         }
 
-            /// <summary>
-            /// Internal method: do the actual radar snapshot rendering from 3 sides and store it in a vesseltargetinfo attached to the vessel
-            ///
-            /// Note: Transform t is passed separatedly (instead of using v.transform), as the method need to be called from the editor
-            ///         and there we dont have a VESSEL, only a SHIPCONSTRUCT, so the EditorRcSWindow passes the transform separately.
-            /// </summary>
-            /// <param name="inEditorZoom">when true, we try to make the rendered vessel fill the rendertexture completely, for a better detailed view. This does skew the computed cross section, so it is only for a good visual in editor!</param>
-            public static float RenderVesselRadarSnapshotLegacy(Vessel v, Transform t, bool inEditorZoom = false)
+        /// <summary>
+        /// Internal method: do the actual radar snapshot rendering from 3 sides and store it in a vesseltargetinfo attached to the vessel
+        ///
+        /// Note: Transform t is passed separatedly (instead of using v.transform), as the method need to be called from the editor
+        ///         and there we dont have a VESSEL, only a SHIPCONSTRUCT, so the EditorRcSWindow passes the transform separately.
+        /// </summary>
+        /// <param name="inEditorZoom">when true, we try to make the rendered vessel fill the rendertexture completely, for a better detailed view. This does skew the computed cross section, so it is only for a good visual in editor!</param>
+        public static float RenderVesselRadarSnapshotLegacy(Vessel v, Transform t, bool inEditorZoom = false)
         {
             const float radarDistance = 1000f;
             const float radarFOV = 2.0f;
@@ -1279,13 +1288,13 @@ namespace BDArmory.Radar
             // guard clauses
             if (!radar)
                 return false;
-
             using (var loadedvessels = BDATargetManager.LoadedVessels.GetEnumerator())
                 while (loadedvessels.MoveNext())
                 {
                     // ignore null and unloaded
                     if (loadedvessels.Current == null || !loadedvessels.Current.loaded) continue;
-
+                    if (loadedvessels.Current.IsUnderwater() && radar.sonarMode == ModuleRadar.SonarModes.None) //don't detect underwater targets with radar
+                        continue;
                     // ignore self, ignore behind ray
                     Vector3 vectorToTarget = (loadedvessels.Current.transform.position - ray.origin);
                     if (((vectorToTarget).sqrMagnitude < RADAR_IGNORE_DISTANCE_SQR) ||
@@ -1300,9 +1309,19 @@ namespace BDArmory.Radar
 
                         // get vessel's radar signature
                         TargetInfo ti = GetVesselRadarSignature(loadedvessels.Current);
-                        float signature = (BDArmorySettings.ASPECTED_RCS) ? GetVesselRadarSignatureAtAspect(ti, ray.origin) : ti.radarModifiedSignature;
-                        signature *= GetRadarGroundClutterModifier(radar.radarGroundClutterFactor, radar.referenceTransform, ray.origin, loadedvessels.Current.CoM, ti);
-                        signature *= GetStandoffJammingModifier(radar.vessel, radar.weaponManager.Team, ray.origin, loadedvessels.Current, signature);
+                        float signature = 0;
+                        if (radar.sonarMode != ModuleRadar.SonarModes.passive)
+                        {
+                            signature = (BDArmorySettings.ASPECTED_RCS) ? GetVesselRadarSignatureAtAspect(ti, ray.origin) : ti.radarModifiedSignature;
+                            signature *= GetRadarGroundClutterModifier(radar.radarGroundClutterFactor, radar.referenceTransform, ray.origin, loadedvessels.Current.CoM, ti);
+                            signature *= GetStandoffJammingModifier(radar.vessel, radar.weaponManager.Team, ray.origin, loadedvessels.Current, signature);
+                            if (radar.vessel.Splashed && loadedvessels.Current.Splashed) signature *= GetVesselBubbleFactor(radar.transform.position, loadedvessels.Current);
+                        }
+                        else
+                        {
+                            float selfNoise = BDATargetManager.GetVesselAcousticSignature(radar.vessel, radar.referenceTransform.position) / 3;
+                            signature = BDATargetManager.GetVesselAcousticSignature(loadedvessels.Current, radar.referenceTransform.position) - selfNoise;
+                        }
                         // no ecm lockbreak factor here
                         // no chaff factor here
 
@@ -1330,8 +1349,11 @@ namespace BDArmory.Radar
                         }
 
                         //  our radar ping can be received at a higher range than we can detect, according to RWR range ping factor:
-                        if (distance < radar.radarMaxDistanceDetect * RWR_PING_RANGE_FACTOR)
-                            RadarWarningReceiver.PingRWR(loadedvessels.Current, ray.origin, radar.rwrType, radar.signalPersistTimeForRwr);
+                        if (radar.sonarMode != ModuleRadar.SonarModes.passive)
+                        {
+                            if (distance < radar.radarMaxDistanceDetect * RWR_PING_RANGE_FACTOR)
+                                RadarWarningReceiver.PingRWR(loadedvessels.Current, ray.origin, radar.rwrType, radar.signalPersistTimeForRwr);
+                        }
                     }
                 }
 
@@ -1387,9 +1409,10 @@ namespace BDArmory.Radar
                             signature = (BDArmorySettings.ASPECTED_RCS) ? GetVesselRadarSignatureAtAspect(ti, ray.origin) : ti.radarModifiedSignature;
                             // no ground clutter modifier for missiles
                             signature *= ti.radarLockbreakFactor;    //multiply lockbreak factor from active ecm
+
                         }                                                                 //do not multiply chaff factor here
                         signature *= GetStandoffJammingModifier(missile.vessel, missile.Team, ray.origin, loadedvessels.Current, signature);
-
+                        if (missile.GetWeaponClass() == WeaponClasses.SLW) signature *= GetVesselBubbleFactor(missile.transform.position, loadedvessels.Current);
                         // evaluate range
                         float distance = (loadedvessels.Current.CoM - ray.origin).magnitude;
                         //TODO: Performance! better if we could switch to sqrMagnitude...
@@ -1451,11 +1474,14 @@ namespace BDArmory.Radar
             Vector3 lookDirection = Quaternion.AngleAxis(directionAngle, upVector) * forwardVector;
             int dataIndex = 0;
             bool hasLocked = false;
-
+            float selfNoise = 0;
             // guard clauses
             if (!myWpnManager || !myWpnManager.vessel || !radar)
                 return false;
-
+            if (radar.sonarMode == ModuleRadar.SonarModes.passive)
+            {
+                selfNoise = BDATargetManager.GetVesselAcousticSignature(radar.vessel, radar.referenceTransform.position) / 3;
+            }
             using (var loadedvessels = BDATargetManager.LoadedVessels.GetEnumerator())
                 while (loadedvessels.MoveNext())
                 {
@@ -1466,7 +1492,8 @@ namespace BDArmory.Radar
                     // ignore too close ones
                     if ((loadedvessels.Current.transform.position - position).sqrMagnitude < RADAR_IGNORE_DISTANCE_SQR)
                         continue;
-
+                    if (loadedvessels.Current.IsUnderwater() && radar.sonarMode == ModuleRadar.SonarModes.None) //don't detect underwater targets with radar
+                        continue;
                     Vector3 vesselDirection = (loadedvessels.Current.CoM - position).ProjectOnPlanePreNormalized(upVector);
                     if (Vector3.Angle(vesselDirection, lookDirection) < fov / 2f)
                     {
@@ -1476,9 +1503,16 @@ namespace BDArmory.Radar
 
                         // get vessel's radar signature
                         TargetInfo ti = GetVesselRadarSignature(loadedvessels.Current);
-                        float signature = (BDArmorySettings.ASPECTED_RCS) ? GetVesselRadarSignatureAtAspect(ti, position) : ti.radarModifiedSignature;
+                        float signature = 1;
+                        if (radar.sonarMode != ModuleRadar.SonarModes.passive)    //radar or active soanr
+                        {
+                            signature = (BDArmorySettings.ASPECTED_RCS) ? GetVesselRadarSignatureAtAspect(ti, position) : ti.radarModifiedSignature;
+                            signature *= GetRadarGroundClutterModifier(radar.radarGroundClutterFactor, referenceTransform, position, loadedvessels.Current.CoM, ti);
+                            if (radar.vessel.Splashed && loadedvessels.Current.Splashed) signature *= GetVesselBubbleFactor(radar.transform.position, loadedvessels.Current);
+                        }
+                        else //passive sonar
+                            signature = BDATargetManager.GetVesselAcousticSignature(loadedvessels.Current, radar.referenceTransform.position) - selfNoise;
                         //do not multiply chaff factor here
-                        signature *= GetRadarGroundClutterModifier(radar.radarGroundClutterFactor, referenceTransform, position, loadedvessels.Current.CoM, ti);
 
                         // evaluate range
                         float distance = (loadedvessels.Current.CoM - position).magnitude / 1000f;                                      //TODO: Performance! better if we could switch to sqrMagnitude...
@@ -1522,10 +1556,12 @@ namespace BDArmory.Radar
                                     }
                                 }
                             }
-
-                            //  our radar ping can be received at a higher range than we can lock/track, according to RWR range ping factor:
-                            if (distance < radar.radarMaxDistanceLockTrack * RWR_PING_RANGE_FACTOR)
-                                RadarWarningReceiver.PingRWR(loadedvessels.Current, position, radar.rwrType, radar.signalPersistTimeForRwr);
+                            if (radar.sonarMode != ModuleRadar.SonarModes.passive)
+                            {
+                                //  our radar ping can be received at a higher range than we can lock/track, according to RWR range ping factor:
+                                if (distance < radar.radarMaxDistanceLockTrack * RWR_PING_RANGE_FACTOR)
+                                    RadarWarningReceiver.PingRWR(loadedvessels.Current, position, radar.rwrType, radar.signalPersistTimeForRwr);
+                            }
                         }
                         else   // SCAN/DETECT TARGETS:
                         {
@@ -1541,10 +1577,12 @@ namespace BDArmory.Radar
                                 // report scanned targets only
                                 radar.ReceiveContactData(new TargetSignatureData(loadedvessels.Current, signature), false);
                             }
-
-                            //  our radar ping can be received at a higher range than we can detect, according to RWR range ping factor:
-                            if (distance < radar.radarMaxDistanceDetect * RWR_PING_RANGE_FACTOR)
-                                RadarWarningReceiver.PingRWR(loadedvessels.Current, position, radar.rwrType, radar.signalPersistTimeForRwr);
+                            if (radar.sonarMode != ModuleRadar.SonarModes.passive)
+                            {
+                                //  our radar ping can be received at a higher range than we can detect, according to RWR range ping factor:
+                                if (distance < radar.radarMaxDistanceDetect * RWR_PING_RANGE_FACTOR)
+                                    RadarWarningReceiver.PingRWR(loadedvessels.Current, position, radar.rwrType, radar.signalPersistTimeForRwr);
+                            }
                         }
                     }
                 }
@@ -1608,6 +1646,7 @@ namespace BDArmory.Radar
                 signature *= GetRadarGroundClutterModifier(radar.radarGroundClutterFactor, radar.referenceTransform, ray.origin, lockedVessel.CoM, ti);
                 signature *= ti.radarLockbreakFactor;    //multiply lockbreak factor from active ecm
                 if (radar.weaponManager is not null) signature *= GetStandoffJammingModifier(radar.vessel, radar.weaponManager.Team, ray.origin, lockedVessel, signature);
+                if (radar.vessel.Splashed && lockedVessel.Splashed) signature *= GetVesselBubbleFactor(radar.transform.position, lockedVessel);
                 //do not multiply chaff factor here
 
                 // evaluate range
@@ -1779,7 +1818,9 @@ namespace BDArmory.Radar
             Vector3 upVector = referenceTransform.up;
             Vector3 lookDirection = -forwardVector;
             var pilotAI = VesselModuleRegistry.GetBDModulePilotAI(myWpnManager.vessel, true);
-            var ignoreMyTargetTargetingMe = pilotAI != null && pilotAI.evasionIgnoreMyTargetTargetingMe;
+            var orbitalAI = VesselModuleRegistry.GetModule<BDModuleOrbitalAI>(myWpnManager.vessel, true);
+            var ignoreMyTargetTargetingMe = (pilotAI != null && pilotAI.evasionIgnoreMyTargetTargetingMe) ||
+                (orbitalAI != null && orbitalAI.evasionIgnoreMyTargetTargetingMe);
             float maxRWRDistance = RWR != null ? RWR.rwrDisplayRange : maxViewDistance;
             using (var loadedvessels = BDATargetManager.LoadedVessels.GetEnumerator())
                 while (loadedvessels.MoveNext())
@@ -1792,17 +1833,20 @@ namespace BDArmory.Radar
                     float vesselDistanceSqr = (loadedvessels.Current.transform.position - position).sqrMagnitude;
                     //BDATargetManager.ClearRadarReport(loadedvessels.Current, myWpnManager); //reset radar contact status
                     if (vesselDistanceSqr < maxRWRDistance * maxRWRDistance && Vector3.Angle(vesselProjectedDirection, lookDirection) < fov / 2f) // && Vector3.Angle(loadedvessels.Current.transform.position - position, -myWpnManager.transform.forward) < myWpnManager.guardAngle / 2f) //WM facing direction? that s going to cause issues for any that aren't mounted pointing forward if guardAngle < 360; check combatSeat forward vector
-                        {
-                        if (TerrainCheck(referenceTransform.position, loadedvessels.Current.transform.position))
-                        {
-                            continue; //blocked by terrain
-                        }
-
+                    {
                         TargetInfo tInfo;
                         if ((tInfo = loadedvessels.Current.gameObject.GetComponent<TargetInfo>()))
                         {
+                            //if (TerrainCheck(referenceTransform.position, loadedvessels.Current.transform.position))
+                            //{
+                            //    continue; //blocked by terrain
+                            //}
                             if (tInfo.isMissile)
                             {
+                                if (TerrainCheck(referenceTransform.position, loadedvessels.Current.transform.position))
+                                {
+                                    continue; //blocked by terrain
+                                }
                                 MissileBase missileBase = tInfo.MissileBaseModule;
                                 if (missileBase != null)
                                 {
@@ -1831,7 +1875,7 @@ namespace BDArmory.Radar
                                         {
                                             guidanceType = missileBase.TargetingMode,
                                             distance = Vector3.Distance(missileBase.part.transform.position, myWpnManager.part.transform.position),
-                                            time = AIUtils.TimeToCPA(missileBase.vessel, myWpnManager.vessel, 16f),
+                                            time = AIUtils.TimeToCPA(missileBase.vessel, myWpnManager.vessel, myWpnManager.evadeThreshold * 1.2f),
                                             position = missileBase.transform.position,
                                             vessel = missileBase.vessel,
                                             weaponManager = missileBase.SourceVessel != null ? VesselModuleRegistry.GetModule<MissileFire>(missileBase.SourceVessel) : null,
@@ -1851,17 +1895,36 @@ namespace BDArmory.Radar
                                                 results.foundAntiRadiationMissile = true; //admittedly, combining the two would result in launching flares at ARMs and turning off radar when having incoming heaters...
                                                 break;
                                         }
+                                        if (missileBase.GetWeaponClass() == WeaponClasses.SLW) results.foundTorpedo = true;
                                     }
                                 }
                                 else
                                 {
                                     Debug.LogWarning("[BDArmory.RadarUtils]: Supposed missile (" + loadedvessels.Current.vesselName + ") has no MissileBase!");
-                                    tInfo.isMissile = false; // The target vessel has lost it's missile base component and should no longer count as a missile.
+                                    tInfo.isMissile = false; // The target vessel has lost it's missile base component and should no longer count as a missile. This can happen for modular missiles that are getting destroyed.
                                 }
                             }
-                            else
+                            else if (myWpnManager.guardMode) // Only check being under fire when in guard mode (for non-guardmode CMs).
                             {
-                                if (vesselDistanceSqr > myWpnManager.guardRange * myWpnManager.guardRange) continue;
+                                /*
+                                VesselCloakInfo vesselcamo;
+                                float viewModifier = 1;
+                                if (vesselcamo = loadedvessels.Current.gameObject.GetComponent<VesselCloakInfo>())
+                                {
+                                    if (vesselcamo.cloakEnabled) viewModifier = vesselcamo.opticalReductionFactor;
+                                }
+                                //Can the target be seen?
+                                float visDistance = myWpnManager.guardRange;
+                                if (BDArmorySettings.UNDERWATER_VISION && (myWpnManager.vessel.IsUnderwater() || loadedvessels.Current.IsUnderwater())) visDistance = 100;
+                                visDistance *= viewModifier;
+                                if (vesselDistanceSqr > visDistance * visDistance) continue;
+                                */
+                                //if (TerrainCheck(referenceTransform.position, loadedvessels.Current.transform.position))
+                                if (!myWpnManager.CanSeeTarget(tInfo, false, false))
+                                {
+                                    continue; //blocked by terrain
+                                }
+
                                 using (var weapon = VesselModuleRegistry.GetModules<ModuleWeapon>(loadedvessels.Current).GetEnumerator())
                                     while (weapon.MoveNext())
                                     {
@@ -1983,7 +2046,6 @@ namespace BDArmory.Radar
             {
                 return Physics.Linecast(start, end, (int)LayerMasks.Scenery);
             }
-
             return false;
         }
 

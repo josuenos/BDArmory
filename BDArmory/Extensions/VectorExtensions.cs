@@ -89,5 +89,32 @@ namespace BDArmory.Extensions
             var normalisationFactor = BDAMath.Sqrt(v1.sqrMagnitude * v2.sqrMagnitude);
             return normalisationFactor > 0 ? Vector3.Dot(v1, v2) / normalisationFactor : 0;
         }
+    
+        /// <summary>
+        /// Efficient replacement for Vector3.Distance(from, to) < distance.
+        /// Intel and AMD appear to support sqrt in hardware, but M1 Macs don't.
+        /// This is the most efficient version from benchmarks and gives the cleanest code.
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="to"></param>
+        /// <param name="distance"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool CloserToThan(this Vector3 v, Vector3 to, float distance)
+        {
+            return (v - to).sqrMagnitude < distance * distance;
+        }
+        /// <summary>
+        /// Efficient replacement for Vector3.Distance(from, to) > distance.
+        /// </summary>
+        /// <param name="v"></param>
+        /// <param name="from"></param>
+        /// <param name="distance"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool FurtherFromThan(this Vector3 v, Vector3 from, float distance)
+        {
+            return (v - from).sqrMagnitude > distance * distance;
+        }
     }
 }

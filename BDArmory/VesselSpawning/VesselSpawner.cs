@@ -50,7 +50,7 @@ namespace BDArmory.VesselSpawning
             Vector3d dummySpawnCoords;
             FlightGlobals.currentMainBody.GetLatLonAlt(FlightCamera.fetch.transform.position + offset, out dummySpawnCoords.x, out dummySpawnCoords.y, out dummySpawnCoords.z);
             if (spawnProbeLocation == null) return null;
-            Vessel spawnProbe = VesselSpawner.SpawnVesselFromCraftFile(spawnProbeLocation, dummySpawnCoords, 0f, 0f, 0f, out dummyVar);
+            Vessel spawnProbe = SpawnVesselFromCraftFile(spawnProbeLocation, dummySpawnCoords, 0f, 0f, 0f, out dummyVar);
             return spawnProbe;
         }
 

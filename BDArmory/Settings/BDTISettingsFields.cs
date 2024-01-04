@@ -88,11 +88,11 @@ namespace BDArmory.Settings
 		{
 			if (type == typeof(bool))
 			{
-				return Boolean.Parse(value);
+				return bool.Parse(value);
 			}
 			else if (type == typeof(float))
 			{
-				return Single.Parse(value);
+				return float.Parse(value);
 			}
 			else if (type == typeof(string))
 			{

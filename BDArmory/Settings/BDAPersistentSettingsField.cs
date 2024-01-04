@@ -166,7 +166,7 @@ namespace BDArmory.Settings
 
                 if (type == typeof(bool))
                 {
-                    return Boolean.Parse(value);
+                    return bool.Parse(value);
                 }
                 else if (type.IsEnum)
                 {
@@ -174,23 +174,23 @@ namespace BDArmory.Settings
                 }
                 else if (type == typeof(float))
                 {
-                    return Single.Parse(value);
+                    return float.Parse(value);
                 }
                 else if (type == typeof(int))
                 {
                     return int.Parse(value);
                 }
-                else if (type == typeof(Single))
+                else if (type == typeof(float))
                 {
-                    return Single.Parse(value);
+                    return float.Parse(value);
                 }
                 else if (type == typeof(Rect))
                 {
                     string[] strings = value.Split(',');
-                    int xVal = Int32.Parse(strings[0].Split(':')[1].Split('.')[0]);
-                    int yVal = Int32.Parse(strings[1].Split(':')[1].Split('.')[0]);
-                    int wVal = Int32.Parse(strings[2].Split(':')[1].Split('.')[0]);
-                    int hVal = Int32.Parse(strings[3].Split(':')[1].Split('.')[0]);
+                    int xVal = int.Parse(strings[0].Split(':')[1].Split('.')[0]);
+                    int yVal = int.Parse(strings[1].Split(':')[1].Split('.')[0]);
+                    int wVal = int.Parse(strings[2].Split(':')[1].Split('.')[0]);
+                    int hVal = int.Parse(strings[3].Split(':')[1].Split('.')[0]);
                     Rect rectVal = new Rect
                     {
                         x = xVal,

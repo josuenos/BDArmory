@@ -39,7 +39,8 @@ namespace BDArmory.UI
         private double currentVesselDiedAt = 0;
 
         //gui params
-        private float _windowHeight; //auto adjusting
+        bool resizingWindow = false;
+        Vector2 windowSize = new(350, 32); // Height is auto-adjusting
         private string camMode = "A";
         private int currentMode = 1;
         private SortedList<string, List<MissileFire>> weaponManagers = new SortedList<string, List<MissileFire>>();
@@ -123,12 +124,9 @@ namespace BDArmory.UI
 
             StartCoroutine(WaitForBdaSettings());
 
-            // TEST
+            // Set floating origin thresholds
             FloatingOrigin.fetch.threshold = 20000; //20km
             FloatingOrigin.fetch.thresholdSqr = 20000 * 20000; //20km
-            // Debug.Log($"[BDArmory.LoadedVesselSwitcher]: FLOATINGORIGIN: threshold is {FloatingOrigin.fetch.threshold}");
-
-            //BDArmorySetup.WindowRectVesselSwitcher = new Rect(10, Screen.height / 6f, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH, 10);
         }
 
         private void OnDestroy()
@@ -152,6 +150,8 @@ namespace BDArmory.UI
 
             _ready = true;
             BDArmorySetup.Instance.hasVesselSwitcher = true;
+            if (BDArmorySetup.WindowRectVesselSwitcher.size != default) windowSize = BDArmorySetup.WindowRectVesselSwitcher.size;
+            windowSize.x = Math.Max(windowSize.x, 350);
             if (_guiCheckIndex < 0) _guiCheckIndex = GUIUtils.RegisterGUIRect(new Rect());
             SetVisible(BDArmorySetup.showVesselSwitcherGUI);
         }
@@ -296,15 +296,16 @@ namespace BDArmory.UI
         {
             if (!(_ready && HighLogic.LoadedSceneIsFlight))
                 return;
+            if (resizingWindow && Event.current.type == EventType.MouseUp) { resizingWindow = false; }
             if (_showGui && (BDArmorySetup.GAME_UI_ENABLED || BDArmorySettings.VESSEL_SWITCHER_PERSIST_UI))
             {
                 string windowTitle = StringUtils.Localize("#LOC_BDArmory_BDAVesselSwitcher_Title");
                 if (BDArmorySettings.GRAVITY_HACKS)
                     windowTitle = windowTitle + " (" + BDACompetitionMode.gravityMultiplier.ToString("0.0") + "G)";
 
-                SetNewHeight(_windowHeight);
+                ResizeWindow();
                 // this Rect initialization ensures any save issues with height or width of the window are resolved
-                BDArmorySetup.WindowRectVesselSwitcher = new Rect(BDArmorySetup.WindowRectVesselSwitcher.x, BDArmorySetup.WindowRectVesselSwitcher.y, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH, _windowHeight);
+                BDArmorySetup.WindowRectVesselSwitcher = new Rect(BDArmorySetup.WindowRectVesselSwitcher.x, BDArmorySetup.WindowRectVesselSwitcher.y, windowSize.x, windowSize.y);
                 BDArmorySetup.SetGUIOpacity();
                 BDArmorySetup.WindowRectVesselSwitcher = GUI.Window(10293444, BDArmorySetup.WindowRectVesselSwitcher, WindowVesselSwitcher, windowTitle, BDArmorySetup.BDGuiSkin.window); //"BDA Vessel Switcher"
                 GUIUtils.UpdateGUIRect(BDArmorySetup.WindowRectVesselSwitcher, _guiCheckIndex);
@@ -322,13 +323,17 @@ namespace BDArmory.UI
             GUIUtils.SetGUIRectVisible(_guiCheckIndex, visible);
         }
 
-        private void SetNewHeight(float windowHeight)
+        private void ResizeWindow()
         {
-            var previousWindowHeight = BDArmorySetup.WindowRectVesselSwitcher.height;
-            BDArmorySetup.WindowRectVesselSwitcher.height = windowHeight;
-            if (BDArmorySettings.STRICT_WINDOW_BOUNDARIES && windowHeight < previousWindowHeight && Mathf.RoundToInt(BDArmorySetup.WindowRectVesselSwitcher.y + previousWindowHeight) == Screen.height) // Window shrunk while being at edge of screen.
-                BDArmorySetup.WindowRectVesselSwitcher.y = Screen.height - BDArmorySetup.WindowRectVesselSwitcher.height;
+            if (resizingWindow) windowSize.x = Mathf.Clamp(windowSize.x, 350, Screen.width - BDArmorySetup.WindowRectVesselSwitcher.x);
+            if (BDArmorySettings.STRICT_WINDOW_BOUNDARIES)
+            {
+                if (windowSize.y < BDArmorySetup.WindowRectVesselSwitcher.height && Mathf.RoundToInt(BDArmorySetup.WindowRectVesselSwitcher.yMax) == Screen.height) // Window shrunk while being at edge of screen.
+                    BDArmorySetup.WindowRectVesselSwitcher.y = Screen.height - windowSize.y;
+            }
+            BDArmorySetup.WindowRectVesselSwitcher.size = windowSize;
             GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectVesselSwitcher);
+            windowSize = BDArmorySetup.WindowRectVesselSwitcher.size;
         }
 
         public void ResetDeadVessels() => deadVesselStrings.Clear(); // Reset the dead vessel strings so that they get recalculated.
@@ -345,43 +350,29 @@ namespace BDArmory.UI
         private void WindowVesselSwitcher(int id)
         {
             int numButtons = 11;
-            int numButtonsOnLeft = 6;
-            GUI.DragWindow(new Rect(numButtonsOnLeft * _buttonHeight + _margin, 0f, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - numButtons * _buttonHeight - 3f * _margin, _titleHeight));
-            GUI.Label(new Rect(BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - (numButtons - numButtonsOnLeft) * _buttonHeight - _margin - 70f, 4f, 70f, _titleHeight - 4f), BDArmorySetup.Version);
-            if (GUI.Button(new Rect(0f * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "><", BDArmorySetup.BDGuiSkin.button)) // Don't get so small that the buttons get hidden.
-            {
-                BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH -= 50f;
-                if (BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 50f < 2f * _margin + numButtons * _buttonHeight)
-                    BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH = 2f * _margin + numButtons * _buttonHeight;
-                BDArmorySetup.SaveConfig();
-            }
-            if (GUI.Button(new Rect(1f * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "<>", BDArmorySetup.BDGuiSkin.button))
-            {
-                BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH += 50f;
-                if (BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH > Screen.width) // Don't go off the screen.
-                    BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH = Screen.width;
-                BDArmorySetup.SaveConfig();
-            }
-            if (GUI.Button(new Rect(2f * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "↕", BDArmorySettings.VESSEL_SWITCHER_WINDOW_SORTING ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            int numButtonsOnLeft = 4, leftButtonCount = 0;
+            GUI.DragWindow(new Rect(numButtonsOnLeft * _buttonHeight + _margin, 0f, windowSize.x - numButtons * _buttonHeight - 3f * _margin, _titleHeight));
+            GUI.Label(new Rect(windowSize.x - (numButtons - numButtonsOnLeft) * _buttonHeight - _margin - 70f, 4f, 70f, _titleHeight - 4f), BDArmorySetup.Version);
+            if (GUI.Button(new Rect(leftButtonCount++ * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "↕", BDArmorySettings.VESSEL_SWITCHER_WINDOW_SORTING ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 BDArmorySettings.VESSEL_SWITCHER_WINDOW_SORTING = !BDArmorySettings.VESSEL_SWITCHER_WINDOW_SORTING;
                 BDArmorySetup.SaveConfig();
             }
-            if (GUI.Button(new Rect(3f * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "t", BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(new Rect(leftButtonCount++ * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "t", BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE = !BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE;
                 BDArmorySetup.SaveConfig();
             }
-            if (GUI.Button(new Rect(4f * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "Sc", ScoreWindow.Instance.IsVisible ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(new Rect(leftButtonCount++ * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "Sc", ScoreWindow.Instance.IsVisible ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 ScoreWindow.Instance.SetVisible(!ScoreWindow.Instance.IsVisible);
             }
-            if (GUI.Button(new Rect(5f * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "UI", BDArmorySettings.VESSEL_SWITCHER_PERSIST_UI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(new Rect(leftButtonCount++ * _buttonHeight + _margin, 4f, _buttonHeight, _buttonHeight), "UI", BDArmorySettings.VESSEL_SWITCHER_PERSIST_UI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 BDArmorySettings.VESSEL_SWITCHER_PERSIST_UI = !BDArmorySettings.VESSEL_SWITCHER_PERSIST_UI;
                 BDArmorySetup.SaveConfig();
             }
-            if (GUI.Button(new Rect(BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 6 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "M", BDACompetitionMode.Instance.killerGMenabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(new Rect(windowSize.x - 6 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "M", BDACompetitionMode.Instance.killerGMenabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 if (Event.current.button == 1)
                 {
@@ -395,7 +386,7 @@ namespace BDArmory.UI
                 }
             }
 
-            if (GUI.Button(new Rect(BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 5 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), camMode, _autoCameraSwitch ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(new Rect(windowSize.x - 5 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), camMode, _autoCameraSwitch ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 if (Event.current.button == 1) //right click
                 {
@@ -426,19 +417,19 @@ namespace BDArmory.UI
                 }
             }
 
-            if (GUI.Button(new Rect(BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 4 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "G", _guardModeEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(new Rect(windowSize.x - 4 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "G", _guardModeEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 // switch everyon onto different teams
                 ToggleGuardModes();
             }
 
-            if (GUI.Button(new Rect(BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 3 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "P", _autoPilotEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(new Rect(windowSize.x - 3 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "P", _autoPilotEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 // Toggle autopilots for everyone
                 ToggleAutopilots();
             }
 
-            if (GUI.Button(new Rect(BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 2 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "T", _teamsAssigned ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+            if (GUI.Button(new Rect(windowSize.x - 2 * _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), "T", _teamsAssigned ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
             {
                 if (Event.current.button == 1) // Right click => original teams.
                 {
@@ -453,14 +444,14 @@ namespace BDArmory.UI
                 }
             }
 
-            if (GUI.Button(new Rect(BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), " X", BDArmorySetup.CloseButtonStyle))
+            if (GUI.Button(new Rect(windowSize.x - _buttonHeight - _margin, 4, _buttonHeight, _buttonHeight), " X", BDArmorySetup.CloseButtonStyle))
             {
                 SetVisible(false);
                 return;
             }
 
             float height = _titleHeight;
-            float vesselButtonWidth = BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 2 * _margin - (!BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE || BDArmorySettings.TAG_MODE ? 6f : 5f) * _buttonHeight;
+            float vesselButtonWidth = windowSize.x - 2 * _margin - (!BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE || BDArmorySettings.TAG_MODE ? 6f : 5f) * _buttonHeight;
             float teamMargin = (!BDArmorySettings.VESSEL_SWITCHER_WINDOW_OLD_DISPLAY_STYLE && weaponManagers.All(tm => tm.Value.Count() == 1)) ? 0 : _margin;
 
             // Show all the active vessels
@@ -533,7 +524,7 @@ namespace BDArmory.UI
                                 {
                                     BDTISetup.TILabel.normal.textColor = BDTISetup.Instance.ColorAssignments[teamManager.Item1];
                                 }
-                                GUI.Label(new Rect(_margin, height, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 2 * _margin, _buttonHeight), $"{teamManager.Item1}:{(weaponManager.Team.Neutral ? (weaponManager.Team.Name != "Neutral" ? "(Neutral)" : "") : "")}", BDTISetup.TILabel);
+                                GUI.Label(new Rect(_margin, height, windowSize.x - 2 * _margin, _buttonHeight), $"{teamManager.Item1}:{(weaponManager.Team.Neutral ? (weaponManager.Team.Name != "Neutral" ? "(Neutral)" : "") : "")}", BDTISetup.TILabel);
 
                                 teamNameShowing = true;
                                 height += _buttonHeight + _buttonGap;
@@ -565,7 +556,7 @@ namespace BDArmory.UI
                             {
                                 BDTISetup.TILabel.normal.textColor = BDTISetup.Instance.ColorAssignments[teamManagers.Key];
                             }
-                            GUI.Label(new Rect(_margin, height, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 2 * _margin, _buttonHeight), $"{teamManagers.Key}:{(weaponManager.team != "Neutral" ? (weaponManager.Team.Neutral ? "(Neutral)" : "") : "")}", BDTISetup.TILabel);
+                            GUI.Label(new Rect(_margin, height, windowSize.x - 2 * _margin, _buttonHeight), $"{teamManagers.Key}:{(weaponManager.team != "Neutral" ? (weaponManager.Team.Neutral ? "(Neutral)" : "") : "")}", BDTISetup.TILabel);
                             teamNameShowing = true;
                             height += _buttonHeight + _buttonGap;
                         }
@@ -649,7 +640,7 @@ namespace BDArmory.UI
                         }
                         deadVesselStrings.Add(player, deadVesselString.ToString());
                     }
-                    GUI.Label(new Rect(_margin, height, BDArmorySettings.VESSEL_SWITCHER_WINDOW_WIDTH - 2 * _margin, _buttonHeight), deadVesselStrings[player], BDArmorySetup.BDGuiSkin.label); // Use the full width since we're not showing buttons here.
+                    GUI.Label(new Rect(_margin, height, windowSize.x - 2 * _margin, _buttonHeight), deadVesselStrings[player], BDArmorySetup.BDGuiSkin.label); // Use the full width since we're not showing buttons here.
                     height += _buttonHeight + _buttonGap;
                 }
             }
@@ -675,7 +666,13 @@ namespace BDArmory.UI
             }
 
             height += _margin;
-            _windowHeight = Mathf.Max(height, _titleHeight + _buttonHeight);
+            #region Resizing
+            windowSize.y = Mathf.Max(height, _titleHeight + _buttonHeight);
+            var resizeRect = new Rect(windowSize.x - 16, windowSize.y - 16, 16, 16);
+            GUI.DrawTexture(resizeRect, GUIUtils.resizeTexture, ScaleMode.StretchToFill, true);
+            if (Event.current.type == EventType.MouseDown && resizeRect.Contains(Event.current.mousePosition)) resizingWindow = true;
+            if (resizingWindow && Event.current.type == EventType.Repaint) windowSize.x += Mouse.delta.x;
+            #endregion
         }
 
         StringBuilder VSEntryString = new StringBuilder();
@@ -1086,14 +1083,14 @@ namespace BDArmory.UI
         {
             if (_autoCameraSwitch && lastActiveVessel == v)
             {
+                currentVesselDied = true;
                 if (v.IsMissile())
                 {
-                    currentVesselDied = true;
-                    currentVesselDiedAt = Time.time - (BDArmorySettings.DEATH_CAMERA_SWITCH_INHIBIT_PERIOD == 0 ? BDArmorySettings.CAMERA_SWITCH_FREQUENCY / 2f : BDArmorySettings.DEATH_CAMERA_SWITCH_INHIBIT_PERIOD) + minCameraCheckInterval;
+                    currentVesselDiedAt = Time.time - (BDArmorySettings.DEATH_CAMERA_SWITCH_INHIBIT_PERIOD == 0 ? BDArmorySettings.CAMERA_SWITCH_FREQUENCY / 2f : BDArmorySettings.DEATH_CAMERA_SWITCH_INHIBIT_PERIOD) / 2f; // Wait half the death cam period on missile death.
+                    // FIXME If the missile is a clustermissile, we should immediately switch to one of the sub-missiles.
                 }
                 else
                 {
-                    currentVesselDied = true;
                     currentVesselDiedAt = Time.time;
                 }
             }
@@ -1139,7 +1136,13 @@ namespace BDArmory.UI
                 if (activeVessel != null && activeVessel.loaded && !activeVessel.packed && activeVessel.IsMissile())
                 {
                     var mb = VesselModuleRegistry.GetMissileBase(activeVessel);
-                    if (mb != null && !mb.HasMissed && Vector3.Dot((mb.TargetPosition - mb.vessel.transform.position).normalized, mb.vessel.transform.up) < 0.5f) return; // Don't switch away from an active missile until it misses or is off-target.
+                    // Don't switch away from an active missile until it misses or is off-target, or if it is within 1 km of its target position
+                    bool stayOnMissile = mb != null &&
+                        !mb.HasMissed &&
+                        Vector3.Dot((mb.TargetPosition - mb.vessel.transform.position).normalized, mb.vessel.transform.up) < 0.5f &&
+                        (mb.vessel.transform.position - mb.TargetPosition).sqrMagnitude < 1e6;
+                    if (stayOnMissile) return;
+                    lastCameraCheck -= TimeWarp.deltaTime; // Speed up moving away from less relevant missiles.
                 }
                 bool foundActiveVessel = false;
                 Vector3 centroid = Vector3.zero;
@@ -1157,15 +1160,17 @@ namespace BDArmory.UI
                     }
                     centroid /= (float)count;
                 }
-                if (BDArmorySettings.CAMERA_SWITCH_INCLUDE_MISSILES) // Prioritise active missiles. // FIXME Not sure this bit is actually doing much.
+                if (BDArmorySettings.CAMERA_SWITCH_INCLUDE_MISSILES) // Prioritise active missiles.
                 {
-                    foreach (MissileBase missile in BDATargetManager.FiredMissiles)
+                    foreach (MissileBase missile in BDATargetManager.FiredMissiles.Cast<MissileBase>())
                     {
                         if (missile == null || missile.HasMissed) continue; // Ignore missed missiles.
                         var targetDirection = missile.TargetPosition - missile.transform.position;
                         var targetDistance = targetDirection.magnitude;
-                        if (Vector3.Dot(targetDirection, missile.vessel.up) < 0.5f * targetDistance) continue; // Ignore off-target missiles.
-                        float missileScore = targetDistance < 1.1e3f ? 1e-3f : (targetDistance - 1e3f) * (targetDistance - 1e3f) * 1e-10f; // Prioritise missiles that are within 1km from their targets.
+                        if (Vector3.Dot(targetDirection, missile.GetForwardTransform()) < 0.5f * targetDistance) continue; // Ignore off-target missiles.
+                        if (missile.targetVessel != null && missile.targetVessel.Vessel.IsMissile()) continue; // Ignore missiles targeting missiles.
+                        if (Vector3.Dot(missile.TargetVelocity - missile.vessel.Velocity(), missile.GetForwardTransform()) > -1f) continue; // Ignore missiles that aren't gaining on their targets.
+                        float missileScore = targetDistance < 1e3f ? 0.1f : 0.1f + (targetDistance - 1e3f) * (targetDistance - 1e3f) * 5e-8f; // Prioritise missiles that are within 1km from their targets and de-prioritise those more than 5km away.
                         if (missileScore < bestScore)
                         {
                             bestScore = missileScore;
@@ -1261,6 +1266,7 @@ namespace BDArmory.UI
                                     float HP = 0;
                                     float WreckFactor = 0;
                                     var AI = VesselModuleRegistry.GetBDModulePilotAI(wm.Current.vessel, true);
+                                    var OAI = VesselModuleRegistry.GetModule<BDModuleOrbitalAI>(wm.Current.vessel, true);
 
                                     // If we're running a waypoints competition, only focus on vessels still running waypoints.
                                     if (BDACompetitionMode.Instance.competitionType == CompetitionType.WAYPOINTS)
@@ -1325,6 +1331,18 @@ namespace BDArmory.UI
                                             }
                                         }
                                         //else got weapons and engaging
+                                    }
+                                    if (OAI) // Maneuvering is interesting, other statuses are not
+                                    {
+                                        if (OAI.currentStatusMode == BDModuleOrbitalAI.StatusMode.Maneuvering)
+                                            vesselScore *= 0.5f;
+                                        else if (OAI.currentStatusMode == BDModuleOrbitalAI.StatusMode.CorrectingOrbit)
+                                            vesselScore *= 1.5f;
+                                        else if (OAI.currentStatusMode == BDModuleOrbitalAI.StatusMode.Idle)
+                                            vesselScore *= 2f;
+                                        else if (OAI.currentStatusMode == BDModuleOrbitalAI.StatusMode.Stranded)
+                                            vesselScore *= 3f;
+                                        // else -- Firing, Evading covered by weapon manager checks
                                     }
                                     vesselScore *= 0.031623f * BDAMath.Sqrt(targetDistance); // Equal to 1 at 1000m
                                     if (wm.Current.recentlyFiring) // Firing guns or missiles at stuff is more interesting. (Uses 1/2 the camera switch frequency on all guns.)

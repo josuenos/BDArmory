@@ -36,7 +36,7 @@ namespace BDArmory.CounterMeasure
                 gameObject.SetActive(false);
                 return;
             }
-
+            pe.useWorldSpace = false; // Don't use worldspace, so that we can move the FX properly.
             StartCoroutine(LifeRoutine());
         }
 
@@ -57,7 +57,7 @@ namespace BDArmory.CounterMeasure
             while (Time.time - startTime < pe.maxEnergy)
             {
                 position = body.GetWorldSurfacePosition(geoPos.x, geoPos.y, geoPos.z);
-                velocity += FlightGlobals.getGeeForceAtPosition(position) * Time.fixedDeltaTime;
+                velocity += FlightGlobals.getGeeForceAtPosition(position, body) * Time.fixedDeltaTime;
                 Vector3 dragForce = (0.008f) * drag * 0.5f * velocity.sqrMagnitude *
                                     (float)
                                     FlightGlobals.getAtmDensity(FlightGlobals.getStaticPressure(position),

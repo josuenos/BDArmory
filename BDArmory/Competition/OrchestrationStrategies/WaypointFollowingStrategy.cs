@@ -72,7 +72,7 @@ namespace BDArmory.Competition.OrchestrationStrategies
                 LoadedVesselSwitcher.Instance.MassTeamSwitch(true);
             else //increment team each heat
             {
-                char T = (Char)(Convert.ToUInt16('A') + BDATournament.Instance.currentHeat);
+                char T = (char)(Convert.ToUInt16('A') + BDATournament.Instance.currentHeat);
                 pilots[0].weaponManager.SetTeam(BDTeam.Get(T.ToString()));
             }
             PrepareCompetition();

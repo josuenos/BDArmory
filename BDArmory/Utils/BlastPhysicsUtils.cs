@@ -53,7 +53,7 @@ namespace BDArmory.Utils
             if (BDArmorySettings.DEBUG_DAMAGE)
             {
                 Debug.Log(
-                    "[BDArmory.BlastPhysicsUtils]: Blast Debug data: {" + part.name + "}, " +
+                    "[BDArmory.BlastPhysicsUtils]: Blast Debug data: {" + part.name + " on " + part.vessel.vesselName + "}, " +
                     " clampedMinDistanceToHit: {" + clampedMinDistanceToHit + "}," +
                     " minPressureDistance: {" + minPressureDistance + "}," +
                     " minScaledDistance: {" + minScaledDistance + "}," +

@@ -68,7 +68,7 @@ namespace BDArmory.Utils
         {
             if (IgnoredPartNames == null)
             {
-                IgnoredPartNames = new HashSet<string> { "bdPilotAI", "bdShipAI", "missileController", "bdammGuidanceModule" };
+                IgnoredPartNames = new HashSet<string> { "bdPilotAI", "bdShipAI", "bdVTOLAI", "bdOrbitalAI", "missileController", "bdammGuidanceModule" };
                 IgnoredPartNames.UnionWith(PartLoader.LoadedPartsList.Select(p => p.partPrefab.partInfo.name).Where(name => name.Contains("flag")));
                 IgnoredPartNames.UnionWith(PartLoader.LoadedPartsList.Select(p => p.partPrefab.partInfo.name).Where(name => name.Contains("conformaldecals")));
 
@@ -90,7 +90,7 @@ namespace BDArmory.Utils
                 }
                 if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log($"[BDArmory.ProjectileUtils]: Ignored Parts: " + string.Join(", ", IgnoredPartNames));
             }
-            return ProjectileUtils.IgnoredPartNames.Contains(part.partInfo.name);
+            return IgnoredPartNames.Contains(part.partInfo.name);
         }
         static HashSet<string> armorParts;
         public static bool IsArmorPart(Part part)
@@ -133,7 +133,7 @@ namespace BDArmory.Utils
         {
             if (materialsBlacklist == null)
             {
-                materialsBlacklist = new HashSet<string> { "bdPilotAI", "bdShipAI", "missileController", "bdammGuidanceModule", "PotatoRoid" };
+                materialsBlacklist = new HashSet<string> { "bdPilotAI", "bdShipAI", "bdVTOLAI", "bdOrbitalAI", "missileController", "bdammGuidanceModule", "PotatoRoid" };
 
                 var fileNode = ConfigNode.Load(settingsConfigURL);
                 if (fileNode.HasNode("MaterialsBlacklist"))
@@ -531,7 +531,7 @@ namespace BDArmory.Utils
             /// Returns boolean; True = armor stops explosion, False = armor blowthrough
             /// </summary>
             //use blastTotalPressure to get MPa of shock on plate, compare to armor mat tolerances
-            if (BDArmorySettings.PAINTBALL_MODE) return true; //don't damage armor if paintball mode
+            if (BDArmorySettings.PAINTBALL_MODE) return false; //don't damage armor if paintball mode. Returns false (damage passes armor) so misiles can still be damaged in Paintball mode
             float thickness = (float)hitPart.GetArmorThickness();
             if (thickness <= 0) return false; //no armor to stop explosion
             float armorArea = -1;
@@ -679,7 +679,7 @@ namespace BDArmory.Utils
                         }
                         if (blowthroughFactor > 0.66)
                         {
-                            if (ductility < 0.05f)
+                            if (ductility < 0.05f) //should really have this modified by thickness/blast force
                             {
                                 var volumeToReduce = Mathf.CeilToInt(spallArea / 2500) * (50 * 50) * ((float)hitPart.GetArmorMaxThickness() / 10); //cm3
                                                                                                                                                    //total failue of 50x50cm armor tile(s)

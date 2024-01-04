@@ -44,6 +44,8 @@ namespace BDArmory.UI
         [BDAWindowSettingsField] public static Rect WindowRectRadar;
         [BDAWindowSettingsField] public static Rect WindowRectRwr;
         [BDAWindowSettingsField] public static Rect WindowRectVesselSwitcher;
+        [BDAWindowSettingsField] static Rect _WindowRectVesselSwitcherUIHidden;
+        [BDAWindowSettingsField] static Rect _WindowRectVesselSwitcherUIVisible;
         [BDAWindowSettingsField] public static Rect WindowRectWingCommander = new Rect(45, 75, 240, 800);
         [BDAWindowSettingsField] public static Rect WindowRectTargetingCam;
 
@@ -54,6 +56,8 @@ namespace BDArmory.UI
         [BDAWindowSettingsField] public static Rect WindowRectVesselMoverVesselSelection = new Rect(Screen.width / 2 - 300, Screen.height / 2 - 400, 600, 800);
         [BDAWindowSettingsField] public static Rect WindowRectAI;
         [BDAWindowSettingsField] public static Rect WindowRectScores = new Rect(0, 0, 500, 50);
+        [BDAWindowSettingsField] static Rect _WindowRectScoresUIHidden;
+        [BDAWindowSettingsField] static Rect _WindowRectScoresUIVisible;
 
         //reflection field lists
         static FieldInfo[] iFs;
@@ -146,17 +150,14 @@ namespace BDArmory.UI
         bool editingGPSName;
         int editingGPSNameIndex;
         bool hasEnteredGPSName;
-        string newGPSName = String.Empty;
+        string newGPSName = string.Empty;
 
         public MissileFire ActiveWeaponManager;
         public bool missileWarning;
         public float missileWarningTime = 0;
 
-        //load range stuff
-        VesselRanges combatVesselRanges = new VesselRanges();
-        float physRangeTimer;
-
         public static List<CMFlare> Flares = new List<CMFlare>();
+        public static List<CMDecoy> Decoys = new List<CMDecoy>();
 
         public List<string> mutators = new List<string>();
         bool[] mutators_selected;
@@ -418,6 +419,11 @@ namespace BDArmory.UI
             BDAWindowSettingsField.Load();
             CheckIfWindowsSettingsAreWithinScreen();
 
+            // Configure UI visibility and window rects
+            GAME_UI_ENABLED = true;
+            if (_WindowRectScoresUIVisible != default) WindowRectScores = _WindowRectScoresUIVisible;
+            if (_WindowRectVesselSwitcherUIVisible != default) WindowRectVesselSwitcher = _WindowRectVesselSwitcherUIVisible;
+
             WindowRectGps.width = WindowRectToolbar.width - 10;
 
             // Get the BDA version. We can do this here since it's this assembly we're interested in, other assemblies have to wait until Start.
@@ -448,29 +454,7 @@ namespace BDArmory.UI
                 CheatOptions.InfinitePropellant = BDArmorySettings.INFINITE_FUEL;
                 CheatOptions.InfiniteElectricity = BDArmorySettings.INFINITE_EC;
             }
-            // // Create settings file if not present.
-            // if (ConfigNode.Load(BDArmorySettings.settingsConfigURL) == null)
-            // {
-            //     var node = new ConfigNode();
-            //     node.AddNode("BDASettings");
-            //     node.Save(BDArmorySettings.settingsConfigURL);
-            // }
 
-            // // window position settings
-            // WindowRectToolbar = new Rect(Screen.width - toolWindowWidth - 40, 150, toolWindowWidth, toolWindowHeight);
-            // // Default, if not in file.
-            // WindowRectGps = new Rect(0, 0, WindowRectToolbar.width - 10, 0);
-            // SetupSettingsSize();
-            // BDAWindowSettingsField.Load();
-            // CheckIfWindowsSettingsAreWithinScreen();
-
-            // WindowRectGps.width = WindowRectToolbar.width - 10;
-
-            // //settings
-            // LoadConfig();
-
-            physRangeTimer = Time.time;
-            GAME_UI_ENABLED = true;
             fireKeyGui = BDInputSettingsFields.WEAP_FIRE_KEY.inputString;
 
             //setup gui styles
@@ -699,10 +683,14 @@ namespace BDArmory.UI
             GUIUtils.RepositionWindow(ref WindowRectSettings);
             GUIUtils.RepositionWindow(ref WindowRectRwr);
             GUIUtils.RepositionWindow(ref WindowRectVesselSwitcher);
+            GUIUtils.RepositionWindow(ref _WindowRectVesselSwitcherUIHidden);
+            GUIUtils.RepositionWindow(ref _WindowRectVesselSwitcherUIVisible);
             GUIUtils.RepositionWindow(ref WindowRectWingCommander);
             GUIUtils.RepositionWindow(ref WindowRectTargetingCam);
             GUIUtils.RepositionWindow(ref WindowRectAI);
             GUIUtils.RepositionWindow(ref WindowRectScores);
+            GUIUtils.RepositionWindow(ref _WindowRectScoresUIHidden);
+            GUIUtils.RepositionWindow(ref _WindowRectScoresUIVisible);
         }
 
         void Update()
@@ -1311,7 +1299,7 @@ namespace BDArmory.UI
                         else
                         {
                             label = StringUtils.Localize("#LOC_BDArmory_WMWindow_NoneWeapon");//"None"
-                            subLabel = String.Empty;
+                            subLabel = string.Empty;
                         }
                         Rect weaponButtonRect = new Rect(leftIndent, (weaponLines * entryHeight), weaponListGroupRect.width - (2 * leftIndent), entryHeight);
 
@@ -1413,8 +1401,8 @@ namespace BDArmory.UI
                     GUI.Label(LabelRect(++guardLines, guardLabelWidth), StringUtils.Localize("#LOC_BDArmory_WMWindow_VisualRange"), leftLabel);//"Visual Range"
                     if (!NumFieldsEnabled)
                     {
-                        ActiveWeaponManager.guardRange = BDAMath.RoundToUnit(GUI.HorizontalSlider(SliderRect(guardLines, guardLabelWidth), ActiveWeaponManager.guardRange, 100, BDArmorySettings.MAX_GUARD_VISUAL_RANGE), 0.01f);
-                        GUI.Label(RightLabelRect(guardLines), ActiveWeaponManager.guardRange.ToString(), leftLabel);
+                        ActiveWeaponManager.guardRange = UI_FloatSemiLogRange.ToSemiLogValue(Mathf.Round(GUI.HorizontalSlider(SliderRect(guardLines, guardLabelWidth), UI_FloatSemiLogRange.FromSemiLogValue(ActiveWeaponManager.guardRange, 100), 1, UI_FloatSemiLogRange.FromSemiLogValue(BDArmorySettings.MAX_GUARD_VISUAL_RANGE, 100))), 100, 1);
+                        GUI.Label(RightLabelRect(guardLines), ActiveWeaponManager.guardRange < 1000 ? $"{ActiveWeaponManager.guardRange:G4}m" : $"{ActiveWeaponManager.guardRange / 1000:G4}km", leftLabel);
                     }
                     else
                     {
@@ -1426,8 +1414,8 @@ namespace BDArmory.UI
                     GUI.Label(LabelRect(++guardLines, guardLabelWidth), StringUtils.Localize("#LOC_BDArmory_WMWindow_GunsRange"), leftLabel);//"Guns Range"
                     if (!NumFieldsEnabled)
                     {
-                        ActiveWeaponManager.gunRange = BDAMath.RoundToUnit(GUI.HorizontalSlider(SliderRect(guardLines, guardLabelWidth), ActiveWeaponManager.gunRange, 0, ActiveWeaponManager.maxGunRange), 0.1f);
-                        GUI.Label(RightLabelRect(guardLines), ActiveWeaponManager.gunRange.ToString(), leftLabel);
+                        ActiveWeaponManager.gunRange = UI_FloatSemiLogRange.ToSemiLogValue(BDAMath.RoundToUnit(GUI.HorizontalSlider(SliderRect(guardLines, guardLabelWidth), UI_FloatSemiLogRange.FromSemiLogValue(ActiveWeaponManager.gunRange, 10), 1, UI_FloatSemiLogRange.FromSemiLogValue(ActiveWeaponManager.maxGunRange, 10)), 0.1f), 10);
+                        GUI.Label(RightLabelRect(guardLines), ActiveWeaponManager.gunRange < 1000 ? $"{ActiveWeaponManager.gunRange:G4}m" : $"{ActiveWeaponManager.gunRange / 1000:G4}km", leftLabel);
                     }
                     else
                     {
@@ -2411,13 +2399,16 @@ namespace BDArmory.UI
                 BDArmorySettings.GAPLESS_PARTICLE_EMITTERS = GUI.Toggle(SLeftRect(++line), BDArmorySettings.GAPLESS_PARTICLE_EMITTERS, StringUtils.Localize("#LOC_BDArmory_Settings_GaplessParticleEmitters"));//"Gapless Particle Emitters"
                 if (BDArmorySettings.FLARE_SMOKE != (BDArmorySettings.FLARE_SMOKE = GUI.Toggle(SRightRect(line), BDArmorySettings.FLARE_SMOKE, StringUtils.Localize("#LOC_BDArmory_Settings_FlareSmoke"))))//"Flare Smoke"
                 {
-                    foreach (var flareObj in CMDropper.flarePool.pool)
-                        if (flareObj.activeInHierarchy)
-                        {
-                            var flare = flareObj.GetComponent<CMFlare>();
-                            if (flare == null) continue;
-                            flare.EnableEmitters();
-                        }
+                    if (CMDropper.flarePool != null)
+                    {
+                        foreach (var flareObj in CMDropper.flarePool.pool)
+                            if (flareObj.activeInHierarchy)
+                            {
+                                var flare = flareObj.GetComponent<CMFlare>();
+                                if (flare == null) continue;
+                                flare.EnableEmitters();
+                            }
+                    }
                 }
                 BDArmorySettings.STRICT_WINDOW_BOUNDARIES = GUI.Toggle(SLeftRect(++line), BDArmorySettings.STRICT_WINDOW_BOUNDARIES, StringUtils.Localize("#LOC_BDArmory_Settings_StrictWindowBoundaries"));//"Strict Window Boundaries"
                 if (BDArmorySettings.AI_TOOLBAR_BUTTON != (BDArmorySettings.AI_TOOLBAR_BUTTON = GUI.Toggle(SRightRect(line), BDArmorySettings.AI_TOOLBAR_BUTTON, StringUtils.Localize("#LOC_BDArmory_Settings_AIToolbarButton")))) // AI Toobar Button
@@ -2524,21 +2515,24 @@ namespace BDArmory.UI
                         //     PROF_n = Mathf.RoundToInt(Mathf.Pow(10, PROF_n_pow));
                         // }
 
-                        // if (GUI.Button(SLineRect(++line), "Test GetMass vs Size performance"))
-                        //     TestMassVsSizePerformance();
-                        // if (GUI.Button(SLineRect(++line), "Test DotNorm performance"))
-                        //     TestDotNormPerformance();
+                        // if (BDArmorySettings.DEBUG_OTHER && GUI.Button(SLineRect(++line), "Dump VesselModuleRegistry") && FlightGlobals.ActiveVessel != null) { VesselModuleRegistry.Instance.DumpRegistriesFor(FlightGlobals.ActiveVessel); }
+                        // GUI.Label(SLeftSliderRect(++line), $"Initial correction: {(TestNumericalMethodsIC == 0 ? "None" : TestNumericalMethodsIC == 1 ? "All" : TestNumericalMethodsIC == 2 ? "Local" : "Gravity")}");
+                        // TestNumericalMethodsIC = Mathf.RoundToInt(GUI.HorizontalSlider(SRightSliderRect(line), TestNumericalMethodsIC, 0, 3));
+                        // if (GUI.Button(SLineRect(++line), $"Test Forward Euler vs Semi-Implicit Euler vs Leap-frog ({PROF_N * Time.fixedDeltaTime}s, {PROF_N / Math.Min(PROF_N / 2, PROF_n)} steps)")) StartCoroutine(TestNumericalMethods(PROF_N * Time.fixedDeltaTime, PROF_N / Math.Min(PROF_N / 2, PROF_n)));
+                        // if (GUI.Button(SLineRect(++line), "Test inside vs on unit sphere")) TestInOnUnitSphere();
+                        // if (GUI.Button(SLineRect(++line), "Test Sqr vs x*x")) TestMaxRelSpeed();
+                        // if (GUI.Button(SLineRect(++line), "Test Sqr vs x*x")) TestSqrVsSqr();
+                        // if (GUI.Button(SLineRect(++line), "Test Order of Operations")) TestOrderOfOperations();
+                        // if (GUI.Button(SLineRect(++line), "Test GetMass vs Size performance")) TestMassVsSizePerformance();
+                        // if (GUI.Button(SLineRect(++line), "Test DotNorm performance")) TestDotNormPerformance();
                         // if (GUI.Button(SLineRect(++line), "Vessel Naming"))
                         // {
                         //     var v = FlightGlobals.ActiveVessel;
                         //     Debug.Log($"DEBUG vesselName: {v.vesselName}, GetName: {v.GetName()}, GetDisplayName: {v.GetDisplayName()}");
                         // }
-                        // if (GUI.Button(SLineRect(++line), "Test name performance"))
-                        //     TestNamePerformance();
-                        // if (GUI.Button(SLineRect(++line), "Test rand performance"))
-                        //     TestRandPerformance();
-                        // if (GUI.Button(SLineRect(++line), "Test ProjectOnPlane and PredictPosition"))
-                        //     TestProjectOnPlaneAndPredictPosition();
+                        // if (GUI.Button(SLineRect(++line), "Test name performance")) TestNamePerformance();
+                        // if (GUI.Button(SLineRect(++line), "Test rand performance")) TestRandPerformance();
+                        // if (GUI.Button(SLineRect(++line), "Test ProjectOnPlane and PredictPosition")) TestProjectOnPlaneAndPredictPosition();
                         // if (GUI.Button(SLineRect(++line), "Say hello KAL"))
                         // {
                         //     foreach (var kal in FlightGlobals.ActiveVessel.FindPartModulesImplementing<Expansions.Serenity.ModuleRoboticController>())
@@ -2949,7 +2943,7 @@ namespace BDArmory.UI
                     if (BDArmorySettings.AUTO_RESUME_TOURNAMENT)
                     {
                         BDArmorySettings.AUTO_QUIT_AT_END_OF_TOURNAMENT = GUI.Toggle(SRightRect(line), BDArmorySettings.AUTO_QUIT_AT_END_OF_TOURNAMENT, StringUtils.Localize("#LOC_BDArmory_Settings_AutoQuitAtEndOfTournament")); // Auto Quit At End Of Tournament
-                        GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_AutoQuitMemoryUsage")}:  ({(BDArmorySettings.QUIT_MEMORY_USAGE_THRESHOLD > SystemMaxMemory ? "Off" : $"{BDArmorySettings.QUIT_MEMORY_USAGE_THRESHOLD}GB")})", leftLabel); // Auto-Quit Memory Threshold
+                        GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_AutoQuitMemoryUsage")}:  ({(BDArmorySettings.QUIT_MEMORY_USAGE_THRESHOLD > SystemMaxMemory ? StringUtils.Localize("#LOC_BDArmory_Generic_Off") : $"{BDArmorySettings.QUIT_MEMORY_USAGE_THRESHOLD}GB")})", leftLabel); // Auto-Quit Memory Threshold
                         BDArmorySettings.QUIT_MEMORY_USAGE_THRESHOLD = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.QUIT_MEMORY_USAGE_THRESHOLD, 1f, SystemMaxMemory + 1));
                         if (BDArmorySettings.QUIT_MEMORY_USAGE_THRESHOLD <= SystemMaxMemory)
                         {
@@ -2992,9 +2986,6 @@ namespace BDArmory.UI
 
                         GUI.Label(SLeftSliderRect(++line, 1), $"{StringUtils.Localize("#LOC_BDArmory_Settings_APSThreshold")}:  ({BDArmorySettings.APS_THRESHOLD})", leftLabel);
                         BDArmorySettings.APS_THRESHOLD = Mathf.RoundToInt(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.APS_THRESHOLD, 1f, 356f));
-
-                        BDArmorySettings.USE_DLZ_LAUNCH_RANGE = GUI.Toggle(SLineRect(++line, 1), BDArmorySettings.USE_DLZ_LAUNCH_RANGE, StringUtils.Localize("#LOC_BDArmory_MissilesRange"));
-                        
                     }
                 }
 
@@ -3048,7 +3039,7 @@ namespace BDArmory.UI
                         BDArmorySettings.WEAPON_FX_DURATION = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.WEAPON_FX_DURATION, 5f, 20f));
 
                         GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_BallisticTrajectorSimulationMultiplier")}:  ({BDArmorySettings.BALLISTIC_TRAJECTORY_SIMULATION_MULTIPLIER})", leftLabel);
-                        BDArmorySettings.BALLISTIC_TRAJECTORY_SIMULATION_MULTIPLIER = Mathf.RoundToInt(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.BALLISTIC_TRAJECTORY_SIMULATION_MULTIPLIER, 1f, 256f));
+                        BDArmorySettings.BALLISTIC_TRAJECTORY_SIMULATION_MULTIPLIER = Mathf.RoundToInt(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.BALLISTIC_TRAJECTORY_SIMULATION_MULTIPLIER, 1f, 128f));
 
                         GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_ArmorMassMultiplier")}:  ({BDArmorySettings.ARMOR_MASS_MOD})", leftLabel);
                         BDArmorySettings.ARMOR_MASS_MOD = BDAMath.RoundToUnit(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.ARMOR_MASS_MOD, 0.05f, 2f), 0.05f); //armor mult shouldn't be zero, else armor will never take damage, might also break some other things
@@ -3097,7 +3088,10 @@ namespace BDArmory.UI
             {
                 line += 0.2f;
 
-                BDArmorySettings.BATTLEDAMAGE = GUI.Toggle(SLeftRect(++line), BDArmorySettings.BATTLEDAMAGE, StringUtils.Localize("#LOC_BDArmory_Settings_BattleDamage"));
+                if (BDArmorySettings.BATTLEDAMAGE != (BDArmorySettings.BATTLEDAMAGE = GUI.Toggle(SLeftRect(++line), BDArmorySettings.BATTLEDAMAGE, StringUtils.Localize("#LOC_BDArmory_Settings_BattleDamage"))))
+                {
+                    BDArmorySettings.PAINTBALL_MODE = false;
+                }
                 BDArmorySettings.INFINITE_AMMO = GUI.Toggle(SRightRect(line), BDArmorySettings.INFINITE_AMMO, StringUtils.Localize("#LOC_BDArmory_Settings_InfiniteAmmo"));//"Infinite Ammo"
                 BDArmorySettings.TAG_MODE = GUI.Toggle(SLeftRect(++line), BDArmorySettings.TAG_MODE, StringUtils.Localize("#LOC_BDArmory_Settings_TagMode"));//"Tag Mode"
                 BDArmorySettings.INFINITE_ORDINANCE = GUI.Toggle(SRightRect(line), BDArmorySettings.INFINITE_ORDINANCE, StringUtils.Localize("#LOC_BDArmory_Settings_InfiniteMissiles"));//"Infinite Ammo"
@@ -3705,7 +3699,7 @@ namespace BDArmory.UI
                     GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_DebrisCleanUpDelay")}:  ({BDArmorySettings.DEBRIS_CLEANUP_DELAY}s)", leftLabel); // Debris Clean-up delay
                     BDArmorySettings.DEBRIS_CLEANUP_DELAY = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.DEBRIS_CLEANUP_DELAY, 1f, 60f));
 
-                    GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionNonCompetitorRemovalDelay")}:  ({(BDArmorySettings.COMPETITION_NONCOMPETITOR_REMOVAL_DELAY > 60 ? "Off" : BDArmorySettings.COMPETITION_NONCOMPETITOR_REMOVAL_DELAY + "s")})", leftLabel); // Non-competitor removal frequency
+                    GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionNonCompetitorRemovalDelay")}:  ({(BDArmorySettings.COMPETITION_NONCOMPETITOR_REMOVAL_DELAY > 60 ? StringUtils.Localize("#LOC_BDArmory_Generic_Off") : BDArmorySettings.COMPETITION_NONCOMPETITOR_REMOVAL_DELAY + "s")})", leftLabel); // Non-competitor removal frequency
                     BDArmorySettings.COMPETITION_NONCOMPETITOR_REMOVAL_DELAY = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.COMPETITION_NONCOMPETITOR_REMOVAL_DELAY, 1f, 61f));
                 }
                 GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionDuration")}: ({(BDArmorySettings.COMPETITION_DURATION > 0 ? BDArmorySettings.COMPETITION_DURATION + (BDArmorySettings.COMPETITION_DURATION > 1 ? " mins" : " min") : "Unlimited")})", leftLabel);
@@ -3722,7 +3716,7 @@ namespace BDArmory.UI
                     string startNowAfter;
                     if (BDArmorySettings.COMPETITION_START_NOW_AFTER > 10)
                     {
-                        startNowAfter = "Off";
+                        startNowAfter = StringUtils.Localize("#LOC_BDArmory_Generic_Off");
                     }
                     else if (BDArmorySettings.COMPETITION_START_NOW_AFTER > 5)
                     {
@@ -3736,7 +3730,7 @@ namespace BDArmory.UI
                     BDArmorySettings.COMPETITION_START_NOW_AFTER = Mathf.RoundToInt(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.COMPETITION_START_NOW_AFTER, 0f, 11f));
                 }
 
-                GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionKillTimer")}: (" + (BDArmorySettings.COMPETITION_KILL_TIMER > 0 ? (BDArmorySettings.COMPETITION_KILL_TIMER + "s") : "Off") + ")", leftLabel); // FIXME the toggle and this slider could be merged
+                GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionKillTimer")}: (" + (BDArmorySettings.COMPETITION_KILL_TIMER > 0 ? (BDArmorySettings.COMPETITION_KILL_TIMER + "s") : StringUtils.Localize("#LOC_BDArmory_Generic_Off")) + ")", leftLabel); // FIXME the toggle and this slider could be merged
                 BDArmorySettings.COMPETITION_KILL_TIMER = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.COMPETITION_KILL_TIMER, 0, 60f));
 
                 GUI.Label(SLeftRect(++line), StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionIntraTeamSeparation")); // Intra-team separation.
@@ -3745,12 +3739,12 @@ namespace BDArmory.UI
                 GUI.Label(new Rect(intraTeamSepRect.x + intraTeamSepRect.width / 4 + 2, intraTeamSepRect.y, 15, intraTeamSepRect.height), " + ");
                 compIntraTeamSeparationPerMember = GUI.TextField(new Rect(intraTeamSepRect.x + intraTeamSepRect.width / 4 + 17, intraTeamSepRect.y, intraTeamSepRect.width / 4 + 2, intraTeamSepRect.height), compIntraTeamSeparationPerMember, 6, textFieldStyle);
                 GUI.Label(new Rect(intraTeamSepRect.x + intraTeamSepRect.width / 2 + 25, intraTeamSepRect.y, intraTeamSepRect.width / 2 - 25, intraTeamSepRect.height), StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionIntraTeamSeparationPerMember"));
-                if (Single.TryParse(compIntraTeamSeparationBase, out float cIntraBase) && BDArmorySettings.COMPETITION_INTRA_TEAM_SEPARATION_BASE != cIntraBase)
+                if (float.TryParse(compIntraTeamSeparationBase, out float cIntraBase) && BDArmorySettings.COMPETITION_INTRA_TEAM_SEPARATION_BASE != cIntraBase)
                 {
                     cIntraBase = Mathf.Round(cIntraBase); BDArmorySettings.COMPETITION_INTRA_TEAM_SEPARATION_BASE = cIntraBase;
                     if (cIntraBase != 0) compIntraTeamSeparationBase = cIntraBase.ToString();
                 }
-                if (Single.TryParse(compIntraTeamSeparationPerMember, out float cIntraPerMember) && BDArmorySettings.COMPETITION_INTRA_TEAM_SEPARATION_PER_MEMBER != cIntraPerMember)
+                if (float.TryParse(compIntraTeamSeparationPerMember, out float cIntraPerMember) && BDArmorySettings.COMPETITION_INTRA_TEAM_SEPARATION_PER_MEMBER != cIntraPerMember)
                 {
                     cIntraPerMember = Mathf.Round(cIntraPerMember); BDArmorySettings.COMPETITION_INTRA_TEAM_SEPARATION_PER_MEMBER = cIntraPerMember;
                     if (cIntraPerMember != 0) compIntraTeamSeparationPerMember = cIntraPerMember.ToString();
@@ -3758,7 +3752,7 @@ namespace BDArmory.UI
 
                 GUI.Label(SLeftRect(++line), StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionDistance"));//"Competition Distance"
                 compDistGui = GUI.TextField(SRightRect(line, 1, true), compDistGui, textFieldStyle);
-                if (Single.TryParse(compDistGui, out float cDist) && BDArmorySettings.COMPETITION_DISTANCE != cDist)
+                if (float.TryParse(compDistGui, out float cDist) && BDArmorySettings.COMPETITION_DISTANCE != cDist)
                 {
                     cDist = Mathf.Round(cDist); BDArmorySettings.COMPETITION_DISTANCE = cDist;
                     if (cDist != 0) compDistGui = cDist.ToString();
@@ -3800,10 +3794,23 @@ namespace BDArmory.UI
                         GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionKillerGMGracePeriod")}: ({BDArmorySettings.COMPETITION_KILLER_GM_GRACE_PERIOD}s)", leftLabel);
                         BDArmorySettings.COMPETITION_KILLER_GM_GRACE_PERIOD = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.COMPETITION_KILLER_GM_GRACE_PERIOD / 10f, 0f, 18f)) * 10f;
 
-                        GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionKillerGMFrequency")}: ({(BDArmorySettings.COMPETITION_KILLER_GM_FREQUENCY > 60 ? "Off" : BDArmorySettings.COMPETITION_KILLER_GM_FREQUENCY + "s")}, {(BDACompetitionMode.Instance != null && BDACompetitionMode.Instance.killerGMenabled ? "on" : "off")})", leftLabel);
+                        GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionKillerGMFrequency")}: ({(BDArmorySettings.COMPETITION_KILLER_GM_FREQUENCY > 60 ? StringUtils.Localize("#LOC_BDArmory_Generic_Off") : BDArmorySettings.COMPETITION_KILLER_GM_FREQUENCY + "s")}, {(BDACompetitionMode.Instance != null && BDACompetitionMode.Instance.killerGMenabled ? StringUtils.Localize("#LOC_BDArmory_Generic_On") : StringUtils.Localize("#LOC_BDArmory_Generic_Off"))})", leftLabel);
                         BDArmorySettings.COMPETITION_KILLER_GM_FREQUENCY = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.COMPETITION_KILLER_GM_FREQUENCY / 10f, 1, 6)) * 10f; // For now, don't control the killerGMEnabled flag (it's controlled by right clicking M).
                     }
-                    GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionWaypointTimeThreshold")}: ({(BDArmorySettings.COMPETITION_WAYPOINTS_GM_KILL_PERIOD > 0 ? $"{BDArmorySettings.COMPETITION_WAYPOINTS_GM_KILL_PERIOD:0}s" : "Off")})", leftLabel); // Waypoint threshold
+                    // Craft autokill criteria
+                    BDArmorySettings.COMPETITION_GM_KILL_WEAPON = GUI.Toggle(SLineRect(++line), BDArmorySettings.COMPETITION_GM_KILL_WEAPON, StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionGMWeaponKill"));
+                    BDArmorySettings.COMPETITION_GM_KILL_ENGINE = GUI.Toggle(SLineRect(++line), BDArmorySettings.COMPETITION_GM_KILL_ENGINE, StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionGMEngineKill"));
+                    BDArmorySettings.COMPETITION_GM_KILL_DISABLED = GUI.Toggle(SLineRect(++line), BDArmorySettings.COMPETITION_GM_KILL_DISABLED, StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionGMDisableKill"));
+                    string GMKillHP;
+                    if (BDArmorySettings.COMPETITION_GM_KILL_HP <= 0f) GMKillHP = StringUtils.Localize("#LOC_BDArmory_Generic_Off");
+                    else GMKillHP = $"<{Mathf.RoundToInt((BDArmorySettings.COMPETITION_GM_KILL_HP))}%";
+                    GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionGMHPKill")}: {GMKillHP}", leftLabel);
+                    BDArmorySettings.COMPETITION_GM_KILL_HP = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.COMPETITION_GM_KILL_HP, 0, 99));
+
+                    GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionGMKillDelay")}: {(BDArmorySettings.COMPETITION_GM_KILL_TIME > -1 ? (BDArmorySettings.COMPETITION_GM_KILL_TIME + "s") : StringUtils.Localize("#LOC_BDArmory_Generic_Off"))}", leftLabel);
+                    BDArmorySettings.COMPETITION_GM_KILL_TIME = Mathf.Round(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.COMPETITION_GM_KILL_TIME, -1, 60));
+
+                    GUI.Label(SLeftSliderRect(++line), $"{StringUtils.Localize("#LOC_BDArmory_Settings_CompetitionWaypointTimeThreshold")}: ({(BDArmorySettings.COMPETITION_WAYPOINTS_GM_KILL_PERIOD > 0 ? $"{BDArmorySettings.COMPETITION_WAYPOINTS_GM_KILL_PERIOD:0}s" : StringUtils.Localize("#LOC_BDArmory_Generic_Off"))})", leftLabel); // Waypoint threshold
                     BDArmorySettings.COMPETITION_WAYPOINTS_GM_KILL_PERIOD = BDAMath.RoundToUnit(GUI.HorizontalSlider(SRightSliderRect(line), BDArmorySettings.COMPETITION_WAYPOINTS_GM_KILL_PERIOD, 0, 120), 5);
 
                     line += 0.2f;
@@ -4053,7 +4060,7 @@ namespace BDArmory.UI
         void InputSettingsLine(string fieldName, int id, ref float line)
         {
             GUI.Box(SLineRect(line), GUIContent.none);
-            string label = String.Empty;
+            string label = string.Empty;
             if (BDKeyBinder.IsRecordingID(id))
             {
                 string recordedInput;
@@ -4112,6 +4119,15 @@ namespace BDArmory.UI
 
         void HideGameUI()
         {
+            if (GAME_UI_ENABLED)
+            {
+                // Switch visible/hidden window rects
+                _WindowRectScoresUIVisible = WindowRectScores;
+                if (_WindowRectScoresUIHidden != default) WindowRectScores = _WindowRectScoresUIHidden;
+                _WindowRectVesselSwitcherUIVisible = WindowRectVesselSwitcher;
+                if (_WindowRectVesselSwitcherUIHidden != default) WindowRectVesselSwitcher = _WindowRectVesselSwitcherUIHidden;
+            }
+
             GAME_UI_ENABLED = false;
             BDACompetitionMode.Instance.UpdateGUIElements();
             UpdateCursorState();
@@ -4119,6 +4135,15 @@ namespace BDArmory.UI
 
         void ShowGameUI()
         {
+            if (!GAME_UI_ENABLED)
+            {
+                // Switch visible/hidden window rects
+                _WindowRectScoresUIHidden = WindowRectScores;
+                if (_WindowRectScoresUIVisible != default) WindowRectScores = _WindowRectScoresUIVisible;
+                _WindowRectVesselSwitcherUIHidden = WindowRectVesselSwitcher;
+                if (_WindowRectVesselSwitcherUIVisible != default) WindowRectVesselSwitcher = _WindowRectVesselSwitcherUIVisible;
+            }
+
             GAME_UI_ENABLED = true;
             BDACompetitionMode.Instance.UpdateGUIElements();
             UpdateCursorState();
@@ -4128,6 +4153,16 @@ namespace BDArmory.UI
         {
             if (saveWindowPosition)
             {
+                if (GAME_UI_ENABLED)
+                {
+                    _WindowRectScoresUIVisible = WindowRectScores;
+                    _WindowRectVesselSwitcherUIVisible = WindowRectVesselSwitcher;
+                }
+                else
+                {
+                    _WindowRectScoresUIHidden = WindowRectScores;
+                    _WindowRectVesselSwitcherUIHidden = WindowRectVesselSwitcher;
+                }
                 BDAWindowSettingsField.Save();
             }
             if (windowSettingsEnabled || showVesselSpawnerGUI)
@@ -4158,7 +4193,7 @@ namespace BDArmory.UI
 
 #if DEBUG
         // static int PROF_N_pow = 5, PROF_n_pow = 2;
-        static int PROF_N = 100000, PROF_n = 100;
+        static int PROF_N = 1000, PROF_n = 1000;
         IEnumerator TestVesselPositionTiming()
         {
             var wait = new WaitForFixedUpdate();
@@ -4171,9 +4206,9 @@ namespace BDArmory.UI
             TimingManager.FixedUpdateAdd(TimingManager.TimingStage.FlightIntegrator, FlightIntegrator);
             TimingManager.FixedUpdateAdd(TimingManager.TimingStage.Late, Late);
             TimingManager.FixedUpdateAdd(TimingManager.TimingStage.BetterLateThanNever, BetterLateThanNever);
-            yield return wait;
-            yield return wait;
-            yield return wait;
+            yield return wait; Debug.Log($"DEBUG {Time.time} WaitForFixedUpdate");
+            yield return wait; Debug.Log($"DEBUG {Time.time} WaitForFixedUpdate");
+            yield return wait; Debug.Log($"DEBUG {Time.time} WaitForFixedUpdate");
             TimingManager.FixedUpdateRemove(TimingManager.TimingStage.ObscenelyEarly, ObscenelyEarly);
             TimingManager.FixedUpdateRemove(TimingManager.TimingStage.Early, Early);
             TimingManager.FixedUpdateRemove(TimingManager.TimingStage.Precalc, Precalc);
@@ -4357,6 +4392,200 @@ namespace BDArmory.UI
                 clip = SoundUtils.GetAudioClip("BDArmory/Sounds/deployClick");
             dt = Time.realtimeSinceStartup - tic;
             Debug.Log($"DEBUG GetAudioClip took {dt / N:G3}s");
+        }
+
+        int TestNumericalMethodsIC = 0;
+        IEnumerator TestNumericalMethods(float duration, int steps)
+        {
+            var vessel = FlightGlobals.ActiveVessel;
+            var wait = new WaitForFixedUpdate();
+            yield return wait; // Wait for the next fixedUpdate to synchronise with the physics.
+            if (vessel == null) yield break;
+            var dt = duration / steps;
+            if (dt < Time.fixedDeltaTime)
+            {
+                dt = Time.fixedDeltaTime;
+                steps = (int)(duration / dt);
+            }
+            Vector3 x = vessel.transform.position, x0 = x, x1 = x, x2 = x;
+            Vector3 a0 = vessel.acceleration - FlightGlobals.getGeeForceAtPosition(x0), a1 = a0, a2 = a0; // Separate acceleration into local and gravitational.
+            // Note: acceleration is an averaged (or derived) value, we should use acceleration_immediate instead, but most of the rest of the code uses acceleration.
+            Vector3 v = vessel.rb_velocity + BDKrakensbane.FrameVelocityV3f;
+            switch (TestNumericalMethodsIC)
+            {
+                case 0: // No correction
+                    break;
+                case 1:
+                    v += 0.5f * Time.fixedDeltaTime * vessel.acceleration; // Unity integration correction for all acceleration
+                    break;
+                case 2:
+                    v += 0.5f * Time.fixedDeltaTime * a0; // Unity integration correction for local acceleration only — this seems to give the best results for leap-frog
+                    break;
+                case 3:
+                    v += 0.5f * Time.fixedDeltaTime * FlightGlobals.getGeeForceAtPosition(x0); // Unity integration correction for gravity only
+                    break;
+            }
+            Vector3 v0 = v, v1 = v, v2 = v;
+            Debug.Log($"DEBUG {Time.time} IC: {TestNumericalMethodsIC}, Initial acceleration: {a0}m/s^2 constant local + {(Vector3)FlightGlobals.getGeeForceAtPosition(x0)}m/s^2 gravity");
+            for (int i = 0; i < steps; ++i)
+            {
+                // Forward Euler (1st order, not symplectic)
+                var g = FlightGlobals.getGeeForceAtPosition(x0); // Get the gravity at the current time
+                x0 += dt * v0; // Update position based on velocity at the current time
+                v0 += dt * (a0 + g); // Update the velocity based on the potential at the current time
+
+                // Semi-implicit Euler (1st order, symplectic)
+                v1 += dt * (a1 + FlightGlobals.getGeeForceAtPosition(x1)); // Update velocity based on the potential at the current time
+                x1 += dt * v1; // Update position based on velocity at the future time
+
+                // Leap-frog (2nd order, symplectic)
+                // Note: combining the second half-update to v2 with the first one of the next step into a single evaluation is where the name of the method comes from.
+                v2 += 0.5f * dt * (a2 + FlightGlobals.getGeeForceAtPosition(x2)); // Update velocity half a step based on the potential at the current time
+                x2 += dt * v2; // Update the position based on the velocity half-way between the current and future times
+                v2 += 0.5f * dt * (a2 + FlightGlobals.getGeeForceAtPosition(x2)); // Update velocity another half a step based on the potential at the future time
+            }
+
+            var tic = Time.time;
+            while (Time.time - tic < duration - Time.fixedDeltaTime / 2)
+            {
+                yield return wait;
+                if (vessel == null)
+                {
+                    Debug.Log($"DEBUG Active vessel disappeared, aborting.");
+                    yield break;
+                }
+
+                if (BDKrakensbane.IsActive) // Correct for Krakensbane
+                {
+                    x0 -= BDKrakensbane.FloatingOriginOffsetNonKrakensbane;
+                    x1 -= BDKrakensbane.FloatingOriginOffsetNonKrakensbane;
+                    x2 -= BDKrakensbane.FloatingOriginOffsetNonKrakensbane;
+                }
+            }
+            x = vessel.transform.position;
+            Debug.Log($"DEBUG {Time.time}: After {duration}s ({steps}*{dt}={steps * dt}), Actual x = {x}, Forward Euler predicts x = {x0} (Δ = {(x - x0).magnitude}), Semi-implicit Euler predicts x = {x1} (Δ = {(x - x1).magnitude}), Leap-frog predicts x = {x2} (Δ = {(x - x2).magnitude})");
+        }
+
+        public static void TestInOnUnitSphere()
+        {
+            var watch = new System.Diagnostics.Stopwatch();
+            float µsResolution = 1e6f / System.Diagnostics.Stopwatch.Frequency;
+            Debug.Log($"DEBUG Clock resolution: {µsResolution}µs, {PROF_N} outer loops, {PROF_n} inner loops");
+            Vector3 point = default;
+            var func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { point = UnityEngine.Random.onUnitSphere; } };
+            Debug.Log($"DEBUG onUnitSphere took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {point}");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { point = UnityEngine.Random.insideUnitSphere; } };
+            Debug.Log($"DEBUG insideUnitSphere took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {point}");
+        }
+
+        public static void TestMaxRelSpeed()
+        {
+            var watch = new System.Diagnostics.Stopwatch();
+            float µsResolution = 1e6f / System.Diagnostics.Stopwatch.Frequency;
+            Debug.Log($"DEBUG Clock resolution: {µsResolution}µs, {PROF_N} outer loops, {PROF_n} inner loops");
+            var currentPosition = FlightGlobals.ActiveVessel.transform.position;
+            var currentVelocity = FlightGlobals.ActiveVessel.rb_velocity + BDKrakensbane.FrameVelocityV3f;
+            float maxRelSpeed = 0;
+            var func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { maxRelSpeed = BDAMath.Sqrt((float)FlightGlobals.Vessels.Where(v => v != null && v.loaded).Max(v => (v.rb_velocity + BDKrakensbane.FrameVelocityV3f - currentVelocity).sqrMagnitude)); } };
+            Debug.Log($"DEBUG Without Dot took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {maxRelSpeed}");
+            maxRelSpeed = 0;
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { maxRelSpeed = BDAMath.Sqrt((float)FlightGlobals.Vessels.Where(v => v != null && v.loaded && Vector3.Dot(v.rb_velocity + BDKrakensbane.FrameVelocityV3f - currentVelocity, v.transform.position - currentPosition) < 0).Select(v => (v.rb_velocity + BDKrakensbane.FrameVelocityV3f - currentVelocity).sqrMagnitude).DefaultIfEmpty(0).Max()); } };
+            Debug.Log($"DEBUG With Dot took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {maxRelSpeed}");
+            maxRelSpeed = 0;
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () =>
+            {
+                for (int i = 0; i < PROF_n; ++i)
+                {
+                    float maxRelSpeedSqr = 0, relVelSqr;
+                    Vector3 relVel;
+                    using (var v = FlightGlobals.Vessels.GetEnumerator())
+                        while (v.MoveNext())
+                        {
+                            if (v.Current == null || !v.Current.loaded) continue;
+                            relVel = v.Current.rb_velocity + BDKrakensbane.FrameVelocityV3f - currentVelocity;
+                            // if (Vector3.Dot(relVel, v.Current.transform.position - currentPosition) >= 0) continue;
+                            relVelSqr = relVel.sqrMagnitude;
+                            if (relVelSqr > maxRelSpeedSqr) maxRelSpeedSqr = relVelSqr;
+                        }
+                    maxRelSpeed = BDAMath.Sqrt(maxRelSpeedSqr);
+                }
+            };
+            Debug.Log($"DEBUG Explicit without Dot took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {maxRelSpeed}");
+            maxRelSpeed = 0;
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () =>
+            {
+                for (int i = 0; i < PROF_n; ++i)
+                {
+                    float maxRelSpeedSqr = 0, relVelSqr;
+                    Vector3 relVel;
+                    using (var v = FlightGlobals.Vessels.GetEnumerator())
+                        while (v.MoveNext())
+                        {
+                            if (v.Current == null || !v.Current.loaded) continue;
+                            relVel = v.Current.rb_velocity + BDKrakensbane.FrameVelocityV3f - currentVelocity;
+                            if (Vector3.Dot(relVel, v.Current.transform.position - currentPosition) >= 0) continue;
+                            relVelSqr = relVel.sqrMagnitude;
+                            if (relVelSqr > maxRelSpeedSqr) maxRelSpeedSqr = relVelSqr;
+                        }
+                    maxRelSpeed = BDAMath.Sqrt(maxRelSpeedSqr);
+                }
+            };
+            Debug.Log($"DEBUG Explicit with Dot took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {maxRelSpeed}");
+        }
+
+        public static void TestSqrVsSqr()
+        {
+            var watch = new System.Diagnostics.Stopwatch();
+            float µsResolution = 1e6f / System.Diagnostics.Stopwatch.Frequency;
+            Debug.Log($"DEBUG Clock resolution: {µsResolution}µs, {PROF_N} outer loops, {PROF_n} inner loops");
+            float sqr = 0, value = 3.14159f;
+            var func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { sqr = value.Sqr(); } };
+            Debug.Log($"DEBUG value.Sqr() took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {sqr}");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { sqr = value * value; } };
+            Debug.Log($"DEBUG value * value took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {sqr}");
+            Vector3 a = UnityEngine.Random.insideUnitSphere, b = UnityEngine.Random.insideUnitSphere;
+            float distance = 0;
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { distance = Vector3.Distance(a, b); } };
+            Debug.Log($"DEBUG Vector3.Distance took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {distance}");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { distance = (a - b).magnitude; } };
+            Debug.Log($"DEBUG magnitude took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {distance}");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { distance = (a - b).sqrMagnitude; } };
+            Debug.Log($"DEBUG sqrMagnitude took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {distance}");
+            bool lessThan = false;
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { lessThan = Vector3.Distance(a, b) < 0.5f; } };
+            Debug.Log($"DEBUG Vector3.Distance < v took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {distance}");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { lessThan = (a - b).sqrMagnitude < 0.5f * 0.5f; } };
+            Debug.Log($"DEBUG sqrMagnitude < v*v took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {distance}");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { lessThan = (a - b).sqrMagnitude < 0.5f.Sqr(); } };
+            Debug.Log($"DEBUG sqrMagnitude < v.Sqr() took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {distance}");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { lessThan = a.CloserToThan(b, 0.5f); } };
+            Debug.Log($"DEBUG a.CloserToThan(b,f) took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {lessThan}");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { lessThan = a.FurtherFromThan(b, 0.5f); } };
+            Debug.Log($"DEBUG a.FurtherFromThan(b,f) took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs to give {lessThan}");
+        }
+
+        public static void TestOrderOfOperations()
+        {
+            var watch = new System.Diagnostics.Stopwatch();
+            float µsResolution = 1e6f / System.Diagnostics.Stopwatch.Frequency;
+            Debug.Log($"DEBUG Clock resolution: {µsResolution}µs, {PROF_N} outer loops, {PROF_n} inner loops");
+            float x = UnityEngine.Random.Range(-1f, 1f);
+            Vector3 X = UnityEngine.Random.insideUnitSphere;
+            Vector3 result = default;
+            var func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { result = x * X; } };
+            Debug.Log($"DEBUG x*X took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { result = X * x; } };
+            Debug.Log($"DEBUG X*x took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { result = x * x * X; } };
+            Debug.Log($"DEBUG x*x*X took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { result = X * x * x; } };
+            Debug.Log($"DEBUG X*x*x took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { result = x * X * x; } };
+            Debug.Log($"DEBUG x*X*x took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { result = x * x * x * X; } };
+            Debug.Log($"DEBUG x*x*x*X took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs");
+            func = [MethodImpl(MethodImplOptions.AggressiveInlining)] () => { for (int i = 0; i < PROF_n; ++i) { result = X * x * x * x; } };
+            Debug.Log($"DEBUG X*x*x*x took {ProfileFunc(func, PROF_N) / PROF_n:G3}µs");
         }
 
         public static void TestMassVsSizePerformance()

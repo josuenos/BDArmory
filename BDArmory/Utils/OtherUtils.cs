@@ -135,6 +135,12 @@ namespace BDArmory.Utils
             BDArmorySettings.TIME_OVERRIDE = enabled;
             Time.timeScale = enabled ? BDArmorySettings.TIME_SCALE : 1f;
         }
+
+        // LINQ.All() returns true for empty collections. Sometimes we want it to be false in those cases.
+        public static bool AllAndNotEmpty<T>(this IEnumerable<T> source, Func<T, bool> predicate)
+        {
+            return source.Any() && source.All(predicate);
+        }
     }
 
     /// <summary>

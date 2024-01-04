@@ -298,7 +298,7 @@ namespace BDArmory.Targeting
             // Get the parts via the VesselModuleRegistry to avoid the expensive Find... commands.
             VesselModuleRegistry.OnVesselModified(vessel); // Make sure the vessel is up-to-date since this can happen as part of an event.
             _targetWeaponList.AddUniqueRange(VesselModuleRegistry.GetModuleWeapons(vessel).Select(m => m.part).Concat(VesselModuleRegistry.GetModules<MissileTurret>(vessel).Select(m => m.part)).Where(p => p is not null));
-            _targetEngineList.AddUniqueRange(VesselModuleRegistry.GetModuleEngines(vessel).Select(m => m.part).Concat(VesselModuleRegistry.GetModules<ModuleEnginesFX>(vessel).Select(m => m.part)).Where(p => p is not null));
+            _targetEngineList.AddUniqueRange(VesselModuleRegistry.GetModuleEngines(vessel).Select(m => m.part).Where(p => p is not null));
             _targetCommandList.AddUniqueRange(VesselModuleRegistry.GetModuleCommands(vessel).Select(m => m.part).Concat(VesselModuleRegistry.GetKerbalSeats(vessel).Select(m => m.part)).Where(p => p is not null));
             _targetMassList.AddRange(vessel.Parts.Where(p => p is not null));
 

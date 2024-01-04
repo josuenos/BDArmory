@@ -1,5 +1,7 @@
-﻿using System.Collections;
+﻿using System;
 using System.Collections.Generic;
+using System.Collections;
+using System.Linq;
 using KSP.UI;
 using KSP.UI.Screens;
 using UnityEngine;
@@ -102,6 +104,10 @@ namespace BDArmory.UI
                 }
             // Part autocategorization
             if (partsDetected)
+            {
+                // Set our category to 1 more than the highest category enum value. Note: this breaks type safety for this enum, but doesn't seem to cause issues.
+                PartCategories BDAPartCategory = (PartCategories)(Enum.GetValues(typeof(PartCategories)).Cast<int>().Max() + 1);
+
                 using (var parts = PartLoader.LoadedPartsList.GetEnumerator())
                     while (parts.MoveNext())
                     {
@@ -109,7 +115,7 @@ namespace BDArmory.UI
                             continue;
                         if (parts.Current.TechHidden || parts.Current.TechRequired == "Unresearchable")
                         {
-                            parts.Current.partConfig.RemoveValue(BDACategoryKey); 
+                            parts.Current.partConfig.RemoveValue(BDACategoryKey);
                             continue;
                         }
                         if (parts.Current.partConfig.HasValue(BDACategoryKey))
@@ -183,7 +189,12 @@ namespace BDArmory.UI
                                             parts.Current.partConfig.AddValue(AutoBDACategoryKey, "Ammo");
                             }
                         }
+                        if (parts.Current.category == PartCategories.none && parts.Current.partConfig.HasValue(AutoBDACategoryKey)) // BDA parts that don't fall into the main KSP categories.
+                        {
+                            parts.Current.category = BDAPartCategory; // Set their category to our custom value so that searching works (since search ignores the "none" category).
+                        }
                     }
+            }
         }
 
         private void OnDestroy()

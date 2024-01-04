@@ -156,19 +156,80 @@ namespace BDArmory.Radar
             get { return displayedTargets[lockedTargetIndexes[activeLockedTargetIndex]]; }
         }
 
-        public TargetSignatureData activeIRTarget()
+        public TargetSignatureData activeIRTarget(Vessel desiredTarget, MissileFire mf)
         {
             TargetSignatureData data;
+            float targetMagnitude = 0;
+            int brightestTarget = 0;
             for (int i = 0; i < displayedIRTargets.Count; i++)
             {
-                if (displayedIRTargets[i].vessel == weaponManager.currentTarget)
+                if (desiredTarget != null)
                 {
-                    data = displayedIRTargets[i].targetData;
-                    return data;
+                    if (displayedIRTargets[i].vessel == desiredTarget)
+                    {
+                        data = displayedIRTargets[i].targetData;
+                        return data;
+                    }
+                }
+                else
+                {
+                    if (displayedIRTargets[i].targetData.Team == mf.Team) continue;
+                    if (displayedIRTargets[i].magnitude > targetMagnitude)
+                    {
+                        targetMagnitude = displayedIRTargets[i].magnitude;
+                        brightestTarget = i;
+                    }
+
                 }
             }
-            data = TargetSignatureData.noTarget;
-            return data;
+            if (targetMagnitude > 0)
+            {
+                data = displayedIRTargets[brightestTarget].targetData;
+                return data;
+            }
+            else
+            {
+                data = TargetSignatureData.noTarget;
+                return data;
+            }
+        }
+
+        public TargetSignatureData detectedRadarTarget(Vessel desiredTarget, MissileFire mf) //passive sonar torpedoes, but could also be useful for LOAL missiles fired at detected but not locked targets, etc.
+        {
+            TargetSignatureData data;
+            float targetMagnitude = 0;
+            int brightestTarget = 0;
+            for (int i = 0; i < displayedTargets.Count; i++)
+            {
+                if (desiredTarget != null)
+                {
+                    if (displayedTargets[i].vessel == desiredTarget)
+                    {
+                        data = displayedTargets[i].targetData;
+                        return data;
+                    }
+                }
+                else
+                {
+                    if (displayedTargets[i].targetData.Team == mf.Team) continue;
+                    if (displayedTargets[i].targetData.signalStrength > targetMagnitude)
+                    {
+                        targetMagnitude = displayedTargets[i].targetData.signalStrength;
+                        brightestTarget = i;
+                    }
+
+                }
+            }
+            if (targetMagnitude > 0)
+            {
+                data = displayedTargets[brightestTarget].targetData;
+                return data;
+            }
+            else
+            {
+                data = TargetSignatureData.noTarget;
+                return data;
+            }
         }
 
         //turret slaving
@@ -962,6 +1023,7 @@ namespace BDArmory.Radar
 
                 for (int i = 0; i < rCount; i++)
                 {
+                    if (availableRadars[i] == null || availableRadars[i].gameObject == null) continue;
                     bool canScan = availableRadars[i].canScan;
                     bool canTrackWhileScan = availableRadars[i].canTrackWhileScan;
                     bool islocked = availableRadars[i].locked;
@@ -1015,6 +1077,7 @@ namespace BDArmory.Radar
                 }
                 for (int i = 0; i < iCount; i++)
                 {
+                    if (availableIRSTs[i] == null || availableIRSTs[i].gameObject == null) continue;
                     bool canScan = availableIRSTs[i].canScan;
                     float currentAngle = availableIRSTs[i].currentAngle;
 
@@ -1626,11 +1689,11 @@ namespace BDArmory.Radar
 
             if (rData.vessel == vessel) return;
 
-            if (rData.vessel.altitude < -20 && radar.rwrThreatType != (int)RadarWarningReceiver.RWRThreatTypes.Sonar) addContact = false; // Normal Radar Should not detect Underwater vessels
-            if (!rData.vessel.LandedOrSplashed && radar.rwrThreatType == (int)RadarWarningReceiver.RWRThreatTypes.Sonar) addContact = false; //Sonar should not detect Aircraft
-            if (rData.vessel.altitude < 0 && radar.rwrThreatType == (int)RadarWarningReceiver.RWRThreatTypes.Sonar && vessel.Splashed) addContact = true; //Sonar only detects underwater vessels // Sonar should only work when in the water
-            if (!vessel.Splashed && radar.rwrThreatType == (int)RadarWarningReceiver.RWRThreatTypes.Sonar) addContact = false; // Sonar should only work when in the water
-            if (rData.vessel.Landed && radar.rwrThreatType == (int)RadarWarningReceiver.RWRThreatTypes.Sonar) addContact = false; //Sonar should not detect land vessels
+            if (rData.vessel.altitude < -20 && radar.sonarMode == ModuleRadar.SonarModes.None) addContact = false; // Normal Radar Should not detect Underwater vessels
+            if (!rData.vessel.LandedOrSplashed && radar.sonarMode != ModuleRadar.SonarModes.None) addContact = false; //Sonar should not detect Aircraft
+            if (rData.vessel.Splashed && radar.sonarMode != ModuleRadar.SonarModes.None && vessel.Splashed) addContact = true; //Sonar only detects underwater vessels // Sonar should only work when in the water
+            if (!vessel.Splashed && radar.sonarMode != ModuleRadar.SonarModes.None) addContact = false; // Sonar should only work when in the water
+            if (rData.vessel.Landed && radar.sonarMode != ModuleRadar.SonarModes.None) addContact = false; //Sonar should not detect land vessels
 
             if (addContact == false) return;
 
@@ -2003,7 +2066,7 @@ namespace BDArmory.Radar
                             if (weaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.Missile || weaponManager.selectedWeapon.GetWeaponClass() == WeaponClasses.SLW)
                             {
                                 MissileBase currMissile = weaponManager.CurrentMissile;
-                                if (currMissile.TargetingMode == MissileBase.TargetingModes.Radar || currMissile.TargetingMode == MissileBase.TargetingModes.Heat)
+                                if (currMissile && (currMissile.TargetingMode == MissileBase.TargetingModes.Radar || currMissile.TargetingMode == MissileBase.TargetingModes.Heat))
                                 {
                                     MissileLaunchParams dlz = MissileLaunchParams.GetDynamicLaunchParams(currMissile, lockedTarget.velocity, lockedTarget.predictedPosition);
                                     float rangeToPixels = (1 / rIncrements[rangeIndex]) * RadarDisplayRect.height;

@@ -70,11 +70,12 @@ namespace BDArmory.VesselSpawning
         public float altitude; // Altitude above terrain / water to adjust spawning position to.
         public float pitch; // Pitch if spawning airborne.
         public bool airborne; // Whether the vessel should be spawned in an airborne configuration or not.
+        public bool inOrbit; // Whether the vessel should be spawned in orbit or not (overrides airborne).
         public int teamIndex;
         public bool reuseURLVesselName; // Reuse the vesselName for the same craftURL (for continuous spawning).
         public List<ProtoCrewMember> crew; // Override the crew.
         public EditorFacility editorFacility = EditorFacility.SPH; // Which editorFacility the craft belongs to (found out during spawning).
-        public VesselSpawnConfig(string craftURL, Vector3 position, Vector3 direction, float altitude, float pitch, bool airborne, int teamIndex = 0, bool reuseURLVesselName = false, List<ProtoCrewMember> crew = null)
+        public VesselSpawnConfig(string craftURL, Vector3 position, Vector3 direction, float altitude, float pitch, bool airborne, bool inOrbit, int teamIndex = 0, bool reuseURLVesselName = false, List<ProtoCrewMember> crew = null)
         {
             this.craftURL = craftURL;
             this.position = position;
@@ -82,6 +83,7 @@ namespace BDArmory.VesselSpawning
             this.altitude = altitude;
             this.pitch = pitch;
             this.airborne = airborne;
+            this.inOrbit = inOrbit;
             this.teamIndex = teamIndex;
             this.reuseURLVesselName = reuseURLVesselName;
             this.crew = crew == null ? null : crew.ToList(); // Take a copy.

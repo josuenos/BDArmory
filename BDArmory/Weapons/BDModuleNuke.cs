@@ -91,11 +91,13 @@ namespace BDArmory.Weapons
         {
             get
             {
-                if (thisEngine) return thisEngine;
+                if (hasCheckedEngineCore || thisEngine) return thisEngine;
                 thisEngine = part.FindModuleImplementing<ModuleEngines>();
+                hasCheckedEngineCore = true;
                 return thisEngine;
             }
         }
+        bool hasCheckedEngineCore = false; // Only check once, it's not going to change.
         public void Start()
         {
             if (HighLogic.LoadedSceneIsFlight)
@@ -114,9 +116,9 @@ namespace BDArmory.Weapons
                 else
                 {
                     //Fields["status"].guiActive = false;
-                    Fields["fuelleft"].guiActive = false;
+                    // Fields["fuelleft"].guiActive = false;
                     //Fields["status"].guiActiveEditor = false;
-                    Fields["fuelleft"].guiActiveEditor = false;
+                    // Fields["fuelleft"].guiActiveEditor = false;
                 }
                 Sourcevessel = part.vessel.GetName();
 
@@ -137,7 +139,7 @@ namespace BDArmory.Weapons
                         bool engineOut = true;
                         if (part.vessel.rootPart == part)
                         {
-                            foreach (var e in VesselModuleRegistry.GetModules<ModuleEngines>(vessel))
+                            foreach (var e in VesselModuleRegistry.GetModuleEngines(vessel))
                             {
                                 if (e != null && !e.flameout && e.vessel == part.vessel && e.thrustPercentage > 0)
                                 {
@@ -176,7 +178,7 @@ namespace BDArmory.Weapons
                         {
                             if (!hasDetonated && !goingCritical)
                             {
-                                if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.RWPS3R2NukeModule]: nerva on " + (String.IsNullOrEmpty(Sourcevessel) ? Sourcevessel : part.vessel.GetName()) + " is out of fuel.");
+                                if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.RWPS3R2NukeModule]: nerva on " + (string.IsNullOrEmpty(Sourcevessel) ? Sourcevessel : part.vessel.GetName()) + " is out of fuel.");
                                 StartCoroutine(DelayedDetonation(meltDownDuration)); //bingo fuel, detonate
 
                             }
@@ -207,7 +209,7 @@ namespace BDArmory.Weapons
             {
                 bool engineOut = true;
                 {
-                    foreach (var e in VesselModuleRegistry.GetModules<ModuleEngines>(vessel))
+                    foreach (var e in VesselModuleRegistry.GetModuleEngines(vessel))
                     {
                         if (e != null && !e.flameout && e.vessel == part.vessel && e.thrustPercentage > 0)
                         {
@@ -252,7 +254,7 @@ namespace BDArmory.Weapons
             }
             if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.BDModuleNuke]: Running Detonate() on nukeModule in vessel " + Sourcevessel);
             //affect any nearby parts/vessels that aren't the source vessel
-            NukeFX.CreateExplosion(part.transform.position, Launcher != null ? ExplosionSourceType.Missile : ExplosionSourceType.BattleDamage, Sourcevessel, reportingName, 0, thermalRadius, yield, fluence, isEMP, blastSoundPath, flashModelPath, shockModelPath, blastModelPath, plumeModelPath, debrisModelPath, "", "");
+            NukeFX.CreateExplosion(part.transform.position, Launcher != null ? ExplosionSourceType.Missile : ExplosionSourceType.BattleDamage, Sourcevessel, reportingName, 0, thermalRadius, yield, fluence, isEMP, blastSoundPath, flashModelPath, shockModelPath, blastModelPath, plumeModelPath, debrisModelPath, "", "", nukePart: part);
             hasDetonated = true;
             if (part.vessel != null) // Already in the process of being destroyed.
                 part.Destroy();
