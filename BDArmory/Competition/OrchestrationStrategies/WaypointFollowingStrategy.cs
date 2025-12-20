@@ -107,8 +107,8 @@ namespace BDArmory.Competition.OrchestrationStrategies
             else
             {
                 yield return new WaitWhile(() => pilots.Any(
-                    pilot => pilot != null && pilot.WeaponManager != null && pilot.IsRunningWaypoints &&
-                    (pilot.TakingOff || (pilot.aiType switch { AIType.SurfaceAI => false, _ => true } && !pilot.vessel.LandedOrSplashed))
+                    pilot => pilot != null && pilot.WeaponManager != null && pilot.IsRunningWaypoints/* &&
+                    (pilot.TakingOff || (pilot.aiType switch { AIType.SurfaceAI => false, _ => true } && !pilot.vessel.LandedOrSplashed))*/
                 ));
             }
             var endedAt = Planetarium.GetUniversalTime();

@@ -323,11 +323,11 @@ namespace BDArmory.Control
             else
             {
                 float throttle = zeroPoint + (targetSpeed - signedSrfSpeed) * gain;
-                lastThrottle = Mathf.Clamp(throttle, -1, 1);
+                lastThrottle = Mathf.Clamp(throttle, -0.1f, 1);
                 zeroPoint = (zeroPoint + lastThrottle * zeroMult) * (1 - zeroMult);
                 if (preventNegativeZeroPoint && zeroPoint < 0) zeroPoint = 0;
                 SetThrottle(s, lastThrottle);
-                vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, (targetSpeed * signedSrfSpeed < -5));
+                vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, (targetSpeed - signedSrfSpeed < -5));
             }
         }
 
