@@ -1,4 +1,6 @@
 ﻿using BDArmory.UI;
+using BDArmory.VesselSpawning;
+using BDArmory.Weapons.Missiles;
 using System.Text;
 
 namespace BDArmory.CounterMeasure
@@ -32,6 +34,8 @@ namespace BDArmory.CounterMeasure
 
         public bool manuallyEnabled = false;
 
+        public bool isMissileECM = false;
+
         private int resourceID;
 
         private float cooldownTimer = 0;
@@ -43,7 +47,7 @@ namespace BDArmory.CounterMeasure
         [KSPAction("Enable")]
         public void AGEnable(KSPActionParam param)
         {
-            if (!jammerEnabled)
+            if (!jammerEnabled && !isMissileECM)
             {
                 EnableJammer();
             }
@@ -52,7 +56,7 @@ namespace BDArmory.CounterMeasure
         [KSPAction("Disable")]
         public void AGDisable(KSPActionParam param)
         {
-            if (jammerEnabled)
+            if (jammerEnabled && !isMissileECM)
             {
                 DisableJammer();
             }
@@ -61,7 +65,8 @@ namespace BDArmory.CounterMeasure
         [KSPAction("Toggle")]
         public void AGToggle(KSPActionParam param)
         {
-            Toggle();
+            if (!isMissileECM)
+                Toggle();
         }
 
         [KSPEvent(guiActiveEditor = false, guiActive = true, guiName = "#LOC_BDArmory_Toggle")]//Toggle
@@ -85,6 +90,12 @@ namespace BDArmory.CounterMeasure
             base.OnStart(state);
             if (!HighLogic.LoadedSceneIsFlight) return;
             part.force_activate();
+
+            if (part.FindModuleImplementing<MissileLauncher>() != null || SpawnUtils.IsModularMissilePart(part))
+            {
+                isMissileECM = true;
+                Events["Toggle"].guiActive = false;
+            }
 
             gauge = (BDStagingAreaGauge)part.AddModule("BDStagingAreaGauge");
             GameEvents.onVesselCreate.Add(OnVesselCreate);

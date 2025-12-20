@@ -19,7 +19,8 @@ Current Maintainers:
 
 Contributors:
 - [Aubranium](https://github.com/agoodman) (Remote Orchestration)
-- [Halban](https://github.com/Halbann/) (Code Adapted from Kerbal Combat Suite)
+- [Halban](https://github.com/Halbann/) (Code Adapted from Kessler (formerly Kerbal Combat Suite))
+- [Spartwo](https://github.com/Spartwo/) (Code Adapted from Kessler (formerly Kerbal Combat Suite))
 - [Scott Manley](https://github.com/illectro)
 - [Stardust](https://github.com/Stardust-Rapture)
 - [Kurgan](https://github.com/TheKurgan)

@@ -6,6 +6,7 @@ using UnityEngine;
 using BDArmory.Control;
 using BDArmory.Utils;
 using BDArmory.Weapons.Missiles;
+using BDArmory.Extensions;
 
 namespace BDArmory.WeaponMounts
 {
@@ -22,7 +23,9 @@ namespace BDArmory.WeaponMounts
         [KSPField]
         public string deployTransformName = "deployTransform";
 
+        public bool IsDeployed => (deployed && !deploying) || (!deployed && deploying); // Deploying or being deployed. !IsDeployed = retracted or retracting.
         bool deployed = false;
+        bool deploying = false;
         [KSPField] public float rotationDelay = 0.15f;
 
         [KSPField]
@@ -49,17 +52,16 @@ namespace BDArmory.WeaponMounts
             get { return rdyMissile; }
         }
 
-        MissileFire wm;
-
-        public MissileFire weaponManager
+        MissileFire WeaponManager
         {
             get
             {
-                if (wm && wm.vessel == vessel) return wm;
-                wm = VesselModuleRegistry.GetMissileFire(vessel, true);
-                return wm;
+                if (_weaponManager == null || !_weaponManager.IsPrimaryWM || _weaponManager.vessel != vessel)
+                    _weaponManager = vessel && vessel.loaded ? vessel.ActiveController().WM : null;
+                return _weaponManager;
             }
         }
+        MissileFire _weaponManager;
 
         [KSPAction("Toggle deployment")]
         public void AGToggleRail(KSPActionParam param) => ToggleRail();
@@ -96,41 +98,49 @@ namespace BDArmory.WeaponMounts
             //setupComplete = true;
         }
 
-        public void DeployRail(bool externallycalled)
+        public void DeployRail(bool externallycalled, Toggle state = Toggle.Toggle)
         {
-            if (!deployed) //deploy
+            switch (state)
             {
-                StopRoutines();
-                deployRoutine = StartCoroutine(Deploy());
-            }
-            else
-            {
-                StopRoutines();
-                retractRoutine = StartCoroutine(Retract());
+                case Toggle.Toggle: // This allows interrupting deploy/retract.
+                    StopRoutines(); // StopRoutines sets deployed taking into account deploying in progress.
+                    if (!deployed)
+                        deployRoutine = StartCoroutine(Deploy());
+                    else
+                        retractRoutine = StartCoroutine(Retract());
+                    break;
+                case Toggle.On:
+                    if (IsDeployed) return; // Already deployed or deploying.
+                    StopRoutines();
+                    deployRoutine = StartCoroutine(Deploy());
+                    break;
+                case Toggle.Off:
+                    if (!IsDeployed) return; // Already retracted or retracting.
+                    StopRoutines();
+                    retractRoutine = StartCoroutine(Retract());
+                    break;
             }
             if (externallycalled) return;
-            using (List<Part>.Enumerator p = part.symmetryCounterparts.GetEnumerator())
-                while (p.MoveNext())
-                {
-                    if (p.Current == null) continue;
-                    if (p.Current != part)
-                    {
-                        var rail = p.Current.FindModuleImplementing<BDDeployableRail>();
-                        rail.UpdateMissileChildren();
-                        rail.DeployRail(true);
-                    }
-                }
+            using List<Part>.Enumerator p = part.symmetryCounterparts.GetEnumerator();
+            while (p.MoveNext())
+            {
+                if (p.Current == null || p.Current == part) continue;
+                var rail = p.Current.FindModuleImplementing<BDDeployableRail>();
+                rail.UpdateMissileChildren();
+                rail.DeployRail(true, state);
+            }
         }
         public IEnumerator OnStartDeploy()
         {
             yield return new WaitForSecondsFixed(1); //figure out what the wait interval needs to be. Too soon, and the offsets get messed up. maybe have the RCS snapshot delay instead?
             UpdateMissileChildren();
-            DeployRail(true);
+            DeployRail(true, Toggle.Off); // Close bays on flight startup
         }
         public IEnumerator Deploy()
         {
             deployState.enabled = true;
             deployState.speed = 1;
+            deploying = true;
             for (int i = 0; i < missileChildren.Length; i++)
             {
                 if (!missileTransforms[i] || !missileChildren[i] || missileChildren[i].HasFired) continue;
@@ -147,6 +157,7 @@ namespace BDArmory.WeaponMounts
             deployState.speed = 0;
             deployState.enabled = false;
             deployed = true;
+            deploying = false;
             if (HighLogic.LoadedSceneIsFlight)
             {
                 yield return new WaitForSecondsFixed(rotationDelay);
@@ -155,15 +166,15 @@ namespace BDArmory.WeaponMounts
             if (HighLogic.LoadedSceneIsEditor)
             {
                 //have attachnode toggle on when deployed, and off when stowed
-                using (List<AttachNode>.Enumerator node = part.attachNodes.GetEnumerator())
-                    while (node.MoveNext())
+                using List<AttachNode>.Enumerator node = part.attachNodes.GetEnumerator();
+                while (node.MoveNext())
+                {
+                    if (node.Current.id.ToLower().Contains("rail"))
                     {
-                        if (node.Current.id.ToLower().Contains("rail"))
-                        {
-                            node.Current.nodeType = AttachNode.NodeType.Stack;
-                            node.Current.radius = 1f;
-                        }
+                        node.Current.nodeType = AttachNode.NodeType.Stack;
+                        node.Current.radius = 1f;
                     }
+                }
             }
         }
         public IEnumerator Retract()
@@ -184,6 +195,7 @@ namespace BDArmory.WeaponMounts
             rdyToFire = false;
             deployState.enabled = true;
             deployState.speed = -1;
+            deploying = true;
             while (deployState.normalizedTime > 0)
             {
                 UpdateChildrenPos();
@@ -193,6 +205,7 @@ namespace BDArmory.WeaponMounts
             deployState.speed = 0;
             deployState.enabled = false;
             deployed = false;
+            deploying = false;
             setupComplete = true;
             for (int i = 0; i < missileChildren.Length; i++)
             {
@@ -204,6 +217,9 @@ namespace BDArmory.WeaponMounts
         }
         public void StopRoutines()
         {
+            if (deploying) deployed = deployRoutine != null; // If partway through deploying, consider it as fully deployed/retracted for toggle logic.
+            deploying = false;
+
             if (retractRoutine != null)
             {
                 StopCoroutine(retractRoutine);
@@ -219,22 +235,12 @@ namespace BDArmory.WeaponMounts
         public void EnableRail()
         {
             if (!setupComplete) return;
-            if (deployed)
-                return;
-            //Debug.Log("[BDArmory.BDDeployableRail]: deploying deployableRail");
-            StopRoutines();
-
-            deployRoutine = StartCoroutine(Deploy());
+            DeployRail(true, Toggle.On);
         }
         public void DisableRail()
         {
             if (!setupComplete) return;
-            if (!deployed)
-                return;
-            //Debug.Log("[BDArmory.BDDeployableRail]: retracting deployableRail"); //this is getting called when missile selected, sometihng is tripping the if statement. investigate.
-            StopRoutines();
-
-            if (part.isActiveAndEnabled) retractRoutine = StartCoroutine(Retract());
+            DeployRail(true, Toggle.Off);
         }
 
         public void UpdateChildrenPos()
@@ -375,7 +381,7 @@ namespace BDArmory.WeaponMounts
             missileChildren[index].part.CoMOffset = comOffsets[missileChildren[index].part];
         }
 
-        public void FireMissile(int missileIndex) //this is causing it not to fire, determine how missileindex is assigned
+        public void FireMissile(int missileIndex, Vessel targetVessel, MissileFire.TargetData targetData = null) //this is causing it not to fire, determine how missileindex is assigned
         {
             if (!readyToFire) return;
 
@@ -383,9 +389,10 @@ namespace BDArmory.WeaponMounts
             {
                 PrepMissileForFire(missileIndex);
 
-                if (weaponManager)
+                var wm = WeaponManager;
+                if (wm)
                 {
-                    wm.SendTargetDataToMissile(missileChildren[missileIndex]);
+                    wm.SendTargetDataToMissile(missileChildren[missileIndex], targetVessel, true, targetData, true);
                     wm.PreviousMissile = missileChildren[missileIndex];
                 }
 
@@ -395,14 +402,14 @@ namespace BDArmory.WeaponMounts
 
                 UpdateMissileChildren();
 
-                if (wm)
+                if (wm) // If the primary WM changes, the list will automatically update.
                 {
                     wm.UpdateList();
                 }
             }
         }
 
-        public void FireMissile(MissileLauncher ml)
+        public void FireMissile(MissileLauncher ml, Vessel targetVessel, MissileFire.TargetData targetData = null)
         {
             if (!readyToFire)
             {
@@ -412,7 +419,7 @@ namespace BDArmory.WeaponMounts
             int index = IndexOfMissile(ml);
             if (index >= 0)
             {
-                FireMissile(index);
+                FireMissile(index, targetVessel, targetData);
             }
         }
 

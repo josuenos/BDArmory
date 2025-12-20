@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections;
+using System.IO;
 using System.Linq;
 using KSP.UI;
 using KSP.UI.Screens;
@@ -26,6 +27,8 @@ namespace BDArmory.UI
         public const string BDACategoryKey = "bdacategory";
         public const string AutoBDACategoryKey = "autobdacategory";
         public const int SubcategoryGroup = 412440121;
+
+        static readonly string customCategoriesConfigURL = "GameData/BDArmory/PluginData/CustomCategories.cfg";
 
         /// <summary>
         /// Adding to this dictionary before the category buttons are created will add more bda categories.
@@ -89,6 +92,7 @@ namespace BDArmory.UI
         private void Awake()
         {
             Instance = this;
+            LoadCustomCategories();
             bool partsDetected = false;
             using (var parts = PartLoader.LoadedPartsList.GetEnumerator())
                 while (parts.MoveNext())
@@ -200,6 +204,40 @@ namespace BDArmory.UI
         private void OnDestroy()
         {
             GameEvents.onGUIEditorToolbarReady.Remove(LoadBDArmoryCategory);
+        }
+
+        void LoadCustomCategories()
+        {
+            var configURL = Path.GetFullPath(Path.Combine(KSPUtil.ApplicationRootPath, customCategoriesConfigURL));
+            var fileNode = ConfigNode.Load(configURL);
+            if (fileNode == null) // If the file doesn't exist, create it, but don't overwrite it if it does exist.
+            {
+                fileNode = new ConfigNode();
+                if (!Directory.GetParent(configURL).Exists)
+                { Directory.GetParent(configURL).Create(); }
+                fileNode.AddNode("CustomCategories");
+                fileNode.Save(configURL);
+            }
+            if (!fileNode.HasNode("CustomCategories"))
+            {
+                fileNode.AddNode("CustomCategories");
+            }
+            string customCategoriesComment = "Add custom BDA subcategories using the format: CategoryName = CategoryIconPath (e.g., Misc = BDArmory/Textures/Misc). Only non-preexisting categories will be added. Empty categories won't be shown.";
+            ConfigNode customCategories = fileNode.GetNode("CustomCategories");
+            customCategories.comment = customCategoriesComment;
+            foreach (ConfigNode.Value category in customCategories.values)
+            {
+                // Note: we use CategoryIcons for the check as Categories gets pared down depending on the parts actually available.
+                if (CategoryIcons.ContainsKey(category.name)) continue;
+                Categories.Add(category.name);
+                if (!GameDatabase.Instance.ExistsTexture(category.value))
+                {
+                    Debug.LogWarning($"[BDArmory.BDAEditorCategory]: Icon for {category.name} not found at {category.value}. Using default icon.");
+                    category.value = "BDArmory/Textures/icon";
+                }
+                Debug.Log($"[BDArmory.BDAEditorCategory]: Adding category {category.name} with icon {category.value}.");
+                CategoryIcons.Add(category.name, category.value);
+            }
         }
 
         public static string GetTexturePath(string category)
@@ -353,7 +391,7 @@ namespace BDArmory.UI
                     button.btnToggleGeneric.SetGroup(412440121);
                     button.transform.SetParent(BDAPartBar, false);
                     // button.transform.position = new Vector3(BDACategory.button.transform.position.x + 34, 424, 750) + button_offset * SubcategoryButtons.Count;
-                    button.transform.position = new Vector3(BDACategory.button.transform.position.x + 34, panelTop - button_offset.y, 750) + button_offset * SubcategoryButtons.Count;
+                    button.transform.position = new Vector3(BDACategory.button.transform.position.x + 34 * GameSettings.UI_SCALE, panelTop - button_offset.y, 750) + button_offset * SubcategoryButtons.Count;
                     categorizer_button.DeleteSubcategory();
                     SubcategoryButtons.Add(button);
                     // Gotta use a saved value, because the enumerator changes the value during the run
@@ -415,12 +453,12 @@ namespace BDArmory.UI
             bool shouldOpen = BDArmorySettings.SHOW_CATEGORIES && FilterByFunctionCategory.button.activeButton.Value && BDACategory.button.activeButton.Value;
             if (shouldOpen && !expanded)
             {
-                ExpandPartSelector(offset);
+                ExpandPartSelector(offset * GameSettings.UI_SCALE);
                 expanded = true;
             }
             else if (!shouldOpen && expanded)
             {
-                ExpandPartSelector(-offset);
+                ExpandPartSelector(-offset * GameSettings.UI_SCALE);
                 expanded = false;
             }
 
@@ -432,6 +470,7 @@ namespace BDArmory.UI
             }
             if (SettingsOpen)
             {
+                if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, SettingsWindow.position);
                 SettingsWindow = GUI.Window(9476026, SettingsWindow, DrawSettingsWindow, "", BDArmorySetup.BDGuiSkin.window);
             }
 

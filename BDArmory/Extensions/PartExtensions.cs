@@ -4,6 +4,7 @@ using UnityEngine;
 using BDArmory.Damage;
 using BDArmory.Initialization;
 using BDArmory.Settings;
+using Expansions.Serenity;
 
 namespace BDArmory.Extensions
 {
@@ -81,31 +82,14 @@ namespace BDArmory.Extensions
                 }
             }
             */
+            if (Utils.ProjectileUtils.IsArmorPart(p)) return 0; //Armor panels don't have HP, so don't score/deal HP damage
             float damage_ = 0f;
             //////////////////////////////////////////////////////////
             // Explosive Hitpoints
             //////////////////////////////////////////////////////////
 
-            switch (sourceType)
-            {
-                case ExplosionSourceType.Missile:
-                    damage_ = (BDArmorySettings.DMG_MULTIPLIER / 100) * BDArmorySettings.EXP_DMG_MOD_MISSILE * explosiveDamage * multiplier;
-                    break;
-                case ExplosionSourceType.Rocket:
-                    damage_ = (BDArmorySettings.DMG_MULTIPLIER / 100) * BDArmorySettings.EXP_DMG_MOD_ROCKET * explosiveDamage * multiplier;
-                    break;
-                case ExplosionSourceType.BattleDamage:
-                    damage_ = (BDArmorySettings.DMG_MULTIPLIER / 100) * BDArmorySettings.EXP_DMG_MOD_BATTLE_DAMAGE * explosiveDamage;
-                    break;
-                case ExplosionSourceType.Bullet:
-                    damage_ = (BDArmorySettings.DMG_MULTIPLIER / 100) * BDArmorySettings.EXP_DMG_MOD_BALLISTIC_NEW * explosiveDamage * multiplier;
-                    break;
-                default: // Other?
-                    damage_ = (BDArmorySettings.DMG_MULTIPLIER / 100) * explosiveDamage;
-                    break;
-            }
+            damage_ = explosiveDamage * ExplosiveDamageModifier(sourceType, multiplier);
 
-            var damage_before = damage_;
             //////////////////////////////////////////////////////////
             //   Armor Reduction factors
             //////////////////////////////////////////////////////////
@@ -144,6 +128,25 @@ namespace BDArmory.Extensions
             return damage_;
         }
 
+        /// <summary>
+        /// Get the appropriate modifier for explosive damage of the given type and multiplier.
+        /// </summary>
+        /// <param name="sourceType"></param>
+        /// <param name="multiplier"></param>
+        /// <returns></returns>
+        public static float ExplosiveDamageModifier(ExplosionSourceType sourceType, float multiplier = 1f)
+        {
+            return BDArmorySettings.DMG_MULTIPLIER / 100f *
+            (sourceType switch
+            {
+                ExplosionSourceType.Bullet => BDArmorySettings.EXP_DMG_MOD_BALLISTIC_NEW * multiplier,
+                ExplosionSourceType.Rocket => BDArmorySettings.EXP_DMG_MOD_ROCKET * multiplier,
+                ExplosionSourceType.Missile => BDArmorySettings.EXP_DMG_MOD_MISSILE * multiplier,
+                ExplosionSourceType.BattleDamage => BDArmorySettings.EXP_DMG_MOD_BATTLE_DAMAGE,
+                _ => 1f
+            });
+        }
+
         public static float AddBallisticDamage(this Part p,
                                                float mass,
                                                float caliber,
@@ -167,6 +170,7 @@ namespace BDArmory.Extensions
                 }
             }
             */
+            if (Utils.ProjectileUtils.IsArmorPart(p)) return 0; //Armor panels don't have HP, so don't score/deal HP damage
             //////////////////////////////////////////////////////////
             // Basic Kinetic Formula
             //////////////////////////////////////////////////////////
@@ -198,7 +202,6 @@ namespace BDArmory.Extensions
                     break;
             }
 
-            var damage_before = damage_;
             //////////////////////////////////////////////////////////
             //   Armor Reduction factors
             //////////////////////////////////////////////////////////
@@ -417,7 +420,7 @@ namespace BDArmory.Extensions
 
         public static bool IsMissile(this Part part)
         {
-            if (part == null) return false;
+            if (part == null || part.Modules == null) return false;
             if (part.Modules.Contains("BDModularGuidance")) return true;
             if (part.Modules.Contains("MissileBase") || part.Modules.Contains("MissileLauncher"))
             {
@@ -427,7 +430,7 @@ namespace BDArmory.Extensions
                 {
                     if (partModules.Current.moduleName == "MultiMissileLauncher")
                     {
-                        return (((Weapons.Missiles.MultiMissileLauncher)partModules.Current).isClusterMissile);
+                        return ((Weapons.Missiles.MultiMissileLauncher)partModules.Current).isClusterMissile;
                     }
                 }
                 //return ((part.Modules.Contains("MissileBase") || part.Modules.Contains("MissileLauncher") ||
@@ -438,6 +441,12 @@ namespace BDArmory.Extensions
         public static bool IsWeapon(this Part part)
         {
             return part.Modules.Contains("ModuleWeapon");
+        }
+        public static bool IsFunctional(this Part part)
+        {
+            return (part.isEngine() || part.isAntenna(out ModuleDeployableAntenna antenna) || part.isBaseServo(out BaseServo serv) || part.isDecoupler(out ModuleDecouple decoupler) || part.isGenerator(out ModuleGenerator gen)
+                || part.isRadiator(out ModuleDeployableRadiator rad) || part.isRobotic() || part.isRoboticHinge() || part.isRoboticPiston() || part.isRoboticRotationServo() || part.isRoboticRotor()
+                || part.Modules.Contains("ModuleGrappleNode") || part.Modules.Contains("ModuleResourceConverter") || part.Modules.Contains("ModuleCoreHeat"));
         }
         public static float GetArea(this Part part, bool isprefab = false, Part prefab = null)
         {

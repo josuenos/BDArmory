@@ -19,12 +19,16 @@ namespace BDArmory.Utils
         /// <param name="time">after this time</param>
         /// <returns>Vector3 extrapolated position</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector3 PredictPosition(this Vessel v, float time)
+        public static Vector3 PredictPosition(this Vessel v, float time, bool immediate=true)
         {
-            Vector3 pos = v.CoM;
-            pos +=  time * v.Velocity();
-            pos += 0.5f * time * time * v.acceleration_immediate;
-            return pos;
+            var vel = v.Velocity();
+            var acc = immediate ? v.acceleration_immediate : v.acceleration;
+            var time2 = 0.5f * time * time;
+            return new Vector3(
+                (float)(v.CoM.x + time * vel.x + time2 * acc.x),
+                (float)(v.CoM.y + time * vel.y + time2 * acc.y),
+                (float)(v.CoM.z + time * vel.z + time2 * acc.z)
+            );
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -67,7 +71,7 @@ namespace BDArmory.Utils
         public static float TimeToCPA(this Vessel vessel, Vector3 targetPosition, Vector3 targetVelocity, Vector3 targetAcceleration, float maxTime = float.MaxValue, CPAType cpaType = CPAType.Earliest)
         {
             if (vessel == null) return 0f; // We don't have a vessel.
-            Vector3 relPosition = targetPosition - vessel.transform.position;
+            Vector3 relPosition = targetPosition - vessel.CoM;
             Vector3 relVelocity = targetVelocity - vessel.Velocity();
             Vector3 relAcceleration = targetAcceleration - vessel.acceleration;
             return TimeToCPA(relPosition, relVelocity, relAcceleration, maxTime, cpaType);
@@ -171,7 +175,7 @@ namespace BDArmory.Utils
                         case CPAType.Closest:
                             t0 = Mathf.Clamp(t0, 0, maxTime);
                             t1 = Mathf.Clamp(t1, 0, maxTime);
-                            time = ((relPosition + t0 * relVelocity + t0 * t0 / 2f * relAcceleration).sqrMagnitude < (relPosition +  t1 * relVelocity + t1 * t1 / 2f * relAcceleration).sqrMagnitude) ? t0 : t1;
+                            time = ((relPosition + t0 * relVelocity + t0 * t0 / 2f * relAcceleration).sqrMagnitude < (relPosition + t1 * relVelocity + t1 * t1 / 2f * relAcceleration).sqrMagnitude) ? t0 : t1;
                             break;
                     }
                     return Mathf.Clamp(time, 0, maxTime);
@@ -217,7 +221,7 @@ namespace BDArmory.Utils
             float lag = ai.commandLeader.lag;
 
             float right = rightSign * positionFactor * spread;
-            float back = positionFactor * lag * -1;
+            float back = -positionFactor * lag;
 
             return new Vector3(right, back, 0);
         }
@@ -236,9 +240,9 @@ namespace BDArmory.Utils
                 while (v.MoveNext())
                 {
                     if (v.Current == null || !v.Current.loaded || v.Current.packed) continue;
-                    if (VesselModuleRegistry.ignoredVesselTypes.Contains(v.Current.vesselType)) continue;
-                    var wms = VesselModuleRegistry.GetMissileFire(v.Current);
-                    if (wms != null)
+                    if (VesselModuleRegistry.IgnoredVesselTypes.Contains(v.Current.vesselType)) continue;
+                    var wm = v.Current.ActiveController().WM;
+                    if (wm != null)
                     {
                         if (Vector3.SqrMagnitude(v.Current.vesselTransform.position - position) < closestSqrDist)
                         {

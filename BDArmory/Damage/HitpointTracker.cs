@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using KSP.Localization;
 using UnityEngine;
 
 using BDArmory.Armor;
@@ -67,13 +66,14 @@ namespace BDArmory.Damage
         private bool isProcWing = false;
         private bool isProcPart = false;
         private bool isProcWheel = false;
+        private bool isVariantPart = false;
         private bool waitingForHullSetup = false;
         private float OldArmorType = -1;
 
         [KSPField(advancedTweakable = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_ArmorMass")]//armor mass
         public float armorMass = 0f;
 
-        private float totalArmorQty = 0f;
+        public float totalArmorQty = 0f;
 
         [KSPField(advancedTweakable = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_ArmorCost")]//armor cost
         public float armorCost = 0f;
@@ -121,6 +121,8 @@ namespace BDArmory.Damage
         [KSPField(isPersistant = true)]
         public float SafeUseTemp;
         [KSPField(isPersistant = true)]
+        public float radarReflectivity;
+        [KSPField(isPersistant = true)]
         public float Cost;
 
         [KSPField(isPersistant = true)]
@@ -165,8 +167,11 @@ namespace BDArmory.Damage
         AttachNode bottom;
         AttachNode top;
 
-        public List<Shader> defaultShader;
-        public List<Color> defaultColor;
+        private float hullRadarReturnFactor = 1;
+        private float armorRadarReturnFactor = 1;
+
+        public Dictionary<int, Shader> defaultShader = [];
+        public Dictionary<int, Color> defaultColor = [];
         public bool RegisterProcWingShader = false;
 
         public float defenseMutator = 1;
@@ -292,6 +297,11 @@ namespace BDArmory.Damage
                 }
                 Hitpoints = maxHitPoints_;
                 if (!ArmorSet) overrideArmorSetFromConfig();
+                if (BDArmorySettings.MAX_ARMOR_LIMIT >= 0)
+                {
+                    maxSupportedArmor = Mathf.Min(BDArmorySettings.MAX_ARMOR_LIMIT, maxSupportedArmor);
+                    Armor = Mathf.Min(Armor, maxSupportedArmor);
+                }
 
                 previousHitpoints = maxHitPoints_;
                 part.RefreshAssociatedWindows();
@@ -319,6 +329,10 @@ namespace BDArmory.Damage
             {
                 isProcWheel = true;
             }
+            if (part.Modules.Contains("ModuleB9PartSwitch") || part.Modules.Contains("ModulePartVariants"))
+            {
+                isVariantPart = true;
+            }
             StartingArmor = Armor;
             if (ProjectileUtils.IsArmorPart(this.part))
             {
@@ -332,13 +346,17 @@ namespace BDArmory.Damage
             {
                 HullTypeNum = HullInfo.materials.FindIndex(t => t.name == hullType) + 1;
             }
+            if (HullTypeNum < 1 || HullTypeNum > HullInfo.materialNames.Count)
+            {
+                Debug.LogWarning($"[BDArmory.HitpointTracker]: Invalid HullTypeNum found on {part.partInfo.name} on {part.vessel.vesselName}. Resetting to Aluminium.");
+                HullTypeNum = 2; // Invalid hull type number, revert to default Aluminium
+            }
             if (SelectedArmorType == "Legacy Armor")
                 ArmorTypeNum = ArmorInfo.armors.FindIndex(t => t.name == "None");
             else
                 ArmorTypeNum = ArmorInfo.armors.FindIndex(t => t.name == SelectedArmorType) + 1;
             guiArmorTypeString = SelectedArmorType;
             guiHullTypeString = StringUtils.Localize(HullInfo.materials[HullInfo.materialNames[(int)HullTypeNum - 1]].localizedName);
-
             if (part.partInfo != null && part.partInfo.partPrefab != null) // PotatoRoid, I'm looking at you.
             {
                 skinskinConduction = part.partInfo.partPrefab.skinSkinConductionMult;
@@ -390,6 +408,13 @@ namespace BDArmory.Damage
                     //UI_ProgressBar Armorleft = (UI_ProgressBar)Fields["ArmorRemaining"].uiControlFlight;
                     //Armorleft.scene = UI_Scene.None;
                 }
+                if (part.Modules.Contains("ModuleReactiveArmor"))
+                {
+                    Fields["Armor"].guiActiveEditor = false;
+                    Fields["ArmorTypeNum"].guiActiveEditor = false;
+                    Fields["armorCost"].guiActiveEditor = false;
+                    Fields["armorMass"].guiActiveEditor = false;
+                }
                 if (part.IsMissile())
                 {
                     Fields["ArmorTypeNum"].guiActiveEditor = false;
@@ -413,7 +438,7 @@ namespace BDArmory.Damage
                 }
 
                 //if part is an engine/fueltank don't allow wood construction/mass reduction
-                if (part.IsMissile() || part.IsWeapon() || ArmorPanel || isAI || BDArmorySettings.LEGACY_ARMOR || BDArmorySettings.RESET_HULL || ProjectileUtils.isMaterialBlackListpart(this.part))
+                if (part.IsMissile() || ArmorPanel || isAI || BDArmorySettings.LEGACY_ARMOR || BDArmorySettings.RESET_HULL || ProjectileUtils.isMaterialBlackListpart(this.part))
                 {
                     HullTypeNum = HullInfo.materials.FindIndex(t => t.name == "Aluminium") + 1;
                     HTrangeEditor.minValue = HullTypeNum;
@@ -425,14 +450,14 @@ namespace BDArmory.Damage
                     IgnoreForArmorSetup = true;
                     SetHullMass();
                 }
-                
+
                 if (ArmorThickness > 10 || ArmorPanel) //Mod part set to start with armor, or armor panel. > 10, since less than 10mm of armor can't be considered 'startsArmored'
                 {
                     startsArmored = true;
                     if (Armor < 0) // armor amount modified in SPH/VAB and does not = either the default nor the .cfg thickness
                         Armor = ArmorThickness;//set Armor amount to .cfg value
                     //See also ln 1183-1186
-                }                
+                }
                 else
                 {
                     if (Armor < 0) Armor = ArmorThickness; //10 for parts, 2 for missiles, from ln 347
@@ -450,21 +475,6 @@ namespace BDArmory.Damage
             //if (armorVolume < 0) //check already occurs 429, doubling it results in the PartSize vector3 returning null
             calcPartSize();
             SetupPrefab();
-            if (HighLogic.LoadedSceneIsEditor && !isProcWing)
-            {
-                var r = part.GetComponentsInChildren<Renderer>();
-                {
-                    for (int i = 0; i < r.Length; i++)
-                    {
-                        defaultShader.Add(r[i].material.shader);
-                        if (BDArmorySettings.DEBUG_ARMOR) Debug.Log("[BDArmory.HitpointTracker]: ARMOR: part shader is " + r[i].material.shader.name);
-                        if (r[i].material.HasProperty("_Color"))
-                        {
-                            defaultColor.Add(r[i].material.color);
-                        }
-                    }
-                }
-            }
             Armour = Armor;
             StartCoroutine(DelayedOnStart()); // Delay updating mass, armour, hull and HP so mods like proc wings and tweakscale get the right values.
                                               //if (HighLogic.LoadedSceneIsFlight)
@@ -527,7 +537,7 @@ namespace BDArmory.Damage
                     }
                 }
                 else
-                sizeAdjust = 0.5f; //armor on one side, otherwise will have armor thickness on both sides of the panel, nonsensical + double weight
+                    sizeAdjust = 0.5f; //armor on one side, otherwise will have armor thickness on both sides of the panel, nonsensical + double weight
             }
             if (armorVolume < 0 || HighLogic.LoadedSceneIsEditor && isProcPart) //make this persistant to get around diffeences in part bounds between SPH/Flight. Also reset if in editor and a procpart to account for resizing
             {
@@ -555,6 +565,22 @@ namespace BDArmory.Damage
                     partMass = part.mass;
                     calcPartSize(); // Re-calculate the size.
                     SetupPrefab(); // Re-setup the prefab.
+                }
+            }
+            if (!isProcWing) //moving this here so any dynamic texture adjustment post spawn (TURD/TUFX/etc) will be grabbed by the defaultShader census
+            {                   //have this be done by RadarUtils when doing RCS snapshots instead?
+                var r = part.GetComponentsInChildren<Renderer>();
+                for (int i = 0; i < r.Length; i++)
+                {
+                    if (r[i].GetComponentInParent<Part>() != part) continue; // Don't recurse to child parts.
+                    int key = r[i].material.GetInstanceID(); // The instance ID is unique for each object (not just component or gameObject).
+                    if (defaultShader.ContainsKey(key)) continue;
+                    defaultShader.Add(key, r[i].material.shader); //This doesn't grab part variants - parts with variants that are switched to will not register in defaultShader, and render as black in the RCS window
+                    if (BDArmorySettings.DEBUG_ARMOR) Debug.Log($"[BDArmory.HitpointTracker]: ARMOR: part shader on {r[i].GetComponentInParent<Part>().partInfo.name} is {r[i].material.shader.name}");
+                    if (r[i].material.HasProperty("_Color"))
+                    {
+                        if (!defaultColor.ContainsKey(key)) defaultColor.Add(key, r[i].material.color);
+                    }
                 }
             }
             if (part.partInfo != null && part.partInfo.partPrefab != null) partMass = part.partInfo.partPrefab.mass;
@@ -585,7 +611,7 @@ namespace BDArmory.Damage
         public void ShipModified(ShipConstruct data)
         {
             // Note: this triggers if the ship is modified, but really we only want to run this when the part is modified.
-            if (isProcWing || isProcPart || isProcWheel)
+            if (isProcWing || isProcPart || isProcWheel || isVariantPart)
             {
                 if (!_delayedShipModifiedRunning)
                 {
@@ -603,7 +629,7 @@ namespace BDArmory.Damage
         }
 
         private bool _delayedShipModifiedRunning = false;
-        IEnumerator DelayedShipModified() // Wait a frame before triggering to allow proc wings to update it's mass properly.
+        IEnumerator DelayedShipModified() // Wait a frame before triggering to allow proc wings to update their mass properly.
         {
             _delayedShipModifiedRunning = true;
             yield return new WaitForFixedUpdate();
@@ -654,7 +680,9 @@ namespace BDArmory.Damage
                     HullSetup(null, null);
                 }
                 if (!_updateMass) // Wait for the mass to update first.
+                {
                     RefreshHitPoints();
+                }
                 if (HighLogic.LoadedSceneIsFlight && _armorConfigured && _hullConfigured && _hpConfigured) // No more changes, we're done.
                 {
                     _finished_setting_up = true;
@@ -672,21 +700,38 @@ namespace BDArmory.Damage
                 HullMassAdjust = 0;
                 part.UpdateMass();
                 //partMass = part.mass - armorMass - HullMassAdjust; //part mass is taken from the part.cfg val, not current part mass; this overrides that
-                //need to get ModuleSelfSealingTank mass adjustment. Could move the SST module to BDA.Core
-                if (isProcWing || isProcPart || isProcWheel)
+                if (isProcWing || isProcPart || isProcWheel || isVariantPart)
                 {
                     float Safetymass = 0;
                     var SST = part.GetComponent<ModuleSelfSealingTank>();
                     if (SST != null)
                     { Safetymass = SST.FBmass + SST.FISmass; }
                     partMass = part.mass - armorMass - HullMassAdjust - Safetymass;
+                    if (isVariantPart)
+                    {
+                        var r = part.GetComponentsInChildren<Renderer>();
+                        for (int i = 0; i < r.Length; i++)
+                        {
+                            if (r[i].GetComponentInParent<Part>() != part) continue; // Don't recurse to child parts.
+                            int key = r[i].material.GetInstanceID(); // The instance ID is unique for each object (not just component or gameObject).
+                            if (!defaultShader.ContainsKey(key))
+                            {
+                                defaultShader.Add(key, r[i].material.shader); //grab materials for part variant variants when switching to that variant
+                                if (BDArmorySettings.DEBUG_ARMOR) Debug.Log($"[BDArmory.HitpointTracker]: ARMOR: part shader on {r[i].GetComponentInParent<Part>().partInfo.name} is {r[i].material.shader.name}");
+                            }
+                            if (r[i].material.HasProperty("_Color"))
+                            {
+                                if (!defaultColor.ContainsKey(key)) defaultColor.Add(key, r[i].material.color);
+                            }
+                        }
+                    }
                 }
                 CalculateDryCost(); //recalc if modify event added a fueltank -resource swap, etc
                 HullMassAdjust = oldHullMassAdjust; // Put the HullmassAdjust back so we can test against it when we update the hull mass.
                 if (oldPartMass != partMass)
                 {
                     if (BDArmorySettings.DEBUG_ARMOR) Debug.Log($"[BDArmory.HitpointTracker]: {part.name} updated mass at {Time.time}: part.mass {part.mass}, partMass {oldPartMass}->{partMass}, armorMass {armorMass}, hullMassAdjust {HullMassAdjust}");
-                    if (isProcPart || isProcWheel)
+                    if (isProcPart || isProcWheel || isVariantPart)
                     {
                         calcPartSize();
                         _armorModified = true;
@@ -728,7 +773,7 @@ namespace BDArmory.Damage
                             {
                                 fireStarter = part.vessel.GetName();
                             }
-                            FX.BulletHitFX.AttachFire(transform.position, part, 50, fireStarter);
+                            FX.BulletHitFX.AttachFire(transform.position, part, 50, fireStarter, float.MaxValue);
                             if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log($"[BDarmory.HitPointTracker]: Hull auto-ignition! {part.name} is on fire!; temperature: {part.temperature}");
                             isOnFire = true;
                         }
@@ -946,7 +991,7 @@ namespace BDArmory.Damage
                             else
                                 hitpoints = (float)part.Modules.GetModule<ModuleLiftingSurface>().deflectionLiftCoeff * 700 * hitpointMultiplier * 0.333f; //stock wings are 700 HP per lifting surface area; using lift instead of mass (110 Lift/ton) due to control surfaces weighing more
                         }
-                        if (isProcPart || isProcWheel)
+                        if (isProcPart || isProcWheel || isVariantPart)
                         {
                             structuralVolume = armorVolume * Mathf.PI / 6f * 0.1f; // Box area * sphere/cube ratio * 10cm. We use sphere/cube ratio to get similar results as part.GetAverageBoundSize().
                             density = (partMass * 1000f) / structuralVolume;
@@ -996,14 +1041,11 @@ namespace BDArmory.Damage
                                     hitpoints = aeroVolume * 1200;
                                     if (HighLogic.LoadedSceneIsFlight)
                                     {
-                                        var lift = part.FindModuleImplementing<ModuleLiftingSurface>();
-                                        if (lift != null) lift.deflectionLiftCoeff = 0;
-                                        DragCube DragCube = DragCubeSystem.Instance.RenderProceduralDragCube(part);
-                                        part.DragCubes.ClearCubes();
-                                        part.DragCubes.Cubes.Add(DragCube);
-                                        part.DragCubes.ResetCubeWeights();
-                                        part.DragCubes.ForceUpdate(true, true, false);
-                                        part.DragCubes.SetDragWeights();
+                                        if (!FerramAerospace.CheckForFAR())
+                                        {
+                                            var lift = part.FindModuleImplementing<ModuleLiftingSurface>();
+                                            if (lift != null) lift.deflectionLiftCoeff = 0;
+                                        }
                                     }
                                 }
                                 if (BDArmorySettings.RUNWAY_PROJECT_ROUND == 60) hitpoints = Mathf.Min(500, hitpoints);
@@ -1020,14 +1062,13 @@ namespace BDArmory.Damage
                             }
                             ArmorModified(null, null);
                         }
-                        if ((BDArmorySettings.RUNWAY_PROJECT || BDArmorySettings.HP_THRESHOLD >= 100) && hitpoints > BDArmorySettings.HP_THRESHOLD) //If RunwayProject or Clamped HP setting, clamp HP
+                        if (BDArmorySettings.HP_THRESHOLD >= 100 && hitpoints > BDArmorySettings.HP_THRESHOLD)
                         {
-                            var scale = (BDArmorySettings.HP_THRESHOLD >= 100 ? BDArmorySettings.HP_THRESHOLD : 2000f) / (Mathf.Exp(1) - 1);
-                            hitpoints = Mathf.Min(hitpoints, (BDArmorySettings.HP_THRESHOLD >= 100 ? BDArmorySettings.HP_THRESHOLD : 2000f) * Mathf.Log(hitpoints / scale + 1)); //use default of 2K for RP if slider set to unclamped
+                            var scale = BDArmorySettings.HP_THRESHOLD / (Mathf.Exp(1) - 1);
+                            hitpoints = Mathf.Min(hitpoints, BDArmorySettings.HP_THRESHOLD * Mathf.Log(hitpoints / scale + 1));
                         }
-                        hitpoints = BDAMath.RoundToUnit(hitpoints, HpRounding);
+                        hitpoints = Mathf.Max(BDAMath.RoundToUnit(hitpoints, HpRounding), HpRounding); //fix ultralight parts like CM boxes having 0 HP
                         //hitpoints = Mathf.Round(hitpoints);//?
-                        if (hitpoints < 100) hitpoints = 100;
                         hitpoints *= HullInfo.materials[hullType].healthMod; // Apply health mod after rounding and lower limit.
                         if (BDArmorySettings.DEBUG_ARMOR && maxHitPoints <= 0 && Hitpoints != hitpoints) Debug.Log($"[BDArmory.HitpointTracker]: {part.name} updated HP: {Hitpoints}->{hitpoints} at time {Time.time}, partMass: {partMass}, density: {density}, structuralVolume: {structuralVolume}, structuralMass {structuralMass}");
                     }
@@ -1100,7 +1141,7 @@ namespace BDArmory.Damage
                 return;
             }
 
-            partdamage = Mathf.Max(partdamage, 0f) * -1;
+            partdamage = -Mathf.Max(partdamage, 0f);
             Hitpoints += (partdamage / defenseMutator); //why not just go -= partdamage?
             if (BDArmorySettings.BATTLEDAMAGE && BDArmorySettings.BD_PART_STRENGTH)
             {
@@ -1128,7 +1169,7 @@ namespace BDArmory.Damage
 
         public void AddDamageToKerbal(KerbalEVA kerbal, float damage)
         {
-            damage = Mathf.Max(damage, 0f) * -1;
+            damage = -Mathf.Max(damage, 0f);
             Hitpoints += damage;
 
             if (Hitpoints <= 0)
@@ -1145,9 +1186,10 @@ namespace BDArmory.Damage
         {
             if (BDArmorySettings.DEBUG_ARMOR)
             {
-                Debug.Log("[HPTracker] armor mass: " + armorMass + "; mass to reduce: " + (massToReduce * Math.Round((Density / 1000000), 3)) * BDArmorySettings.ARMOR_MASS_MOD + "kg"); //g/m3
+                Debug.Log("[HPTracker] armor mass: " + armorMass * 1000 + "kg; mass to reduce: " + (massToReduce * Math.Round((Density / 1000000), 3)) * BDArmorySettings.ARMOR_MASS_MOD + "kg"); //g/m3
             }
             float reduceMass = (massToReduce * (Density / 1000000000)); //g/cm3 conversion to yield tons
+            if (totalArmorQty < reduceMass) reduceMass = totalArmorQty; //shouldn't be happening, but just in case
             if (totalArmorQty > 0)
             {
                 //Armor -= ((reduceMass * 2) / armorMass) * Armor; //armor that's 50% air isn't going to stop anything and could be considered 'destroyed' so lets reflect that by doubling armor loss (this will also nerf armor panels from 'god-tier' to merely 'very very good'
@@ -1169,11 +1211,13 @@ namespace BDArmory.Damage
                     Armour = Armor;
                 }
             }
+            if (BDArmorySettings.DEBUG_ARMOR) Debug.Log("[HPTracker] Debug: current Armor: " + Armor + "; ArmorRemaining: " + ArmorRemaining + "; ArmorPanel: " + ArmorPanel);
             if (ArmorPanel)
             {
                 Hitpoints = ArmorRemaining; // * armorVolume * 10;
                 if (Armor <= 0)
                 {
+                    Debug.Log("[HPTracker] Debug: Armor integrity reduced to 0! Destroying panel");
                     DestroyPart();
                 }
             }
@@ -1200,7 +1244,7 @@ namespace BDArmory.Damage
             {
                 if (part.IsAero())
                 {
-                    if (isProcWing) 
+                    if (isProcWing)
                         maxSupportedArmor = ProceduralWing.getPwingThickness(part);
                     else
                         maxSupportedArmor = 20;
@@ -1216,6 +1260,10 @@ namespace BDArmory.Damage
                 {
                     maxSupportedArmor = ArmorThickness;
                 }
+            }
+			if (BDArmorySettings.MAX_ARMOR_LIMIT >= 0)
+            {
+                maxSupportedArmor = Mathf.Min(BDArmorySettings.MAX_ARMOR_LIMIT, maxSupportedArmor);
             }
             if (BDArmorySettings.DEBUG_ARMOR)
             {
@@ -1260,6 +1308,7 @@ namespace BDArmory.Damage
                 Hardness = armorInfo.Hardness;
                 Strength = armorInfo.Strength;
                 SafeUseTemp = armorInfo.SafeUseTemp;
+                armorRadarReturnFactor = 1;
 
                 vFactor = armorInfo.vFactor;
                 muParam1 = armorInfo.muParam1;
@@ -1370,6 +1419,7 @@ namespace BDArmory.Damage
                 part.skinInternalConductionMult = skinInternalConduction * BDAMath.Sqrt(Diffusivity / 237); //how well does the armor allow external heat to flow into the part internals?
                 part.skinSkinConductionMult = skinskinConduction * BDAMath.Sqrt(Diffusivity / 237); //how well does the armor conduct heat to connected part skins?
                 part.skinMassPerArea = (Density / 1000) * ArmorThickness;
+                armorRadarReturnFactor = armorInfo.radarReflectivity;
             }
             if (ArmorTypeNum == (ArmorInfo.armors.FindIndex(t => t.name == "None") + 1) && ArmorPanel)
             {
@@ -1380,7 +1430,9 @@ namespace BDArmory.Damage
                 part.skinInternalConductionMult = skinInternalConduction * BDAMath.Sqrt(Diffusivity / 237); //how well does the armor allow external heat to flow into the part internals?
                 part.skinSkinConductionMult = skinskinConduction * BDAMath.Sqrt(Diffusivity / 237); //how well does the armor conduct heat to connected part skins?
                 part.skinMassPerArea = (Density / 1000) * ArmorThickness;
+                armorRadarReturnFactor = armorInfo.radarReflectivity;
             }
+            CalculateRCSreduction();
             totalArmorQty = armorMass; //grabbing a copy of unmodified armorMAss so it can be used in armorMass' place for armor reduction without having to un/re-modify the mass before and after armor hits
             armorMass *= BDArmorySettings.ARMOR_MASS_MOD;
             //part.RefreshAssociatedWindows(); //having this fire every time a change happens prevents sliders from being used. Add delay timer?
@@ -1400,7 +1452,7 @@ namespace BDArmory.Damage
         {
             //if (isAI) return; //replace with newer implementation
             if (BDArmorySettings.LEGACY_ARMOR || BDArmorySettings.RESET_ARMOUR) return;
-            if (part.IsMissile()) return;
+            if (part.IsMissile() || part.Modules.Contains("ModuleReactiveArmor")) return;
             if (ArmorTypeNum != (ArmorInfo.armors.FindIndex(t => t.name == "None") + 1) || ArmorPanel)
             {
                 /*
@@ -1420,6 +1472,10 @@ namespace BDArmory.Damage
                 UI_FloatRange armorFieldEditor = (UI_FloatRange)Fields["Armor"].uiControlEditor;
                 if (isProcWing)
                     maxSupportedArmor = ProceduralWing.getPwingThickness(part);
+				if (BDArmorySettings.MAX_ARMOR_LIMIT >= 0)
+                {
+                    maxSupportedArmor = Mathf.Min(BDArmorySettings.MAX_ARMOR_LIMIT, maxSupportedArmor);
+                }
                 if (armorFieldEditor.maxValue != maxSupportedArmor)
                 {
                     armorReset = false;
@@ -1495,9 +1551,10 @@ namespace BDArmory.Damage
                 _hullConfigured = true;
                 return;
             }
-            if (isAI || ArmorPanel || ProjectileUtils.isMaterialBlackListpart(this.part))
+            if (isAI || ArmorPanel || ProjectileUtils.isMaterialBlackListpart(part))
             {
                 _hullConfigured = true;
+                part.gTolerance = (isAI || part.vesselType == VesselType.SpaceObject) ? 999 : ArmorPanel ? 50 : part.partInfo.partPrefab.gTolerance; //50 for now, armor panels should probably either be determined by armor material, or arbitrary 'weld/mounting bracket' strength
                 return;
                 //HullTypeNum = HullInfo.materials.FindIndex(t => t.name == "Aluminium");
             }
@@ -1511,7 +1568,7 @@ namespace BDArmory.Damage
                     HullTypeNum = HullInfo.materials.FindIndex(t => t.name == "Aluminium") + 1;
                 }
 
-                if ((part.isEngine() || part.IsWeapon()) && HullInfo.materials[HullInfo.materialNames[(int)HullTypeNum - 1]].massMod < 1) //can armor engines, but not make them out of wood.
+                if ((part.IsFunctional() || part.IsWeapon()) && HullInfo.materials[HullInfo.materialNames[(int)HullTypeNum - 1]].massMod < 1) //can armor engines, but not make them out of wood.
                 {
                     HullTypeNum = HullInfo.materials.FindIndex(t => t.name == "Aluminium") + 1;
                     part.maxTemp = part.partInfo.partPrefab.maxTemp;
@@ -1540,7 +1597,9 @@ namespace BDArmory.Damage
             part.breakingTorque = maxTorque;
             maxG = part.partInfo.partPrefab.gTolerance * hullInfo.ImpactMod;
             part.gTolerance = maxG;
+            hullRadarReturnFactor = hullInfo.radarMod;
             hullType = hullInfo.name;
+            CalculateRCSreduction();
             float partCost = part.partInfo.cost + part.partInfo.variant.Cost;
             if (hullInfo.costMod < 1) HullCostAdjust = Mathf.Max((partCost - (float)resourceCost) * hullInfo.costMod, partCost - (1000 - (hullInfo.costMod * 1000))) - (partCost - (float)resourceCost);//max of 1000 funds discount on cheaper materials
             else HullCostAdjust = Mathf.Min((partCost - (float)resourceCost) * hullInfo.costMod, (partCost - (float)resourceCost) + (hullInfo.costMod * 1000)) - (partCost - (float)resourceCost); //Increase costs if costMod => 1                                                                                                                                                             
@@ -1556,6 +1615,34 @@ namespace BDArmory.Damage
                     GameEvents.onEditorShipModified.Fire(EditorLogic.fetch.ship);
             }
             _hullConfigured = true;
+        }
+        private void CalculateRCSreduction()
+        {
+            if (ArmorTypeNum > 1 && Armor > 0) //if ArmorType != None and armor thickness != 0
+            {
+                //float radarReflected = 1 - (armorRadarReturnFactor * (1 + Mathf.Log(Mathf.Max(Armor, 1), 100f))) //FIXME - this is busted, needs review
+                //vv less than ideal, but works for v1.0
+                float radarReflected = Armor < 10 ? armorRadarReturnFactor + ((1 - armorRadarReturnFactor) / 10) * (10 - Armor) : armorRadarReturnFactor;//armor < 10 will have reduced radar absorbsion, else
+                //reflector armor/ translucent armor reflecting subsurface structure/RAM thicker than it needs to be, no change;
+                if (BDArmorySettings.DEBUG_ARMOR) Debug.Log($"[BDArmory.HitpointTracker] radarReflectivity for {part.name} is {armorRadarReturnFactor}; radarRefected {radarReflected}");
+                radarReflectivity = radarReflected; //radar return based on armor material
+                if (radarReflected > 1) //radar-translucent armor...
+                {
+                    if (hullRadarReturnFactor < 1) // w/ radar absorbent structural elements
+                        radarReflectivity = 1 - (hullRadarReturnFactor * (radarReflected - 1));
+                    if (hullRadarReturnFactor < 1) // w/ radar reflective structural elements
+                        radarReflectivity = 1 - (hullRadarReturnFactor * (1 - radarReflected));
+                }
+            }
+            else //(ArmorTypeNum < 1 || Armor < 1) //no armor, radar return based on hull material
+            {
+                radarReflectivity = hullRadarReturnFactor;
+            }
+            if (radarReflectivity > 2 || radarReflectivity < 0) // goes up to 2 in case of radar reflectors/anti-stealth coatings, etc
+            {
+                radarReflectivity = Mathf.Clamp(radarReflectivity, 0, 2);
+            }
+            if (BDArmorySettings.DEBUG_ARMOR) Debug.Log("[ARMOR]: Radar return rating is " + radarReflectivity);
         }
         private List<PartResource> GetResources()
         {

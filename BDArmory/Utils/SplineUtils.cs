@@ -43,8 +43,11 @@ namespace BDArmory.Utils
 		/// <param name="dt01"></param>
 		/// <param name="dt12"></param>
 		/// <returns></returns>
-		public static Vector3 EstimateSlope(Vector3 point0, Vector3 point1, Vector3 point2, float dt01, float dt12)
+		public static Vector3 EstimateSlope(Vector3 point0, Vector3 point1, Vector3 point2, float dt01 = 0, float dt12 = 0)
 		{
+			// If the time deltas between the points aren't specified, treat the time parameter as distance.
+			if (dt01 == 0) dt01 = (point1 - point0).magnitude;
+			if (dt12 == 0) dt12 = (point2 - point1).magnitude;
 			return 0.5f * ((point2 - point1) / dt12 + (point1 - point0) / dt01);
 		}
 
@@ -55,8 +58,10 @@ namespace BDArmory.Utils
 		/// <param name="point1"></param>
 		/// <param name="dt"></param>
 		/// <returns></returns>
-		public static Vector3 EstimateSlope(Vector3 point0, Vector3 point1, float dt)
+		public static Vector3 EstimateSlope(Vector3 point0, Vector3 point1, float dt = 0)
 		{
+			// If the time delta between the points isn't specified, treat the time parameter as distance.
+			if (dt == 0) dt = (point1 - point0).magnitude;
 			return (point1 - point0) / dt;
 		}
 		#endregion

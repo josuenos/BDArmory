@@ -109,6 +109,9 @@ namespace BDArmory.Evolution
 
         private EvolutionState evolutionState = null;
 
+        // Current active variant group (used to render in EvolutionWindow or similar)
+        public VariantGroup ActiveVariantGroup() {return evolutionState.groups.Last();}
+
         private VariantEngine engine = null;
 
         // Spawn settings
@@ -140,7 +143,7 @@ namespace BDArmory.Evolution
 
         public static void ConfigurePaths()
         {
-            configDirectory = Path.Combine(KSPUtil.ApplicationRootPath, "AutoSpawn", "evolutions");
+            configDirectory = Path.GetFullPath(Path.Combine(KSPUtil.ApplicationRootPath, "AutoSpawn", "evolutions"));
             workingDirectory = Path.Combine(configDirectory, "working");
             seedDirectory = Path.Combine(configDirectory, "seeds");
             adversaryDirectory = Path.Combine(configDirectory, "adversaries");
@@ -199,7 +202,8 @@ namespace BDArmory.Evolution
                     workingDirectory
                 ),
                 BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE ? BDArmorySettings.VESSEL_SPAWN_DISTANCE : BDArmorySettings.VESSEL_SPAWN_DISTANCE_FACTOR,
-                BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE
+                BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE,
+                BDArmorySettings.VESSEL_SPAWN_REF_HEADING
             );
             evolutionState = new EvolutionState(evolutionId, status, new List<VariantGroup>());
 
@@ -375,22 +379,23 @@ namespace BDArmory.Evolution
             var seedName = LoadSeedCraft();
             engine.Configure(craft, weightMapFile);
 
+            // add the original
+            // Note: should be called first before variants are created since there appears to be some mutation operations that are not fully isolated (debugging WIP)
+            // Saving first also allows avoidance of needing to use craft.CreateCopy() for the reference craft
+            var referenceName = string.Format("R{0}", groupId);
+            SaveVariant(craft, referenceName);
+
             // generate dipolar variants for all primary axes
             var mutations = engine.GenerateMutations(BDArmorySettings.EVOLUTION_MUTATIONS_PER_HEAT);
             List<Variant> variants = new List<Variant>();
             foreach (var mutation in mutations)
             {
-                ConfigNode newVariant = craft.CreateCopy();
-                mutation.Apply(newVariant, engine);
+                ConfigNode newVariant = mutation.Apply(craft, engine);
                 var id = nextVariantId;
                 var name = GetNextVariantName();
                 variants.Add(mutation.GetVariant(id.ToString(), name));
                 SaveVariant(newVariant, name);
             }
-
-            // add the original
-            var referenceName = string.Format("R{0}", groupId);
-            SaveVariant(craft.CreateCopy(), referenceName);
 
             // select random adversary
             LoadAdversaryCraft();
@@ -415,6 +420,11 @@ namespace BDArmory.Evolution
         {
             var info = new DirectoryInfo(seedDirectory);
             var seeds = info.GetFiles("*.craft").ToList();
+            // TODO:
+            // Pre-existing seed files that are overwritten keep the old creation time
+            // (e.g. if the evolution program is stopped and restarted or started again on a new save) of seeds 
+            // Need to check to make sure previous seed name doesn't exist when saving to avoid this
+            // (can't use file modification time since LastWriteTime is only available on windows NT file systems)
             var latestSeed = seeds.OrderBy(e => e.CreationTimeUtc).Last().Name;
             Debug.Log(string.Format("[BDArmory.BDAEvolution]: Evolution using latest seed: {0}", latestSeed));
             ConfigNode node = ConfigNode.Load(string.Format("{0}/{1}", seedDirectory, latestSeed));
@@ -517,6 +527,7 @@ namespace BDArmory.Evolution
                 var wait = new WaitForFixedUpdate();
                 spawnConfig.craftFiles = null; // We don't want to include the specific craft files in the spawn config.
                 spawnConfig.teamCounts = null;
+                SpawnUtils.ResetVesselNamingDeconfliction();
                 spawner.SpawnAllVesselsOnce(spawnConfig);
                 while (spawner.vesselsSpawning)
                     yield return wait;

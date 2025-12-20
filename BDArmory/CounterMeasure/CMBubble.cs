@@ -32,11 +32,13 @@ namespace BDArmory.CounterMeasure
             Vector3 dragForce = (0.008f * mass) * drag * 0.5f * simSpeedSquared *
                                 ((float)
                                 FlightGlobals.getAtmDensity(FlightGlobals.getStaticPressure(currPos),
-                                    FlightGlobals.getExternalTemperature(), FlightGlobals.currentMainBody) * 83) *
+                                    FlightGlobals.getExternalTemperature(), FlightGlobals.currentMainBody) * 10) *
                                 velocity.normalized;
 
             velocity -= (dragForce / mass) * Time.fixedDeltaTime;
-            if (FlightGlobals.getAltitudeAtPos(transform.position) < -8) velocity -= (FlightGlobals.getGeeForceAtPosition(transform.position) / 2) * Time.fixedDeltaTime;
+            if (FlightGlobals.getAltitudeAtPos(currPos) < -1)
+                velocity += FlightGlobals.getGeeForceAtPosition(currPos) * Time.fixedDeltaTime;
+
             transform.position += velocity * Time.fixedDeltaTime;
         }
         public static float RaycastBubblescreen(Ray ray)

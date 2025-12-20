@@ -147,13 +147,13 @@ namespace BDArmory.CounterMeasure
         {
             if (decloakRoutine != null)
             {
-                StopCoroutine(DecloakRoutine());
+                StopCoroutine(decloakRoutine);
                 decloakRoutine = null;
             }
 
             if (cloakRoutine != null)
             {
-                StopCoroutine(CloakRoutine());
+                StopCoroutine(cloakRoutine);
                 cloakRoutine = null;
             }
         }

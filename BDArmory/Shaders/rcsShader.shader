@@ -1,4 +1,4 @@
-﻿// Upgrade NOTE: replaced 'mul(UNITY_MATRIX_MVP,*)' with 'UnityObjectToClipPos(*)'
+﻿﻿// Upgrade NOTE: replaced 'mul(UNITY_MATRIX_MVP,*)' with 'UnityObjectToClipPos(*)'
 
 Shader "Custom/rcsShader"
 {
@@ -47,17 +47,16 @@ Shader "Custom/rcsShader"
 				Interpolators i;
 				i.position = UnityObjectToClipPos(v.position);
 				i.normal = UnityObjectToWorldNormal(v.normal);
-				//i.uv = TRANSFORM_TEX(v.uv, _MainTex);
-				return i;
+                return i;
 			}
 
 			// Main Fragment Program
 			float4 RCSFragmentShader(Interpolators i) : SV_TARGET
 			{
-				float3 lightDir = _WorldSpaceLightPos0.xyz;
-				float3 lightColor = _RCSCOLOR.rgb;
-				float3 reflectionDir = reflect(-_LIGHTDIR, i.normal);
-				return DotClamped(_LIGHTDIR, reflectionDir);
+				float3 reflectionDir = DotClamped(_LIGHTDIR, reflect(-_LIGHTDIR, i.normal));
+				half returnStr = max(0, reflectionDir);
+				float4 finalreturn = returnStr * _RCSCOLOR; //actually make it use _RCSCOLOR
+				return finalreturn;
 			}
 			ENDCG
 		} //PASS

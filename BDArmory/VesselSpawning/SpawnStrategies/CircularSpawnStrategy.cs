@@ -45,7 +45,8 @@ namespace BDArmory.VesselSpawning.SpawnStrategies
                     craftFiles: new List<string>(craftUrls)
                 ),
                 radius,
-                BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE
+                BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE,
+                BDArmorySettings.VESSEL_SPAWN_REF_HEADING
             );
             yield return spawner.Spawn(spawnConfig);
 

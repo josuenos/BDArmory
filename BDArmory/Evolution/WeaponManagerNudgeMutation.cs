@@ -21,10 +21,11 @@ namespace BDArmory.Evolution
             this.direction = direction;
         }
 
-        public void Apply(ConfigNode craft, VariantEngine engine)
+        public ConfigNode Apply(ConfigNode craft, VariantEngine engine)
         {
+            ConfigNode mutatedCraft = craft.CreateCopy();
             Debug.Log("[BDArmory.WeaponManagerNudgeMutation]: Evolution WeaponManagerNudgeMutation applying");
-            List<ConfigNode> matchingNodes = engine.FindModuleNodes(craft, "MissileFire");
+            List<ConfigNode> matchingNodes = engine.FindModuleNodes(mutatedCraft, "MissileFire");
             if (matchingNodes.Count == 1)
             {
                 Debug.Log("[BDArmory.WeaponManagerNudgeMutation]: Evolution WeaponManagerNudgeMutation found module");
@@ -34,11 +35,11 @@ namespace BDArmory.Evolution
                 Debug.Log(string.Format("[BDArmory.WeaponManagerNudgeMutation]: Evolution WeaponManagerNudgeMutation found existing value {0} = {1}", paramName, existingValue));
                 if (engine.NudgeNode(node, paramName, modifier))
                 {
-                    ConfigNode partNode = engine.FindParentPart(craft, node);
+                    ConfigNode partNode = engine.FindParentPart(mutatedCraft, node);
                     if( partNode == null )
                     {
                         Debug.Log("[BDArmory.WeaponManagerNudgeMutation]: Evolution WeaponManagerNudgeMutation failed to find parent part for module");
-                        return;
+                        return mutatedCraft;
                     }
                     string partName = partNode.GetValue("part");
                     var value = existingValue * (1 + modifier);
@@ -54,6 +55,7 @@ namespace BDArmory.Evolution
             {
                 Debug.Log("[BDArmory.WeaponManagerNudgeMutation]: Evolution WeaponManagerNudgeMutation wrong number of weapon managers");
             }
+            return mutatedCraft;
         }
 
         public Variant GetVariant(string id, string name)

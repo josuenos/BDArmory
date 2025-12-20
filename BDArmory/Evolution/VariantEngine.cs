@@ -100,7 +100,8 @@ namespace BDArmory.Evolution
             this.weightMapFile = weightMapFile;
 
             // build map for higher performance access
-            BuildNodeMap(craft);
+            nodeMap.Clear();
+            nodeMap = BuildNodeMap(craft);
 
             // try to load existing weight map file
             try
@@ -133,11 +134,10 @@ namespace BDArmory.Evolution
             }
         }
 
-        private void BuildNodeMap(ConfigNode craft)
+        public Dictionary<string, ConfigNode> BuildNodeMap(ConfigNode craft)
         {
             Debug.Log("[BDArmory.VariantEngine]: Evolution VariantEngine BuildNodeMap");
-            nodeMap.Clear();
-
+            Dictionary<string, ConfigNode> node_map = new Dictionary<string, ConfigNode>();
             // use a fifo queue to recurse through the tree
             List<ConfigNode> nodeQueue = new List<ConfigNode>();
             nodeQueue.Add(craft);
@@ -157,12 +157,12 @@ namespace BDArmory.Evolution
                 {
                     // insert node into map
                     var partName = nextNode.GetValue("part");
-                    if (nodeMap.ContainsKey(partName))
+                    if (node_map.ContainsKey(partName))
                     {
                         Debug.Log(string.Format("[BDArmory.VariantEngine]: Evolution VariantEngine found duplicate part {0}", partName));
                         break;
                     }
-                    nodeMap[partName] = nextNode;
+                    node_map[partName] = nextNode;
                 }
 
                 // add children to the queue
@@ -171,11 +171,24 @@ namespace BDArmory.Evolution
                     nodeQueue.Add(node);
                 }
             }
+            return node_map;
         }
 
-        public ConfigNode GetNode(string partName)
+        // Must be private since it refers to and pulls references to the local nodeMap, not any new craft references
+        // Previously, this was called in other functions when attempting to apply mutations.
+        // This resulted in mutations being applied to the wrong variant or
+        // negativePole mutations undoing positivePole mutations for a variant
+        
+        // Candidate for full removal since using this can be dangerous and produce unintended effects
+        private ConfigNode GetNode(string partName)
         {
             return nodeMap[partName];
+        }
+
+        // Version of GetNode that does not rely on global state
+        public ConfigNode GetNode(string partName, Dictionary<string, ConfigNode> targetNodeMap)
+        {
+            return targetNodeMap[partName];
         }
 
         public List<ConfigNode> GetNodes(List<string> partNames)

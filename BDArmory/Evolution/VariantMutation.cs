@@ -5,7 +5,7 @@ namespace BDArmory.Evolution
 {
     public interface VariantMutation
     {
-        public void Apply(ConfigNode craft, VariantEngine engine);
+        public ConfigNode Apply(ConfigNode craft, VariantEngine engine);
         public Variant GetVariant(string id, string name);
     }
 }

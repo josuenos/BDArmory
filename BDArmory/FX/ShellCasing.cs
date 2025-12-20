@@ -9,27 +9,27 @@ namespace BDArmory.FX
     {
         public float startTime;
         public Vector3 initialV;
+        public Vector3 configV;
+        public float configD;
+        public float lifeTime = 2;
 
         Vector3 velocity;
         Vector3 angularVelocity;
 
         float atmDensity;
-        const int collisionLayerMask = (int)(LayerMasks.Parts | LayerMasks.Scenery | LayerMasks.Unknown19 | LayerMasks.Wheels); // Why 19?
+        const int collisionLayerMask = (int)(LayerMasks.Parts | LayerMasks.Scenery | LayerMasks.EVA | LayerMasks.Wheels);
 
         void OnEnable()
         {
             startTime = Time.time;
-            velocity = initialV;
-            velocity += transform.rotation *
-                        new Vector3(Random.Range(-.1f, .1f), Random.Range(-.1f, .1f),
-                            Random.Range(6f, 8f));
-            angularVelocity =
-                new Vector3(Random.Range(-10f, 10f), Random.Range(-10f, 10f),
-                    Random.Range(-10f, 10f)) * 10;
-
-            atmDensity =
-                (float)
-                FlightGlobals.getAtmDensity(
+            Vector3 randV = Random.insideUnitSphere;
+            velocity = initialV + transform.rotation * new Vector3(
+                configV.x + (configD + 0.1f * Mathf.Abs(configV.x)) * randV.x,
+                configV.y + (configD + 0.1f * Mathf.Abs(configV.y)) * randV.y,
+                configV.z + (configD + 0.1f * Mathf.Abs(configV.z)) * randV.z
+            );
+            angularVelocity = 100f * Random.insideUnitSphere;
+            atmDensity = (float)FlightGlobals.getAtmDensity(
                     FlightGlobals.getStaticPressure(transform.position, FlightGlobals.currentMainBody),
                     FlightGlobals.getExternalTemperature(), FlightGlobals.currentMainBody);
         }
@@ -37,7 +37,7 @@ namespace BDArmory.FX
         void FixedUpdate()
         {
             if (!gameObject.activeInHierarchy) return;
-            if (Time.time - startTime > 2)
+            if (Time.time - startTime > lifeTime)
             {
                 gameObject.SetActive(false);
                 return;

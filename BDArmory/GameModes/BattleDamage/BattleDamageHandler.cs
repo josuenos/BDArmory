@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -15,15 +15,16 @@ using BDArmory.Settings;
 using BDArmory.Targeting;
 using BDArmory.Utils;
 using BDArmory.WeaponMounts;
+using Expansions.Serenity;
 
 namespace BDArmory.GameModes
 {
     class BattleDamageHandler
     {
-        public static void CheckDamageFX(Part part, float caliber, float penetrationFactor, bool explosivedamage, bool incendiary, string attacker, RaycastHit hitLoc, bool firsthit = true, bool cockpitPen = false)
+        public static void CheckDamageFX(Part part, float caliber, float penetrationFactor, bool explosivedamage, bool incendiary, string attacker, RaycastHit hitLoc, bool firsthit = true, bool cockpitPen = false, Vector3 colliderLocalHitPoint = default)
         {      
             if (!BDArmorySettings.BATTLEDAMAGE || BDArmorySettings.PAINTBALL_MODE) return;
-            if (penetrationFactor <= 0) penetrationFactor = 0.01f;
+            penetrationFactor = Mathf.Clamp(penetrationFactor, 0.01f, 4f);
             if (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.ZOMBIE_MODE)
             //if (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == -1)
             {
@@ -37,7 +38,8 @@ namespace BDArmory.GameModes
             }
             if (ProjectileUtils.IsIgnoredPart(part)) return; // Ignore ignored parts.
 
-            double damageChance = Mathf.Clamp((BDArmorySettings.BD_DAMAGE_CHANCE * ((1 - part.GetDamagePercentage()) * 10) * (penetrationFactor / 2)), 0, 100); //more heavily damaged parts more likely to take battledamage
+            double damageChance = Mathf.Clamp((BDArmorySettings.BD_DAMAGE_CHANCE * ((1f - part.GetDamagePercentage()) * 10f) * ((penetrationFactor - BDArmorySettings.BD_DAMAGE_PENETRATION) * 0.5f)), 0, 100); //more heavily damaged parts more likely to take battledamage
+            Vector3 hitPoint = colliderLocalHitPoint == default ? hitLoc.point : hitLoc.collider.transform.TransformPoint(colliderLocalHitPoint);
 
             if (BDArmorySettings.BD_TANKS)
             {
@@ -55,11 +57,11 @@ namespace BDArmory.GameModes
                     {
                         if (alreadyburning != null)
                         {
-                            if (rubbertank == null || !rubbertank.InertTank) BulletHitFX.AttachFire(hitLoc.point, part, caliber, attacker);
+                            if (rubbertank == null || !rubbertank.InertTank) BulletHitFX.AttachFire(hitPoint, part, caliber, attacker);
                         }
                         else
                         {
-                            BulletHitFX.AttachLeak(hitLoc, part, caliber, explosivedamage, incendiary, attacker, rubbertank != null ? rubbertank.InertTank : false);
+                            BulletHitFX.AttachLeak(hitLoc, part, caliber, explosivedamage, incendiary, attacker, rubbertank != null ? rubbertank.InertTank : false, colliderLocalHitPoint);
                         }
                     }
                 }
@@ -83,7 +85,7 @@ namespace BDArmory.GameModes
                         if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.BattleDamageHandler]: Battery Dice Roll: " + Diceroll);
                         if (Diceroll <= BDArmorySettings.BD_DAMAGE_CHANCE)
                         {
-                            BulletHitFX.AttachFire(hitLoc.point, part, caliber, attacker);
+                            BulletHitFX.AttachFire(hitPoint, part, caliber, attacker);
                         }
                     }
                 }
@@ -99,7 +101,7 @@ namespace BDArmory.GameModes
                         if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.BattleDamageHandler]: Wood part Dice Roll: " + Diceroll);
                         if (Diceroll <= BDArmorySettings.BD_DAMAGE_CHANCE)
                         {
-                            BulletHitFX.AttachFire(hitLoc.point, part, caliber, attacker, 90);
+                            BulletHitFX.AttachFire(hitPoint, part, caliber, attacker, 90, surfaceFire: true);
                         }
                     }
                 }
@@ -174,7 +176,7 @@ namespace BDArmory.GameModes
                             var leak = part.GetComponentInChildren<FuelLeakFX>();
                             if (leak == null && !tracker.isSRB) //engine isn't a srb
                             {
-                                BulletHitFX.AttachLeak(hitLoc, part, caliber, explosivedamage, incendiary, attacker, false);
+                                BulletHitFX.AttachLeak(hitLoc, part, caliber, explosivedamage, incendiary, attacker, false, colliderLocalHitPoint);
                             }
                         }
                         if (part.GetDamagePercentage() < 0.50f || (part.GetDamagePercentage() < 0.625f && penetrationFactor > 2))
@@ -184,14 +186,14 @@ namespace BDArmory.GameModes
                             {
                                 if ((explosivedamage || incendiary) && tracker.SRBFuelled)
                                 {
-                                    BulletHitFX.AttachFire(hitLoc.point, part, caliber, attacker);
+                                    BulletHitFX.AttachFire(hitPoint, part, caliber, attacker);
                                 }
                             }
                             else
                             {
                                 if (alreadyburning == null)
                                 {
-                                    BulletHitFX.AttachFire(hitLoc.point, part, caliber, attacker, -1, 1);
+                                    BulletHitFX.AttachFire(hitPoint, part, caliber, attacker, -1, 1);
                                 }
                             }
                         }
@@ -270,7 +272,7 @@ namespace BDArmory.GameModes
                             gimbal.gimbalRange = 0;
                             if (incendiary)
                             {
-                                BulletHitFX.AttachFire(hitLoc.point, part, caliber, attacker, 20);
+                                BulletHitFX.AttachFire(hitPoint, part, caliber, attacker, 20);
                             }
                         }
                     }
@@ -326,7 +328,7 @@ namespace BDArmory.GameModes
                                 aileron.ctrlSurfaceRange /= 2;
                                 if (Diceroll <= ((BDArmorySettings.BD_DAMAGE_CHANCE * HEBonus) / 2))
                                 {
-                                    BulletHitFX.AttachFire(hitLoc.point, part, caliber, attacker, 10);
+                                    BulletHitFX.AttachFire(hitPoint, part, caliber, attacker, 10);
                                 }
                             }
                             else
@@ -343,75 +345,111 @@ namespace BDArmory.GameModes
             if (BDArmorySettings.BD_SUBSYSTEMS && firsthit)
             {
                 double Diceroll = UnityEngine.Random.Range(0, 100);
+                bool subsysCrit = false;
                 if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.BattleDamageHandler]: Subsystem DiceRoll: " + Diceroll + "; needs: " + damageChance);
                 if (Diceroll <= (damageChance) && part.GetDamagePercentage() < 0.95f)
                 {
                     if (part.GetComponent<ModuleReactionWheel>() != null) //should have this be separate dice rolls, else a part with more than one of these will lose them all
                     {
-                        ModuleReactionWheel SAS; //could have torque reduced per hit
+                        ModuleReactionWheel SAS; //critical hit to SAS reduces torque. Don't ask how a damaged Gyro functions correctly.
                         SAS = part.GetComponent<ModuleReactionWheel>();
-                        part.RemoveModule(SAS);
+                        SAS.authorityLimiter = Mathf.Min(SAS.authorityLimiter, part.GetDamagePercentage());//SAS can ge clamped to less than full if more SAS than legal in RWP, so don't increase clamped SAS if they take a glancing nick
+                        //part.RemoveModule(SAS);
+                        subsysCrit = true;
                     }
                     if (part.GetComponent<ModuleRadar>() != null)
                     {
                         ModuleRadar radar; //would need to mod detection curve to degrade performance on hit
-                        radar = part.GetComponent<ModuleRadar>();
+                        radar = part.GetComponent<ModuleRadar>(); //otoh, radars kinda fragile, probably wouldn't work with a chunk of it missing...
                         part.RemoveModule(radar);
+                        subsysCrit = true;
                     }
                     if (part.GetComponent<ModuleAlternator>() != null)
                     {
                         ModuleAlternator alt; //damaging alternator is probably just petty. Could reduce output per hit
                         alt = part.GetComponent<ModuleAlternator>();
                         part.RemoveModule(alt);
+                        subsysCrit = true;
                     }
                     if (part.GetComponent<ModuleAnimateGeneric>() != null)
                     {
                         ModuleAnimateGeneric anim;
-                        anim = part.GetComponent<ModuleAnimateGeneric>(); // could reduce anim speed, open percent per hit
-                        part.RemoveModule(anim);
+                        anim = part.GetComponent<ModuleAnimateGeneric>(); // reduce anim speed
+                        anim.animSpeed *= 0.9f;
+                        //part.RemoveModule(anim);
+                        subsysCrit = true;
                     }
                     if (part.GetComponent<ModuleDecouple>() != null)
                     {
                         ModuleDecouple stage;
                         stage = part.GetComponent<ModuleDecouple>(); //decouplers decouple
                         stage.Decouple();
+                        subsysCrit = true;
                     }
                     if (part.GetComponent<ModuleECMJammer>() != null)
                     {
                         ModuleECMJammer ecm;
-                        ecm = part.GetComponent<ModuleECMJammer>(); //could reduce ecm strngth/rcs modifier
+                        ecm = part.GetComponent<ModuleECMJammer>(); //could reduce ecm strngth/rcs modifier, but ECM equipment also probably fragile
                         part.RemoveModule(ecm);
+                        subsysCrit = true;
                     }
                     if (part.GetComponent<ModuleGenerator>() != null)
                     {
                         ModuleGenerator gen;
                         gen = part.GetComponent<ModuleGenerator>();
-                        part.RemoveModule(gen);
+                        gen.efficiency = part.GetDamagePercentage(); //generators produce reduced output as they take daamge
+                        //part.RemoveModule(gen);
+                        subsysCrit = true;
                     }
                     if (part.GetComponent<ModuleResourceConverter>() != null)
                     {
                         ModuleResourceConverter isru;
-                        isru = part.GetComponent<ModuleResourceConverter>(); //could reduce efficiency, increase heat per hit
-                        part.RemoveModule(isru);
+                        isru = part.GetComponent<ModuleResourceConverter>(); //converters produce reduced output as they take daamge
+                        isru.EfficiencyBonus = part.GetDamagePercentage();
+                        if (part.GetDamagePercentage() < 0.5f) part.RemoveModule(isru);
+                        subsysCrit = true;
                     }
                     if (part.GetComponent<ModuleTurret>() != null)
                     {
                         ModuleTurret turret;
                         turret = part.GetComponent<ModuleTurret>(); //could reduce traverse speed, range per hit
-                        part.RemoveModule(turret);
+                        turret.yawSpeedDPS *= part.GetDamagePercentage();
+                        turret.pitchSpeedDPS *= 0.9f;
+                        //part.RemoveModule(turret);
+                        subsysCrit = true;
                     }
+                    if (part.GetComponent<ModuleRoboticRotationServo>() != null)
+                    {
+                        ModuleRoboticRotationServo servo;
+                        servo = part.GetComponent<ModuleRoboticRotationServo>(); 
+                        servo.maxMotorOutput *= part.GetDamagePercentage();
+                        //part.RemoveModule(turret);
+                        subsysCrit = true;
+                    }
+                    if (part.GetComponent<ModuleRoboticServoHinge>() != null)
+                    {
+                        ModuleRoboticServoHinge hinge;
+                        hinge = part.GetComponent<ModuleRoboticServoHinge>(); 
+                        hinge.maxMotorOutput *= part.GetDamagePercentage();
+                        //part.RemoveModule(turret);
+                        subsysCrit = true;
+                    }
+                    //piston/rotor?
                     if (part.GetComponent<ModuleTargetingCamera>() != null)
                     {
                         ModuleTargetingCamera cam;
                         cam = part.GetComponent<ModuleTargetingCamera>(); // gimbal range??
-                        part.RemoveModule(cam);
+                        cam.gimbalLimit *= part.GetDamagePercentage();
+                        if (cam.gimbalLimit < 30 || part.GetDamagePercentage() < 0.5) part.RemoveModule(cam);
+                        subsysCrit = true;
                     }
+                    //if a wheel, disable the wheel and swap it to the broken state/model?
                     if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log($"[BDArmory.BattleDamageHandler]: {part.name} on {part.vessel.vesselName} took subsystem damage");
-                    if (Diceroll <= (damageChance / 2))
+                    if (subsysCrit && Diceroll <= (damageChance / 2)) //only start fire on part that actually contains destroyed subsystem
                     {
                         if (incendiary)
                         {
-                            BulletHitFX.AttachFire(hitLoc.point, part, caliber, attacker, 20);
+                            BulletHitFX.AttachFire(hitPoint, part, caliber, attacker, 20);
                         }
                     }
                 }
@@ -495,9 +533,12 @@ namespace BDArmory.GameModes
                                 crewMember.StartRespawnPeriod();
                             }
                             //ScreenMessages.PostScreenMessage(crewMember.name + " killed by damage to " + part.vessel.name + part.partName + ".", 5.0f, ScreenMessageStyle.UPPER_LEFT);
-                            ScreenMessages.PostScreenMessage("Cockpit snipe on " + part.vessel.GetName() + "! " + crewMember.name + " killed!", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                            BDACompetitionMode.Instance.OnVesselModified(part.vessel);
-
+                            //ScreenMessages.PostScreenMessage("Cockpit snipe on " + part.vessel.GetName() + "! " + crewMember.name + " killed!", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                            if (BDACompetitionMode.Instance)
+                            {
+                                BDACompetitionMode.Instance.competitionStatus.Add($"Cockpit snipe on {part.vessel.GetName()}! {crewMember.name} killed!");
+                                BDACompetitionMode.Instance.OnVesselModified(part.vessel);
+                            }
                         }
                     }
                 }

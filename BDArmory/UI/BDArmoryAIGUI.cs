@@ -1,6 +1,7 @@
 using KSP.UI.Screens;
 using System.Collections.Generic;
 using System.Collections;
+using System.Linq;
 using System;
 using UnityEngine;
 using static UnityEngine.GUILayout;
@@ -8,6 +9,7 @@ using static UnityEngine.GUILayout;
 using BDArmory.Control;
 using BDArmory.Settings;
 using BDArmory.Utils;
+using BDArmory.Extensions;
 
 namespace BDArmory.UI
 {
@@ -20,6 +22,7 @@ namespace BDArmory.UI
         public static bool NumFieldsEnabled = false;
         public static bool windowBDAAIGUIEnabled;
         internal static bool resizingWindow = false;
+        internal static bool autoResizingWindow = true;
         internal static int _guiCheckIndex = -1;
 
         public static ApplicationLauncherButton button;
@@ -28,33 +31,27 @@ namespace BDArmory.UI
         float WindowHeight = 350;
         float contentHeight = 0;
         float height = 0;
-        float ColumnWidth = 350;
-        float _buttonSize = 26;
-        float _windowMargin = 4;
-        float contentTop = 10;
-        float entryHeight = 20;
-        float labelWidth = 200;
-        bool showPID;
-        bool showAltitude;
-        bool showSpeed;
-        bool showControl;
-        bool showEvade;
-        bool showTerrain;
-        bool showRam;
-        bool showMisc;
-        bool fixedAutoTuneFields = false;
+        const float ColumnWidth = 350;
+        const float _buttonSize = 26;
+        const float _windowMargin = 4;
+        const float contentTop = 10;
+        const float entryHeight = 20;
+        public bool checkForAI = false; // Flag to indicate that a new check for AI needs to happen (instead of responding to every event).
 
         int Drivertype = 0;
         int broadsideDir = 0;
-        bool oldClamp;
+        int pidMode = 0;
+        int rollTowards = 0;
         public AIUtils.VehicleMovementType[] VehicleMovementTypes = (AIUtils.VehicleMovementType[])Enum.GetValues(typeof(AIUtils.VehicleMovementType)); // Get the VehicleMovementType as an array of enum values.
+        public BDModuleOrbitalAI.PIDModeTypes[] PIDModeTypes = (BDModuleOrbitalAI.PIDModeTypes[])Enum.GetValues(typeof(BDModuleOrbitalAI.PIDModeTypes)); // Get the PID mode as an array of enum values.
+        public BDModuleOrbitalAI.RollModeTypes[] RollModeTypes = (BDModuleOrbitalAI.RollModeTypes[])Enum.GetValues(typeof(BDModuleOrbitalAI.RollModeTypes)); // Get the roll mode as an array of enum values.
 
-        private Vector2 scrollViewVector;
-        private Vector2 scrollViewSAIVector;
+        public AIType activeAIType = AIType.None;
+        public BDGenericAIBase ActiveAI; // Note: we don't use the usual ActiveController pattern as we need more control for the numeric input fields.
+        List<IBDAIControl> AIs = []; // A list of the AIs for use in the Editor.
+
+        Dictionary<AIType, Vector2> scrollViewVectors = [];
         private Vector2 scrollInfoVector;
-
-        public BDModulePilotAI ActivePilot;
-        public BDModuleSurfaceAI ActiveDriver;
 
         public static BDArmoryAIGUI Instance;
         public static bool buttonSetup;
@@ -63,9 +60,9 @@ namespace BDArmory.UI
 
         GUIStyle BoldLabel;
         GUIStyle Label;
-        GUIStyle rightLabel;
         GUIStyle Title;
         GUIStyle contextLabel;
+        GUIStyle contextLabelRight;
         GUIStyle infoLinkStyle;
         bool stylesConfigured = false;
 
@@ -78,15 +75,6 @@ namespace BDArmory.UI
 
         void Start()
         {
-            if (HighLogic.LoadedSceneIsFlight)
-            {
-                GameEvents.onVesselChange.Add(OnVesselChange);
-            }
-            else if (HighLogic.LoadedSceneIsEditor)
-            {
-                GameEvents.onEditorLoad.Add(OnEditorLoad);
-            }
-
             if (BDArmorySettings.AI_TOOLBAR_BUTTON) AddToolbarButton();
 
             BDArmorySetup.WindowRectAI = new Rect(BDArmorySetup.WindowRectAI.x, BDArmorySetup.WindowRectAI.y, WindowWidth, BDArmorySetup.WindowRectAI.height);
@@ -95,19 +83,40 @@ namespace BDArmory.UI
             if (HighLogic.LoadedSceneIsFlight)
             {
                 GetAI();
+                GameEvents.onVesselChange.Add(OnVesselChange);
+                GameEvents.onVesselPartCountChanged.Add(OnVesselModified);
+                GameEvents.onPartDestroyed.Add(OnPartDestroyed);
             }
-            if (HighLogic.LoadedSceneIsEditor)
+            else if (HighLogic.LoadedSceneIsEditor)
             {
                 GetAIEditor();
+                GameEvents.onEditorLoad.Add(OnEditorLoad);
                 GameEvents.onEditorPartPlaced.Add(OnEditorPartPlacedEvent); //do per part placement instead of calling a findModule call every time *anything* changes on thevessel
                 GameEvents.onEditorPartDeleted.Add(OnEditorPartDeletedEvent);
             }
             if (_guiCheckIndex < 0) _guiCheckIndex = GUIUtils.RegisterGUIRect(BDArmorySetup.WindowRectAI);
         }
+
         public void AddToolbarButton()
         {
+            if (!HighLogic.LoadedSceneIsFlight && !HighLogic.LoadedSceneIsEditor) return;
             StartCoroutine(ToolbarButtonRoutine());
         }
+        IEnumerator ToolbarButtonRoutine()
+        {
+            if (buttonSetup) // Reconfigure the callbacks to use the current instance.
+            {
+                button.onTrue = ShowAIGUI;
+                button.onFalse = HideAIGUI;
+                yield break;
+            }
+            yield return new WaitUntil(() => ApplicationLauncher.Ready && BDArmorySetup.toolbarButtonAdded); // Wait until after the main BDA toolbar button.
+            Texture buttonTexture = GameDatabase.Instance.GetTexture(BDArmorySetup.textureDir + "icon_ai", false);
+            button = ApplicationLauncher.Instance.AddModApplication(ShowAIGUI, HideAIGUI, Dummy, Dummy, Dummy, Dummy, ApplicationLauncher.AppScenes.SPH | ApplicationLauncher.AppScenes.VAB | ApplicationLauncher.AppScenes.FLIGHT, buttonTexture);
+            buttonSetup = true;
+            if (windowBDAAIGUIEnabled) button.SetTrue(false);
+        }
+
         public void RemoveToolbarButton()
         {
             if (button == null) return;
@@ -115,21 +124,6 @@ namespace BDArmory.UI
             ApplicationLauncher.Instance.RemoveModApplication(button);
             button = null;
             buttonSetup = false;
-        }
-
-        IEnumerator ToolbarButtonRoutine()
-        {
-            if (buttonSetup) yield break;
-            if (!HighLogic.LoadedSceneIsFlight && !HighLogic.LoadedSceneIsEditor) yield break;
-            yield return new WaitUntil(() => ApplicationLauncher.Ready && BDArmorySetup.toolbarButtonAdded); // Wait until after the main BDA toolbar button.
-
-            if (!buttonSetup)
-            {
-                Texture buttonTexture = GameDatabase.Instance.GetTexture(BDArmorySetup.textureDir + "icon_ai", false);
-                button = ApplicationLauncher.Instance.AddModApplication(ShowAIGUI, HideAIGUI, Dummy, Dummy, Dummy, Dummy, ApplicationLauncher.AppScenes.SPH | ApplicationLauncher.AppScenes.VAB | ApplicationLauncher.AppScenes.FLIGHT, buttonTexture);
-                buttonSetup = true;
-                if (windowBDAAIGUIEnabled) button.SetTrue(false);
-            }
         }
 
         public void ToggleAIGUI()
@@ -142,17 +136,31 @@ namespace BDArmory.UI
         {
             windowBDAAIGUIEnabled = true;
             GUIUtils.SetGUIRectVisible(_guiCheckIndex, windowBDAAIGUIEnabled);
-            if (HighLogic.LoadedSceneIsFlight) Instance.GetAI(); // Call via Instance to avoid issue with the toolbar button holding a reference to a null gameobject causing an NRE when starting a coroutine.
-            else Instance.GetAIEditor();
+            if (HighLogic.LoadedSceneIsFlight) GetAI();
+            else GetAIEditor();
             if (button != null) button.SetTrue(false);
         }
 
-        public void HideAIGUI()
+        // Doing it this way prevents OnGUI events from below the window from being triggered by the window disappearing.
+        public void HideAIGUI() => StartCoroutine(HideAIGUIAtEndOfFrame());
+        bool waitingForEndOfFrame = false;
+        IEnumerator HideAIGUIAtEndOfFrame()
+        {
+            if (waitingForEndOfFrame) yield break;
+            waitingForEndOfFrame = true;
+            yield return new WaitForEndOfFrame();
+            waitingForEndOfFrame = false;
+            HideAIGUINow();
+        }
+        void HideAIGUINow()
         {
             windowBDAAIGUIEnabled = false;
             GUIUtils.SetGUIRectVisible(_guiCheckIndex, windowBDAAIGUIEnabled);
             BDAWindowSettingsField.Save(); // Save window settings.
             if (button != null) button.SetFalse(false);
+            if (HighLogic.LoadedSceneIsEditor) GUIUtils.PreventClickThrough(BDArmorySetup.WindowRectAI, "AIGUI lock", true);
+            AIs.Clear();
+            AISelectionComboBox = null;
         }
 
         void Dummy()
@@ -160,12 +168,16 @@ namespace BDArmory.UI
 
         void Update()
         {
-            if (HighLogic.LoadedSceneIsFlight || HighLogic.LoadedSceneIsEditor)
+            if (!(HighLogic.LoadedSceneIsFlight || HighLogic.LoadedSceneIsEditor)) return;
+            if (BDInputUtils.GetKeyDown(BDInputSettingsFields.GUI_AI_TOGGLE))
             {
-                if (BDInputUtils.GetKeyDown(BDInputSettingsFields.GUI_AI_TOGGLE))
-                {
-                    ToggleAIGUI();
-                }
+                ToggleAIGUI();
+            }
+            if (!windowBDAAIGUIEnabled) return;
+            if (checkForAI) // Only happens during flight.
+            {
+                GetAI();
+                checkForAI = false;
             }
         }
 
@@ -178,49 +190,45 @@ namespace BDArmory.UI
                 GetAI();
             }
         }
+
+        void OnVesselModified(Vessel v) // Active AI was on a part that got detached from the active vessel.
+        {
+            if (!windowBDAAIGUIEnabled || activeAIType == AIType.None) return;
+            if (v == null) return;
+            if (v.isActiveVessel && (ActiveAI == null || ActiveAI.vessel != v)) // Was an active vessel with an AI, but the AI is now gone or on another vessel.
+            {
+                activeAIType = AIType.None;
+                checkForAI = true;
+            }
+        }
+
+        void OnPartDestroyed(Part p)
+        {
+            if (!windowBDAAIGUIEnabled || activeAIType == AIType.None) return;
+            if (ActiveAI == null) // We had an AI, but now it's gone...
+            {
+                activeAIType = AIType.None;
+                checkForAI = true;
+            }
+        }
+
         void OnEditorLoad(ShipConstruct ship, CraftBrowserDialog.LoadType loadType)
         {
             GetAIEditor();
         }
+
         private void OnEditorPartPlacedEvent(Part p)
         {
+            if (!windowBDAAIGUIEnabled) return;
             if (p == null) return;
-
-            // Prioritise Pilot AIs
-            if (ActivePilot == null)
-            {
-                var AI = p.FindModuleImplementing<BDModulePilotAI>();
-                if (AI != null)
-                {
-                    ActivePilot = AI;
-                    inputFields = null; // Reset the input fields.
-                    SetInputFields(ActivePilot.GetType());
-                    return;
-                }
-            }
-            else return; // A Pilot AI is already active.
-
-            // No Pilot AIs, check for Surface AIs.
-            if (ActiveDriver == null)
-            {
-                var DAI = p.FindModuleImplementing<BDModuleSurfaceAI>();
-                if (DAI != null)
-                {
-                    ActiveDriver = DAI;
-                    inputFields = null; // Reset the input fields
-                    SetInputFields(ActiveDriver.GetType());
-                    return;
-                }
-            }
-            else return; // A Surface AI is already active.
+            GetAIEditor(); // We need to check if we have a new AI or if the ordering has changed.
         }
 
         private void OnEditorPartDeletedEvent(Part p)
         {
-            if (ActivePilot != null || ActiveDriver != null) // If we had an active AI, we need to check to see if it's disappeared.
-            {
+            if (!windowBDAAIGUIEnabled) return;
+            if (activeAIType != AIType.None) // If we had an active AI, we need to check to see if it's disappeared.
                 GetAIEditor(); // We can't just check the part as it's now null.
-            }
         }
 
         void GetAI()
@@ -233,30 +241,21 @@ namespace BDArmory.UI
         Coroutine _getAICoroutine;
         IEnumerator GetAICoroutine()
         {
-            // Then, reset all the fields as this is only occurring on vessel change, so they need resetting anyway.
-            ActivePilot = null;
-            ActiveDriver = null;
+            ActiveAI = null;
+            activeAIType = AIType.None;
             inputFields = null;
+            AISelectionComboBox = null;
             var tic = Time.time;
             if (FlightGlobals.ActiveVessel == null)
+            {
                 yield return new WaitUntilFixed(() => FlightGlobals.ActiveVessel != null || Time.time - tic > 1); // Give it up to a second to find the active vessel.
-            if (FlightGlobals.ActiveVessel == null) yield break;
+                if (FlightGlobals.ActiveVessel == null) yield break;
+            }
             // Now, get the new AI and update stuff.
-            ActivePilot = VesselModuleRegistry.GetBDModulePilotAI(FlightGlobals.ActiveVessel, true);
-            if (ActivePilot == null)
-            {
-                ActiveDriver = VesselModuleRegistry.GetBDModuleSurfaceAI(FlightGlobals.ActiveVessel, true);
-            }
-            if (ActivePilot != null)
-            {
-                SetInputFields(ActivePilot.GetType());
-                SetChooseOptionSliders(); // For later, if we want to add similar things to the pilot AI.
-            }
-            else if (ActiveDriver != null)
-            {
-                SetInputFields(ActiveDriver.GetType());
-                SetChooseOptionSliders();
-            }
+            ActiveAI = FlightGlobals.ActiveVessel.ActiveController().AI as BDGenericAIBase;
+            activeAIType = ActiveAI == null ? AIType.None : ActiveAI.aiType;
+            SetInputFields(activeAIType);
+            SetChooseOptionSliders();
         }
 
         void GetAIEditor()
@@ -267,221 +266,361 @@ namespace BDArmory.UI
         Coroutine _getAIEditorCoroutine;
         IEnumerator GetAIEditorCoroutine()
         {
+            AISelectionComboBox = null; // Clear the combobox to reset it.
             var tic = Time.time;
             if (EditorLogic.fetch.ship == null || EditorLogic.fetch.ship.Parts == null)
                 yield return new WaitUntilFixed(() => (EditorLogic.fetch.ship != null && EditorLogic.fetch.ship.Parts != null) || Time.time - tic > 1); // Give it up to a second to find the editor ship and parts.
-            if (EditorLogic.fetch.ship != null && EditorLogic.fetch.ship.Parts != null)
+            var ship = EditorLogic.fetch.ship;
+            if (ship != null && ship.Parts != null)
             {
-                foreach (var p in EditorLogic.fetch.ship.Parts) // Take the AIs in the order they were placed on the ship.
+                AIs = [.. ship.Parts.SelectMany(part => part.FindModulesImplementing<IBDAIControl>()).Where(ai => ai != null)];
+                if (AIs.Count > 0)
                 {
-                    foreach (var AI in p.FindModulesImplementing<BDModulePilotAI>())
-                    {
-                        if (AI == null) continue;
-                        if (AI == ActivePilot) yield break; // We found the current ActivePilot!
-                        ActivePilot = AI;
-                        inputFields = null; // Reset the input fields to the current AI.
-                        SetInputFields(ActivePilot.GetType());
-                        yield break;
-                    }
-                    foreach (var AI in p.FindModulesImplementing<BDModuleSurfaceAI>())
-                    {
-                        if (AI == null) continue;
-                        if (AI == ActiveDriver) yield break; // We found the current ActiveDriver!
-                        ActiveDriver = AI;
-                        inputFields = null; // Reset the input fields to the current AI.
-                        SetInputFields(ActiveDriver.GetType());
-                        yield break;
-                    }
+                    var rootPart = ship.Parts.First(); while (rootPart.parent != null) rootPart = rootPart.parent;
+                    VesselModuleRegistry.SortByProximityToRootIBDAI(ref AIs, rootPart);
+                    if (ActiveAI == AIs.First() as BDGenericAIBase) yield break; // It's the same AI, do nothing.
+                    ActiveAI = AIs.First() as BDGenericAIBase; // Switch back to the primary AI.
+                    activeAIType = ActiveAI.aiType;
+                    SetInputFields(activeAIType);
+                    SetChooseOptionSliders();
+                    yield break;
                 }
             }
 
             // No AIs were found, clear everything.
-            ActivePilot = null;
-            ActiveDriver = null;
+            activeAIType = AIType.None;
+            ActiveAI = null;
             inputFields = null;
+            AIs.Clear();
         }
 
-        void SetInputFields(Type AIType)
+        /// <summary>
+        /// Get the proximity to the root part.
+        /// </summary>
+        /// <param name="part"></param>
+        /// <returns>Proximity to the root part or int.MaxValue if not connected to the root part.</returns>
+        public static int ProximityToRoot(Part part, Part root)
         {
-            // Clear other Active AIs.
-            if (AIType != typeof(BDModulePilotAI)) ActivePilot = null;
-            if (AIType != typeof(BDModuleSurfaceAI)) ActiveDriver = null;
-
-            if (inputFields == null) // Initialise the input fields if they're not initialised.
+            int proximity = 0;
+            Part currentPart = part;
+            while (currentPart != null && currentPart != root)
             {
-                oldClamp = false;
-                if (AIType == typeof(BDModulePilotAI))
+                currentPart = currentPart.parent;
+                ++proximity;
+            }
+            if (currentPart == null)
+                return int.MaxValue;
+            return proximity;
+        }
+
+        /// <summary>
+        /// Get the value, minValue and maxValue of a UI_FloatRange derived control.
+        /// </summary>
+        /// <param name="aiType">The type of the AI.</param>
+        /// <param name="gAI">The AI.</param>
+        /// <param name="fieldName">The name of the field to look at.</param>
+        /// <returns>value, minValue, maxValue, (rounding, sigFig, withZero)</returns>
+        (float, float, float, (float, float, bool, bool)) GetAIFieldLimits(AIType aiType, BDGenericAIBase gAI, string fieldName)
+        {
+            float value = 0, minValue = 0, maxValue = 0, rounding = 0, sigFig = 0;
+            bool withZero = false, reducedPrecisionAtMin = false;
+            try
+            {
+                (float, float, float, float, bool, bool) GetLimits(UI_FloatRange uic)
                 {
-                    inputFields = new Dictionary<string, NumericInputField> {
-                        { "steerMult", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.steerMult, 0.1, 20) },
-                        { "steerKiAdjust", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.steerKiAdjust, 0.01, 1) },
-                        { "steerDamping", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.steerDamping, 0.1, 8) },
-
-                        { "DynamicDampingMin", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.DynamicDampingMin, 0.1, 8) },
-                        { "DynamicDampingMax", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.DynamicDampingMax, 0.1, 8) },
-                        { "dynamicSteerDampingFactor", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.dynamicSteerDampingFactor, 0.1, 10) },
-
-                        { "DynamicDampingPitchMin", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.DynamicDampingPitchMin, 0.1, 8) },
-                        { "DynamicDampingPitchMax", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.DynamicDampingPitchMax, 0.1, 8) },
-                        { "dynamicSteerDampingPitchFactor", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.dynamicSteerDampingPitchFactor, 0.1, 10) },
-
-                        { "DynamicDampingYawMin", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.DynamicDampingYawMin, 0.1, 8) },
-                        { "DynamicDampingYawMax", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.DynamicDampingYawMax, 0.1, 8) },
-                        { "dynamicSteerDampingYawFactor", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.dynamicSteerDampingYawFactor, 0.1, 10) },
-
-                        { "DynamicDampingRollMin", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.DynamicDampingRollMin, 0.1, 8) },
-                        { "DynamicDampingRollMax", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.DynamicDampingRollMax, 0.1, 8) },
-                        { "dynamicSteerDampingRollFactor", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.dynamicSteerDampingRollFactor, 0.1, 10) },
-
-                        { "autoTuningOptionNumSamples", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.autoTuningOptionNumSamples, 1, 10) },
-                        { "autoTuningOptionFastResponseRelevance", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.autoTuningOptionFastResponseRelevance, 0, 0.5) },
-                        { "autoTuningOptionInitialLearningRate", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.autoTuningOptionInitialLearningRate, 1e-3, 1) },
-                        { "autoTuningAltitude", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.autoTuningAltitude, 50, 5000) },
-                        { "autoTuningSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.autoTuningSpeed, 50, 800) },
-                        { "autoTuningRecenteringDistance", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.autoTuningRecenteringDistance, 5, 100) },
-
-                        { "defaultAltitude", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.defaultAltitude, 50, 15000) },
-                        { "minAltitude", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.minAltitude, 25, 6000) },
-                        { "maxAltitude", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.maxAltitude, 100, 15000) },
-
-                        { "maxSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.maxSpeed, 20, (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55)? 600 :800) },
-                        { "takeOffSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.takeOffSpeed, 10, 200) },
-                        { "minSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.minSpeed, 10, 200) },
-                        { "strafingSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.strafingSpeed, 10, 200) },
-                        { "idleSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.idleSpeed, 10, 200) },
-                        { "ABPriority", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.ABPriority, 0, 100) },
-                        { "ABOverrideThreshold", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.ABOverrideThreshold, 0, 200) },
-
-                        { "maxSteer", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.maxSteer, 0.1, 1) },
-                        { "lowSpeedSwitch", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.lowSpeedSwitch, 10, 500) },
-                        { "maxSteerAtMaxSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.maxSteerAtMaxSpeed, 0.1, 1) },
-                        { "cornerSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.cornerSpeed, 10, 500) },
-                        { "altitudeSteerLimiterFactor", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.altitudeSteerLimiterFactor, -1, 1) },
-                        { "altitudeSteerLimiterAltitude", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.altitudeSteerLimiterAltitude, 100, 10000) },
-                        { "maxBank", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.maxBank, 10, (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55)? 40 : 180) },
-                        { "waypointPreRollTime", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.waypointPreRollTime, 0, 2) },
-                        { "waypointYawAuthorityTime", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.waypointYawAuthorityTime, 0, 10) },
-                        { "maxAllowedGForce", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.maxAllowedGForce, 2, 45) },
-                        { "maxAllowedAoA", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.maxAllowedAoA, 0, 90) },
-                        { "postStallAoA", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.postStallAoA, 0, (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55)? 0 : 90) },
-                        { "ImmelmannTurnAngle", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.ImmelmannTurnAngle, 0, 90) },
-
-                        { "minEvasionTime", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.minEvasionTime, 0, 1) },
-                        { "evasionNonlinearity", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.evasionNonlinearity, 0, 10) },
-                        { "evasionThreshold", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.evasionThreshold, 0, 100) },
-                        { "evasionTimeThreshold", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.evasionTimeThreshold, 0, 1) },
-                        { "evasionMinRangeThreshold", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.evasionMinRangeThreshold, 10, 10000) },
-                        { "collisionAvoidanceThreshold", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.collisionAvoidanceThreshold, 0, 50) },
-                        { "vesselCollisionAvoidanceLookAheadPeriod", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.vesselCollisionAvoidanceLookAheadPeriod, 0, 3) },
-                        { "vesselCollisionAvoidanceStrength", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.vesselCollisionAvoidanceStrength, 0, 4) },
-                        { "vesselStandoffDistance", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.vesselStandoffDistance, 0, 1000) },
-                        { "extendDistanceAirToAir", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.extendDistanceAirToAir, 0, 2000) },
-                        { "extendAngleAirToAir", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.extendAngleAirToAir, -10, 45) },
-                        { "extendDistanceAirToGroundGuns", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.extendDistanceAirToGroundGuns, 0, 5000) },
-                        { "extendDistanceAirToGround", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.extendDistanceAirToGround, 0, 5000) },
-                        { "extendTargetVel", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.extendTargetVel, 0, 2) },
-                        { "extendTargetAngle", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.extendTargetAngle, 0, 180) },
-                        { "extendTargetDist", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.extendTargetDist, 0, 5000) },
-                        { "extendAbortTime", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.extendAbortTime, 5, 30) },
-
-                        { "turnRadiusTwiddleFactorMin", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.turnRadiusTwiddleFactorMin, 0.1, 5) },
-                        { "turnRadiusTwiddleFactorMax", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.turnRadiusTwiddleFactorMax, 0.1, 5) },
-                        { "terrainAvoidanceCriticalAngle", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.terrainAvoidanceCriticalAngle, 90f, 180f) },
-                        { "controlSurfaceDeploymentTime", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.controlSurfaceDeploymentTime, 0f, 4f) },
-                        { "waypointTerrainAvoidance", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.waypointTerrainAvoidance, 0, 1) },
-
-                        { "controlSurfaceLag", gameObject.AddComponent<NumericInputField>().Initialise(0, ActivePilot.controlSurfaceLag, 0, 0.2) },
-                    };
+                    if (uic is UI_FloatSemiLogRange) (minValue, maxValue, rounding, sigFig, withZero, reducedPrecisionAtMin) = (uic as UI_FloatSemiLogRange).GetLimits();
+                    else if (uic is UI_FloatLogRange) (minValue, maxValue, rounding, sigFig) = (uic as UI_FloatLogRange).GetLimits(); // (min, max, 0, steps)
+                    else if (uic is UI_FloatPowerRange) (minValue, maxValue, rounding, sigFig) = (uic as UI_FloatPowerRange).GetLimits();
+                    else
+                    {
+                        minValue = uic.minValue;
+                        maxValue = uic.maxValue;
+                        rounding = uic.stepIncrement;
+                    }
+                    return (minValue, maxValue, rounding, sigFig, withZero, reducedPrecisionAtMin);
                 }
-                else if (AIType == typeof(BDModuleSurfaceAI))
+                switch (aiType)
                 {
-                    inputFields = new Dictionary<string, NumericInputField> {
-                        { "MaxSlopeAngle", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.MaxSlopeAngle, 1, 30) },
-                        { "CruiseSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.CruiseSpeed, 5, 60) },
-                        { "MaxSpeed", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.MaxSpeed, 5,  80) },
-                        { "MaxDrift", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.MaxDrift, 1, 180) },
-                        { "TargetPitch", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.TargetPitch, -10, 10) },
-                        { "BankAngle", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.BankAngle, -45, 45) },
-                        { "WeaveFactor", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.WeaveFactor, 0, 10) },
-                        { "steerMult", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.steerMult, 0.2,  20) },
-                        { "steerDamping", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.steerDamping, 0.1, 10) },
-                        { "MinEngagementRange", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.MinEngagementRange, 0, 6000) },
-                        { "MaxEngagementRange", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.MaxEngagementRange, 0, 8000) },
-                        { "AvoidMass", gameObject.AddComponent<NumericInputField>().Initialise(0, ActiveDriver.AvoidMass, 0, 100) },
-                    };
+                    case AIType.PilotAI:
+                        {
+                            var AI = gAI as BDModulePilotAI;
+                            var uic = (HighLogic.LoadedSceneIsFlight ? AI.Fields[fieldName].uiControlFlight : AI.Fields[fieldName].uiControlEditor) as UI_FloatRange;
+                            (minValue, maxValue, rounding, sigFig, withZero, reducedPrecisionAtMin) = GetLimits(uic);
+                            value = (float)typeof(BDModulePilotAI).GetField(fieldName).GetValue(AI);
+                        }
+                        break;
+                    case AIType.SurfaceAI:
+                        {
+                            var AI = gAI as BDModuleSurfaceAI;
+                            var uic = (HighLogic.LoadedSceneIsFlight ? AI.Fields[fieldName].uiControlFlight : AI.Fields[fieldName].uiControlEditor) as UI_FloatRange;
+                            (minValue, maxValue, rounding, sigFig, withZero, reducedPrecisionAtMin) = GetLimits(uic);
+                            value = (float)typeof(BDModuleSurfaceAI).GetField(fieldName).GetValue(AI);
+                        }
+                        break;
+                    case AIType.VTOLAI:
+                        {
+                            var AI = gAI as BDModuleVTOLAI;
+                            var uic = (HighLogic.LoadedSceneIsFlight ? AI.Fields[fieldName].uiControlFlight : AI.Fields[fieldName].uiControlEditor) as UI_FloatRange;
+                            (minValue, maxValue, rounding, sigFig, withZero, reducedPrecisionAtMin) = GetLimits(uic);
+                            value = (float)typeof(BDModuleVTOLAI).GetField(fieldName).GetValue(AI);
+                        }
+                        break;
+                    case AIType.OrbitalAI:
+                        {
+                            var AI = gAI as BDModuleOrbitalAI;
+                            var uic = (HighLogic.LoadedSceneIsFlight ? AI.Fields[fieldName].uiControlFlight : AI.Fields[fieldName].uiControlEditor) as UI_FloatRange;
+                            (minValue, maxValue, rounding, sigFig, withZero, reducedPrecisionAtMin) = GetLimits(uic);
+                            value = (float)typeof(BDModuleOrbitalAI).GetField(fieldName).GetValue(AI);
+                        }
+                        break;
                 }
             }
-
-            if (AIType == typeof(BDModulePilotAI))
+            catch (Exception e)
             {
-                if (oldClamp != ActivePilot.UpToEleven)
-                {
-                    oldClamp = ActivePilot.UpToEleven;
-
-                    inputFields["steerMult"].maxValue = ActivePilot.UpToEleven ? 200 : 20;
-                    inputFields["steerKiAdjust"].maxValue = ActivePilot.UpToEleven ? 20 : 1;
-                    inputFields["steerDamping"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-
-                    inputFields["DynamicDampingMin"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-                    inputFields["DynamicDampingMax"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-                    inputFields["dynamicSteerDampingFactor"].maxValue = ActivePilot.UpToEleven ? 100 : 10;
-                    inputFields["DynamicDampingPitchMin"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-                    inputFields["DynamicDampingPitchMax"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-                    inputFields["dynamicSteerDampingPitchFactor"].maxValue = ActivePilot.UpToEleven ? 100 : 10;
-                    inputFields["DynamicDampingYawMin"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-                    inputFields["DynamicDampingYawMax"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-                    inputFields["dynamicSteerDampingYawFactor"].maxValue = ActivePilot.UpToEleven ? 100 : 10;
-                    inputFields["DynamicDampingRollMin"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-                    inputFields["DynamicDampingRollMax"].maxValue = ActivePilot.UpToEleven ? 100 : 8;
-                    inputFields["dynamicSteerDampingRollFactor"].maxValue = ActivePilot.UpToEleven ? 100 : 10;
-
-                    inputFields["defaultAltitude"].maxValue = ActivePilot.UpToEleven ? 100000 : 15000;
-                    inputFields["minAltitude"].maxValue = ActivePilot.UpToEleven ? 60000 : 6000;
-                    inputFields["maxAltitude"].maxValue = ActivePilot.UpToEleven ? 100000 : 15000;
-
-                    if (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55) inputFields["maxSpeed"].maxValue = 600;
-                    else inputFields["maxSpeed"].maxValue = ActivePilot.UpToEleven ? 3000 : 800;
-                    inputFields["takeOffSpeed"].maxValue = ActivePilot.UpToEleven ? 2000 : 200;
-                    inputFields["minSpeed"].maxValue = ActivePilot.UpToEleven ? 2000 : 200;
-                    inputFields["idleSpeed"].maxValue = ActivePilot.UpToEleven ? 3000 : 200;
-
-                    inputFields["maxAllowedGForce"].maxValue = ActivePilot.UpToEleven ? 1000 : 45;
-                    inputFields["maxAllowedAoA"].maxValue = ActivePilot.UpToEleven ? 180 : 90;
-                    inputFields["postStallAoA"].maxValue = ActivePilot.UpToEleven ? 180 : (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55) ? 0 : 90;
-
-                    inputFields["minEvasionTime"].maxValue = ActivePilot.UpToEleven ? 10 : 1;
-                    inputFields["evasionNonlinearity"].maxValue = ActivePilot.UpToEleven ? 90 : 10;
-                    inputFields["evasionThreshold"].maxValue = ActivePilot.UpToEleven ? 300 : 100;
-                    inputFields["evasionTimeThreshold"].maxValue = ActivePilot.UpToEleven ? 1 : 3;
-                    inputFields["vesselStandoffDistance"].maxValue = ActivePilot.UpToEleven ? 5000 : 1000;
-                    inputFields["extendDistanceAirToAir"].maxValue = ActivePilot.UpToEleven ? 20000 : 2000;
-                    inputFields["extendAngleAirToAir"].maxValue = ActivePilot.UpToEleven ? 90 : 45;
-                    inputFields["extendAngleAirToAir"].minValue = ActivePilot.UpToEleven ? -90 : -10;
-                    inputFields["extendDistanceAirToGroundGuns"].maxValue = ActivePilot.UpToEleven ? 20000 : 5000;
-                    inputFields["extendDistanceAirToGround"].maxValue = ActivePilot.UpToEleven ? 20000 : 5000;
-
-                    inputFields["turnRadiusTwiddleFactorMin"].maxValue = ActivePilot.UpToEleven ? 10 : 5;
-                    inputFields["turnRadiusTwiddleFactorMax"].maxValue = ActivePilot.UpToEleven ? 10 : 5;
-                    inputFields["controlSurfaceDeploymentTime"].maxValue = ActivePilot.UpToEleven ? 10 : 4;
-
-                    inputFields["controlSurfaceLag"].maxValue = ActivePilot.UpToEleven ? 1 : 0.2f;
-                }
+                var errorMsg = e.Message;
+#if DEBUG
+                errorMsg += $"\n{e.StackTrace}";
+#endif
+                Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Failed to retrieve field limits from {fieldName} on AI of type {aiType}: {errorMsg}");
             }
-            else if (AIType == typeof(BDModuleSurfaceAI))
-            {
-                if (oldClamp != ActiveDriver.UpToEleven)
-                {
-                    oldClamp = ActiveDriver.UpToEleven;
+            return (value, minValue, maxValue, (rounding, sigFig, withZero, reducedPrecisionAtMin));
+        }
 
-                    inputFields["MaxSlopeAngle"].maxValue = ActiveDriver.UpToEleven ? 90 : 30;
-                    inputFields["CruiseSpeed"].maxValue = ActiveDriver.UpToEleven ? 300 : 60;
-                    inputFields["MaxSpeed"].maxValue = ActiveDriver.UpToEleven ? 400 : 80;
-                    inputFields["steerMult"].maxValue = ActiveDriver.UpToEleven ? 200 : 20;
-                    inputFields["steerDamping"].maxValue = ActiveDriver.UpToEleven ? 100 : 10;
-                    inputFields["MinEngagementRange"].maxValue = ActiveDriver.UpToEleven ? 20000 : 6000;
-                    inputFields["MaxEngagementRange"].maxValue = ActiveDriver.UpToEleven ? 30000 : 8000;
-                    inputFields["AvoidMass"].maxValue = ActiveDriver.UpToEleven ? 1000000 : 100;
-                }
+        /// <summary>
+        /// Get the current field limits from the inputFields data (which may change due to UpToEleven).
+        /// Note: if the values require significant post-processing (e.g., Log10), then it may be better to just use fixed values.
+        /// </summary>
+        /// <param name="fieldName"></param>
+        /// <returns>minValue, maxValue, rounding, sig.fig., with zero</returns>
+        (float, float, float, float, bool, bool) GetFieldLimits(string fieldName)
+        {
+            if (!inputFields.ContainsKey(fieldName)) return (0, 0, 0, 0, false, false);
+            var field = inputFields[fieldName];
+            return ((float)field.minValue, (float)field.maxValue, field.rounding, field.sigFig, field.withZero, field.reducedPrecisionAtMin);
+        }
+
+        /// <summary>
+        /// Set the inputFields entries for the given AI type.
+        /// Note: only UI_FloatRange derived entries should be included here.
+        /// </summary>
+        /// <param name="aiType">The type of the currently active AI.</param>
+        void SetInputFields(AIType aiType)
+        {
+            // Note: We use nameof(AI.field) to get the fieldname to avoid typos.
+            switch (aiType)
+            {
+                case AIType.PilotAI:
+                    {
+                        var AI = ActiveAI as BDModulePilotAI;
+                        if (AI == null)
+                        {
+                            Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Mismatch between AI type and actual AI.");
+                            activeAIType = AIType.None;
+                            inputFields = null;
+                            return;
+                        }
+                        inputFields = new List<string> {
+                            nameof(AI.steerMult),
+                            nameof(AI.steerKiAdjust),
+                            nameof(AI.steerDamping),
+                            nameof(AI.steerDampingPitch),
+                            nameof(AI.steerDampingYaw),
+                            nameof(AI.steerDampingRoll),
+                            nameof(AI.DynamicDampingMin),
+                            nameof(AI.DynamicDampingMax),
+                            nameof(AI.dynamicSteerDampingFactor),
+                            nameof(AI.DynamicDampingPitchMin),
+                            nameof(AI.DynamicDampingPitchMax),
+                            nameof(AI.dynamicSteerDampingPitchFactor),
+                            nameof(AI.DynamicDampingYawMin),
+                            nameof(AI.DynamicDampingYawMax),
+                            nameof(AI.dynamicSteerDampingYawFactor),
+                            nameof(AI.DynamicDampingRollMin),
+                            nameof(AI.DynamicDampingRollMax),
+                            nameof(AI.dynamicSteerDampingRollFactor),
+                            nameof(AI.threeAxisPIDPitchMult),
+                            nameof(AI.threeAxisPIDPitchKi),
+                            nameof(AI.threeAxisPIDPitchDamping),
+                            nameof(AI.threeAxisPIDYawMult),
+                            nameof(AI.threeAxisPIDYawKi),
+                            nameof(AI.threeAxisPIDYawDamping),
+                            nameof(AI.threeAxisPIDRollMult),
+                            nameof(AI.threeAxisPIDRollKi),
+                            nameof(AI.threeAxisPIDRollDamping),
+
+                            nameof(AI.autoTuningOptionNumSamples),
+                            nameof(AI.autoTuningOptionFastResponseRelevance),
+                            nameof(AI.autoTuningOptionInitialLearningRate),
+                            nameof(AI.autoTuningOptionInitialRollRelevance),
+                            nameof(AI.autoTuningAltitude),
+                            nameof(AI.autoTuningSpeed),
+                            nameof(AI.autoTuningRecenteringDistance),
+
+                            nameof(AI.defaultAltitude),
+                            nameof(AI.minAltitude),
+                            nameof(AI.maxAltitude),
+                            nameof(AI.bombingAltitude),
+
+                            nameof(AI.maxSpeed),
+                            nameof(AI.takeOffSpeed),
+                            nameof(AI.minSpeed),
+                            nameof(AI.strafingSpeed),
+                            nameof(AI.idleSpeed),
+                            nameof(AI.ABPriority),
+                            nameof(AI.ABOverrideThreshold),
+                            nameof(AI.brakingPriority),
+
+                            nameof(AI.maxSteer),
+                            nameof(AI.lowSpeedSwitch),
+                            nameof(AI.maxSteerAtMaxSpeed),
+                            nameof(AI.cornerSpeed),
+                            nameof(AI.altitudeSteerLimiterFactor),
+                            nameof(AI.altitudeSteerLimiterAltitude),
+                            nameof(AI.maxBank),
+                            nameof(AI.waypointPreRollTime),
+                            nameof(AI.waypointYawAuthorityTime),
+                            nameof(AI.maxAllowedGForce),
+                            nameof(AI.maxAllowedAoA),
+                            nameof(AI.postStallAoA),
+                            nameof(AI.ImmelmannTurnAngle),
+                            nameof(AI.ImmelmannPitchUpBias),
+
+                            nameof(AI.minEvasionTime),
+                            nameof(AI.evasionNonlinearity),
+                            nameof(AI.evasionThreshold),
+                            nameof(AI.evasionTimeThreshold),
+                            nameof(AI.evasionMinRangeThreshold),
+                            nameof(AI.collisionAvoidanceThreshold),
+                            nameof(AI.vesselCollisionAvoidanceLookAheadPeriod),
+                            nameof(AI.vesselCollisionAvoidanceStrength),
+                            nameof(AI.vesselStandoffDistance),
+                            nameof(AI.extendDistanceAirToAir),
+                            nameof(AI.extendAngleAirToAir),
+                            nameof(AI.extendDistanceAirToGroundGuns),
+                            nameof(AI.extendDistanceAirToGround),
+                            nameof(AI.extendTargetVel),
+                            nameof(AI.extendTargetAngle),
+                            nameof(AI.extendTargetDist),
+                            nameof(AI.extendAbortTime),
+                            nameof(AI.extendMinGainRate),
+
+                            nameof(AI.turnRadiusTwiddleFactorMin),
+                            nameof(AI.turnRadiusTwiddleFactorMax),
+                            nameof(AI.terrainAvoidanceCriticalAngle),
+                            nameof(AI.controlSurfaceDeploymentTime),
+                            nameof(AI.postTerrainAvoidanceCoolDownDuration),
+                            nameof(AI.waypointTerrainAvoidance),
+
+                            nameof(AI.controlSurfaceLag),
+                        }.ToDictionary(key => key, key =>
+                        {
+                            var (value, minValue, maxValue, meta) = GetAIFieldLimits(aiType, ActiveAI, key);
+                            return gameObject.AddComponent<NumericInputField>().Initialise(0, value, minValue, maxValue, meta);
+                        });
+                        showSection[Section.UpToEleven] = AI.UpToEleven;
+                    }
+                    break;
+                case AIType.SurfaceAI:
+                    {
+                        var AI = ActiveAI as BDModuleSurfaceAI;
+                        if (AI == null)
+                        {
+                            Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Mismatch between AI type and actual AI.");
+                            activeAIType = AIType.None;
+                            inputFields = null;
+                            return;
+                        }
+                        inputFields = new List<string> {
+                            nameof(AI.MaxSlopeAngle),
+                            nameof(AI.CruiseSpeed),
+                            nameof(AI.MaxSpeed),
+                            nameof(AI.MaxDrift),
+                            nameof(AI.TargetPitch),
+                            nameof(AI.BankAngle),
+                            nameof(AI.WeaveFactor),
+                            nameof(AI.steerMult),
+                            nameof(AI.steerDamping),
+                            nameof(AI.MinEngagementRange),
+                            nameof(AI.MaxEngagementRange),
+                            nameof(AI.AvoidMass),
+                        }.ToDictionary(key => key, key =>
+                        {
+                            var (value, minValue, maxValue, meta) = GetAIFieldLimits(aiType, ActiveAI, key);
+                            return gameObject.AddComponent<NumericInputField>().Initialise(0, value, minValue, maxValue, meta);
+                        });
+                        showSection[Section.UpToEleven] = AI.UpToEleven;
+                    }
+                    break;
+                case AIType.VTOLAI:
+                    {
+                        var AI = ActiveAI as BDModuleVTOLAI;
+                        if (AI == null)
+                        {
+                            Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Mismatch between AI type and actual AI.");
+                            activeAIType = AIType.None;
+                            inputFields = null;
+                            return;
+                        }
+                        inputFields = new List<string> {
+                            nameof(AI.steerMult),
+                            nameof(AI.steerKiAdjust),
+                            nameof(AI.steerDamping),
+                            nameof(AI.defaultAltitude),
+                            nameof(AI.CombatAltitude),
+                            nameof(AI.minAltitude),
+                            nameof(AI.MaxSpeed),
+                            nameof(AI.CombatSpeed),
+                            nameof(AI.MaxPitchAngle),
+                            nameof(AI.MaxBankAngle),
+                            nameof(AI.WeaveFactor),
+                            nameof(AI.MinEngagementRange),
+                            nameof(AI.MaxEngagementRange),
+                        }.ToDictionary(key => key, key =>
+                        {
+                            var (value, minValue, maxValue, meta) = GetAIFieldLimits(aiType, ActiveAI, key);
+                            return gameObject.AddComponent<NumericInputField>().Initialise(0, value, minValue, maxValue, meta);
+                        });
+                        showSection[Section.UpToEleven] = AI.UpToEleven;
+                    }
+                    break;
+                case AIType.OrbitalAI:
+                    {
+                        var AI = ActiveAI as BDModuleOrbitalAI;
+                        if (AI == null)
+                        {
+                            Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Mismatch between AI type and actual AI.");
+                            activeAIType = AIType.None;
+                            inputFields = null;
+                            return;
+                        }
+                        inputFields = new List<string> {
+                            nameof(AI.steerMult),
+                            nameof(AI.steerKiAdjust),
+                            nameof(AI.steerDamping),
+                            nameof(AI.steerMaxError),
+                            nameof(AI.MinEngagementRange),
+                            nameof(AI.ForceFiringRange),
+                            nameof(AI.ManeuverSpeed),
+                            nameof(AI.minFiringSpeed),
+                            nameof(AI.firingSpeed),
+                            nameof(AI.firingAngularVelocityLimit),
+                            nameof(AI.minEvasionTime),
+                            nameof(AI.evasionThreshold),
+                            nameof(AI.evasionTimeThreshold),
+                            nameof(AI.evasionErraticness),
+                            nameof(AI.evasionMinRangeThreshold),
+                            nameof(AI.collisionAvoidanceThreshold),
+                            nameof(AI.vesselCollisionAvoidanceLookAheadPeriod),
+                        }.ToDictionary(key => key, key =>
+                        {
+                            var (value, minValue, maxValue, meta) = GetAIFieldLimits(aiType, ActiveAI, key);
+                            return gameObject.AddComponent<NumericInputField>().Initialise(0, value, minValue, maxValue, meta);
+                        });
+                    }
+                    break;
+                default:
+                    inputFields = null;
+                    break;
             }
         }
 
@@ -493,93 +632,83 @@ namespace BDArmory.UI
                 // Try to parse all the fields immediately so that they're up to date.
                 foreach (var field in inputFields.Keys)
                 { inputFields[field].tryParseValueNow(); }
-                if (ActivePilot != null)
-                {
-                    foreach (var field in inputFields.Keys)
-                    {
-                        try
-                        {
-                            var fieldInfo = typeof(BDModulePilotAI).GetField(field);
-                            if (fieldInfo != null)
-                            { fieldInfo.SetValue(ActivePilot, Convert.ChangeType(inputFields[field].currentValue, fieldInfo.FieldType)); }
-                            else // Check if it's a property instead of a field.
-                            {
-                                var propInfo = typeof(BDModulePilotAI).GetProperty(field);
-                                propInfo.SetValue(ActivePilot, Convert.ChangeType(inputFields[field].currentValue, propInfo.PropertyType));
-                            }
-                        }
-                        catch (Exception e) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Failed to set current value of {field}: " + e.Message); }
-                    }
-                }
-                else if (ActiveDriver != null)
-                {
-                    foreach (var field in inputFields.Keys)
-                    {
-                        try
-                        {
-                            var fieldInfo = typeof(BDModuleSurfaceAI).GetField(field);
-                            if (fieldInfo != null)
-                            { fieldInfo.SetValue(ActiveDriver, Convert.ChangeType(inputFields[field].currentValue, fieldInfo.FieldType)); }
-                            else // Check if it's a property instead of a field.
-                            {
-                                var propInfo = typeof(BDModuleSurfaceAI).GetProperty(field);
-                                propInfo.SetValue(ActiveDriver, Convert.ChangeType(inputFields[field].currentValue, propInfo.PropertyType));
-                            }
-                        }
-                        catch (Exception e) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Failed to set current value of {field}: " + e.Message); }
-                    }
-                }
-                // Then make any special conversions here.
             }
-            else // Set the input fields to their current values.
+            switch (activeAIType)
             {
-                // Make any special conversions first.
-                // Then set each of the field values to the current slider value.
-                if (ActivePilot != null)
+                case AIType.PilotAI: SetInputFieldValues(ActiveAI as BDModulePilotAI, fromInputFields); break;
+                case AIType.SurfaceAI: SetInputFieldValues(ActiveAI as BDModuleSurfaceAI, fromInputFields); break;
+                case AIType.VTOLAI: SetInputFieldValues(ActiveAI as BDModuleVTOLAI, fromInputFields); break;
+                case AIType.OrbitalAI: SetInputFieldValues(ActiveAI as BDModuleOrbitalAI, fromInputFields); break;
+                default: return;
+            }
+        }
+
+        void SetInputFieldValues<T>(T AI, bool fromInputFields) where T : BDGenericAIBase
+        {
+            if (AI == null) return;
+            if (fromInputFields)
+            {
+                foreach (var field in inputFields.Keys)
                 {
-                    foreach (var field in inputFields.Keys)
+                    try
                     {
-                        try
+                        var fieldInfo = AI.GetType().GetField(field);
+                        if (fieldInfo != null)
+                        { fieldInfo.SetValue(AI, Convert.ChangeType(inputFields[field].currentValue, fieldInfo.FieldType)); }
+                        else // Check if it's a property instead of a field.
                         {
-                            var fieldInfo = typeof(BDModulePilotAI).GetField(field);
-                            if (fieldInfo != null)
-                            { inputFields[field].SetCurrentValue(Convert.ToDouble(fieldInfo.GetValue(ActivePilot))); }
-                            else // Check if it's a property instead of a field.
-                            {
-                                var propInfo = typeof(BDModulePilotAI).GetProperty(field);
-                                inputFields[field].SetCurrentValue(Convert.ToDouble(propInfo.GetValue(ActivePilot)));
-                            }
+                            var propInfo = AI.GetType().GetProperty(field);
+                            propInfo.SetValue(AI, Convert.ChangeType(inputFields[field].currentValue, propInfo.PropertyType));
                         }
-                        catch (Exception e) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Failed to set current value of {field}: " + e.Message + "\n" + e.StackTrace); }
                     }
+                    catch (Exception e) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Failed to set current value of {field}: " + e.Message); }
                 }
-                else if (ActiveDriver != null)
+            }
+            else
+            {
+                foreach (var field in inputFields.Keys)
                 {
-                    foreach (var field in inputFields.Keys)
+                    try
                     {
-                        try
+                        var fieldInfo = AI.GetType().GetField(field);
+                        if (fieldInfo != null)
+                        { inputFields[field].SetCurrentValue(Convert.ToDouble(fieldInfo.GetValue(AI))); }
+                        else // Check if it's a property instead of a field.
                         {
-                            var fieldInfo = typeof(BDModuleSurfaceAI).GetField(field);
-                            if (fieldInfo != null)
-                            { inputFields[field].SetCurrentValue(Convert.ToDouble(fieldInfo.GetValue(ActiveDriver))); }
-                            else // Check if it's a property instead of a field.
-                            {
-                                var propInfo = typeof(BDModuleSurfaceAI).GetProperty(field);
-                                inputFields[field].SetCurrentValue(Convert.ToDouble(propInfo.GetValue(ActiveDriver)));
-                            }
+                            var propInfo = AI.GetType().GetProperty(field);
+                            inputFields[field].SetCurrentValue(Convert.ToDouble(propInfo.GetValue(AI)));
                         }
-                        catch (Exception e) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Failed to set current value of {field}: " + e.Message); }
                     }
+                    catch (Exception e) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: Failed to set current value of {field}: " + e.Message + "\n" + e.StackTrace); }
                 }
             }
         }
 
         public void SetChooseOptionSliders()
         {
-            if (ActiveDriver != null)
+            if (ActiveAI == null) return;
+            switch (activeAIType)
             {
-                Drivertype = VehicleMovementTypes.IndexOf(ActiveDriver.SurfaceType);
-                broadsideDir = ActiveDriver.orbitDirections.IndexOf(ActiveDriver.OrbitDirectionName);
+                case AIType.SurfaceAI:
+                    {
+                        var AI = ActiveAI as BDModuleSurfaceAI;
+                        Drivertype = VehicleMovementTypes.IndexOf(AI.SurfaceType);
+                        broadsideDir = AI.orbitDirections.IndexOf(AI.OrbitDirectionName);
+                    }
+                    break;
+                case AIType.VTOLAI:
+                    {
+                        var AI = ActiveAI as BDModuleVTOLAI;
+                        broadsideDir = AI.orbitDirections.IndexOf(AI.OrbitDirectionName);
+                    }
+                    break;
+                case AIType.OrbitalAI:
+                    {
+                        var AI = ActiveAI as BDModuleOrbitalAI;
+                        pidMode = AI.pidModes.IndexOf(AI.pidMode);
+                        rollTowards = AI.rollTowardsModes.IndexOf(AI.rollTowards);
+                    }
+                    break;
             }
         }
 
@@ -593,11 +722,9 @@ namespace BDArmory.UI
             if (!stylesConfigured) ConfigureStyles();
             if (HighLogic.LoadedSceneIsFlight) BDArmorySetup.SetGUIOpacity();
             if (resizingWindow && Event.current.type == EventType.MouseUp) { resizingWindow = false; }
-            BDArmorySetup.WindowRectAI = GUI.Window(GUIUtility.GetControlID(FocusType.Passive), BDArmorySetup.WindowRectAI, WindowRectAI, "", BDArmorySetup.BDGuiSkin.window);//"BDA Weapon Manager"
+            if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, BDArmorySetup.WindowRectAI.position);
+            BDArmorySetup.WindowRectAI = GUI.Window(GUIUtility.GetControlID(FocusType.Passive), BDArmorySetup.WindowRectAI, WindowAIGUI, "", BDArmorySetup.BDGuiSkin.window);//"BDA Weapon Manager"
             if (HighLogic.LoadedSceneIsFlight) BDArmorySetup.SetGUIOpacity(false);
-            GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectAI);
-            GUIUtils.UpdateGUIRect(BDArmorySetup.WindowRectAI, _guiCheckIndex);
-            GUIUtils.UseMouseEventInRect(BDArmorySetup.WindowRectAI);
         }
 
         void ConfigureStyles()
@@ -606,9 +733,9 @@ namespace BDArmory.UI
             Label.alignment = TextAnchor.UpperLeft;
             Label.normal.textColor = Color.white;
 
-            rightLabel = new GUIStyle();
-            rightLabel.alignment = TextAnchor.UpperRight;
-            rightLabel.normal.textColor = Color.white;
+            contextLabelRight = new GUIStyle();
+            contextLabelRight.alignment = TextAnchor.UpperRight;
+            contextLabelRight.normal.textColor = Color.white;
 
             contextLabel = new GUIStyle(Label);
 
@@ -631,2189 +758,1645 @@ namespace BDArmory.UI
             stylesConfigured = true;
         }
 
-        float pidHeight;
-        float speedHeight;
-        float altitudeHeight;
-        float evasionHeight;
-        float controlHeight;
-        float terrainHeight;
-        float rammingHeight;
-        float miscHeight;
+        enum Section { UpToEleven, PID, Altitude, Speed, Control, Evasion, Terrain, Ramming, Combat, Misc, FixedAutoTuneFields, VehicleType }; // Sections and other important toggles.
+        static Dictionary<Section, bool> showSection = Enum.GetValues(typeof(Section)).Cast<Section>().ToDictionary(s => s, s => false);
+        readonly Dictionary<Section, float> sectionHeights = [];
+        const float contentBorder = 0.2f * entryHeight;
+        const float contentMargin = 10;
+        const float contentInnerMargin = contentMargin + contentBorder;
+        const float columnIndent = 100;
+        const float labelWidth = 200;
+        const float sliderIndent = contentInnerMargin + labelWidth;
 
-        Rect TitleButtonRect(float offset)
+        Rect TitleButtonRect(float offset, float width = 1)
         {
-            return new Rect((ColumnWidth * 2) - _windowMargin - (offset * _buttonSize), _windowMargin, _buttonSize, _buttonSize);
+            return new Rect((ColumnWidth * 2) - _windowMargin - (offset * _buttonSize), _windowMargin, width * _buttonSize, _buttonSize);
         }
-
-        Rect SubsectionRect(float indent, float line)
+        Rect SubsectionRect(float line)
         {
-            return new Rect(indent, contentTop + (line * entryHeight), 100, entryHeight);
+            return new Rect(contentMargin, contentTop + line * entryHeight, columnIndent, entryHeight);
         }
-
-        Rect SettinglabelRect(float indent, float lines)
+        Rect SettinglabelRect(float lines)
         {
-            return new Rect(indent, (lines * entryHeight), labelWidth, entryHeight);
+            return new Rect(contentInnerMargin, lines * entryHeight, labelWidth, entryHeight);
         }
-        Rect SettingSliderRect(float indent, float lines, float contentWidth)
+        Rect SettingSliderRect(float lines, float contentWidth)
         {
-            return new Rect(indent + labelWidth, (lines + 0.2f) * entryHeight, contentWidth - (indent * 2) - labelWidth, entryHeight);
+            return new Rect(sliderIndent, (lines + 0.2f) * entryHeight, contentWidth - 2 * contentMargin - labelWidth, entryHeight);
         }
-        Rect SettingTextRect(float indent, float lines, float contentWidth)
+        Rect SettingTextRect(float lines, float contentWidth)
         {
-            return new Rect(indent + labelWidth, lines * entryHeight, contentWidth - (indent * 2) - labelWidth, entryHeight);
+            return new Rect(sliderIndent, lines * entryHeight, contentWidth - 2 * contentMargin - labelWidth, entryHeight);
         }
-        Rect ContextLabelRect(float indent, float lines)
+        Rect ContextLabelRect(float lines, float contentWidth) => SettingTextRect(lines, contentWidth);
+        Rect ContextLabelRect(float lines)
         {
-            return new Rect(labelWidth + indent, lines * entryHeight, 100, entryHeight);
+            return new Rect(sliderIndent, lines * entryHeight, 100, entryHeight);
         }
-        Rect ContextLabelRectRight(float indent, float lines, float contentWidth)
+        Rect ContextLabelRectRight(float lines, float contentWidth)
         {
-            return new Rect(contentWidth - 100 - 2 * indent, lines * entryHeight, 100, entryHeight);
-        }
-
-        Rect ToggleButtonRect(float indent, float lines, float contentWidth)
-        {
-            return new Rect(indent, lines * entryHeight, contentWidth - (2 * indent), entryHeight);
+            return new Rect(contentWidth - columnIndent - 2 * contentMargin, lines * entryHeight, columnIndent, entryHeight);
         }
 
-        Rect ToggleButtonRects(float indent, float lines, float pos, float of, float contentWidth)
+        Rect ToggleButtonRect(float lines, float contentWidth)
         {
-            var gap = indent / 2f;
-            return new Rect(indent + pos / of * (contentWidth - gap * (of - 1f) - 2f * indent) + pos * gap, lines * entryHeight, 1f / of * (contentWidth - gap * (of - 1f) - 2f * indent), entryHeight);
+            return new Rect(contentInnerMargin, lines * entryHeight, contentWidth - 2 * contentInnerMargin, entryHeight);
         }
 
-        void WindowRectAI(int windowID)
+        Rect ToggleButtonRects(float lines, float pos, float of, float contentWidth)
         {
-            float line = 0;
-            float leftIndent = 10;
+            var gap = contentInnerMargin / 2f;
+            return new Rect(contentInnerMargin + pos / of * (contentWidth - gap * (of - 1f) - 2f * contentInnerMargin) + pos * gap, lines * entryHeight, 1f / of * (contentWidth - gap * (of - 1f) - 2f * contentInnerMargin), entryHeight);
+        }
+
+        enum ContentType { FloatSlider, SemiLogSlider, FloatLogSlider, Toggle, Button };
+        float ContentEntry(ContentType contentType, float line, float width, ref float value, string fieldName, string baseLOC, string formattedValue, bool splitContext = false)
+        {
+            switch (contentType)
+            {
+                case ContentType.FloatSlider:
+                    {
+                        GUI.Label(SettinglabelRect(line), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}") + ": " + formattedValue, Label);
+                        if (!NumFieldsEnabled)
+                        {
+                            var (min, max, rounding, _, _, _) = GetFieldLimits(fieldName);
+                            if (value != (value = GUI.HorizontalSlider(SettingSliderRect(line, width), value, min, max)) && rounding > 0)
+                                value = BDAMath.RoundToUnit(value, rounding);
+                        }
+                        else
+                        {
+                            var field = inputFields[fieldName];
+                            field.tryParseValue(GUI.TextField(SettingTextRect(line, width), field.possibleValue, 8, field.style));
+                            value = (float)field.currentValue;
+                        }
+                        if (contextTipsEnabled)
+                        {
+                            if (splitContext)
+                            {
+                                GUI.Label(ContextLabelRect(++line), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_ContextLow"), Label);
+                                GUI.Label(ContextLabelRectRight(line, width), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_ContextHigh"), contextLabelRight);
+                            }
+                            else GUI.Label(ContextLabelRect(++line, width), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_Context"), contextLabel);
+                        }
+                        ++line;
+                    }
+                    break;
+                case ContentType.SemiLogSlider:
+                    {
+                        GUI.Label(SettinglabelRect(line), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}") + ": " + formattedValue, Label);
+                        if (!NumFieldsEnabled)
+                        {
+                            var (min, max, rounding, sigFig, withZero, reducedPrecisionAtMin) = GetFieldLimits(fieldName);
+                            if (!cacheSemiLogLimits.ContainsKey(fieldName)) { cacheSemiLogLimits[fieldName] = null; }
+                            var cache = cacheSemiLogLimits[fieldName];
+                            if (value != (value = GUIUtils.HorizontalSemiLogSlider(SettingSliderRect(line, width), value, min, max, sigFig, withZero, reducedPrecisionAtMin, ref cache)) && rounding > 0)
+                                value = BDAMath.RoundToUnit(value, rounding);
+                        }
+                        else
+                        {
+                            var field = inputFields[fieldName];
+                            field.tryParseValue(GUI.TextField(SettingTextRect(line, width), field.possibleValue, 8, field.style));
+                            value = (float)field.currentValue;
+                        }
+                        if (contextTipsEnabled)
+                        {
+                            if (splitContext)
+                            {
+                                GUI.Label(ContextLabelRect(++line), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_ContextLow"), Label);
+                                GUI.Label(ContextLabelRectRight(line, width), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_ContextHigh"), contextLabelRight);
+                            }
+                            else GUI.Label(ContextLabelRect(++line, width), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_Context"), contextLabel);
+                        }
+                        ++line;
+                    }
+                    break;
+                case ContentType.FloatLogSlider:
+                    {
+                        GUI.Label(SettinglabelRect(line), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}") + ": " + formattedValue, Label);
+                        if (!NumFieldsEnabled)
+                        {
+                            var (min, max, _, steps, _, _) = GetFieldLimits(fieldName);
+                            if (!cacheSemiLogLimits.ContainsKey(fieldName)) { cacheSemiLogLimits[fieldName] = null; }
+                            var cache = cacheSemiLogLimits[fieldName];
+                            value = GUIUtils.HorizontalFloatLogSlider(SettingSliderRect(line, width), value, min, max, (int)steps, ref cache);
+                        }
+                        else
+                        {
+                            var field = inputFields[fieldName];
+                            field.tryParseValue(GUI.TextField(SettingTextRect(line, width), field.possibleValue, 8, field.style));
+                            value = (float)field.currentValue;
+                        }
+                        if (contextTipsEnabled)
+                        {
+                            if (splitContext)
+                            {
+                                GUI.Label(ContextLabelRect(++line), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_ContextLow"), Label);
+                                GUI.Label(ContextLabelRectRight(line, width), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_ContextHigh"), contextLabelRight);
+                            }
+                            else GUI.Label(ContextLabelRect(++line, width), StringUtils.Localize($"#LOC_BDArmory_AIWindow_{baseLOC}_Context"), contextLabel);
+                        }
+                        ++line;
+                    }
+                    break;
+                case ContentType.Toggle:
+                    {
+                        line += 1.25f;
+                    }
+                    break;
+                case ContentType.Button:
+                    {
+                        line += 1.25f;
+                    }
+                    break;
+            }
+            return line;
+        }
+        readonly Dictionary<string, (float, float)[]> cacheSemiLogLimits = [];
+
+        BDGUIComboBox AISelectionComboBox;
+        int AISelectionIndex = -1;
+        void UpdateAISelectionComboBox(Rect rect)
+        {
+            if (!(HighLogic.LoadedSceneIsEditor || HighLogic.LoadedSceneIsFlight)) return;
+            var primaryAI = (HighLogic.LoadedSceneIsFlight && FlightGlobals.ActiveVessel != null) ? FlightGlobals.ActiveVessel.ActiveController().AI : null;
+            var ais = HighLogic.LoadedSceneIsEditor ? AIs : VesselModuleRegistry.GetIBDAIControls(FlightGlobals.ActiveVessel);
+            GUIContent[] listContent = [.. ais.Select(ai => new GUIContent(ai == primaryAI ? $"* {ai.aiType} *" : $"{ai.aiType}"))];
+            if (listContent.Length > 0)
+            {
+                AISelectionComboBox = new BDGUIComboBox(rect, rect, new GUIContent(ActiveAI as IBDAIControl == primaryAI ? $"* {ActiveAI.aiType} *" : $"{ActiveAI.aiType}"), listContent, (listContent.Length + 1) * _buttonSize + 2 * _windowMargin, BDArmorySetup.BDGuiSkin.button, 1);
+                AISelectionIndex = AISelectionComboBox.SetSelectedItemIndex(ais.FindIndex(ai => ai.pilotEnabled));
+            }
+            else
+                AISelectionComboBox = null;
+        }
+
+        void WindowAIGUI(int windowID)
+        {
+            if (HighLogic.LoadedSceneIsEditor) GUIUtils.PreventClickThrough(BDArmorySetup.WindowRectAI, "AIGUI lock");
             float windowColumns = 2;
-            float contentWidth = ((ColumnWidth * 2) - 100 - 20);
+            float contentIndent = contentMargin + columnIndent;
+            float contentWidth = 2 * ColumnWidth - 2 * contentMargin - columnIndent;
 
-            GUI.DragWindow(new Rect(_windowMargin + _buttonSize * 6, 0, (ColumnWidth * 2) - (2 * _windowMargin) - (10 * _buttonSize), _windowMargin + _buttonSize));
-
-            GUI.Label(new Rect(100, contentTop, contentWidth, entryHeight), StringUtils.Localize("#LOC_BDArmory_AIWindow_title"), Title);// "No AI found."
-
-            line += 1.25f;
-            line += 0.25f;
-
-            //Exit Button
-            GUIStyle buttonStyle = windowBDAAIGUIEnabled ? BDArmorySetup.BDGuiSkin.button : BDArmorySetup.BDGuiSkin.box;
-            if (GUI.Button(TitleButtonRect(1), "X", buttonStyle))
+            GUI.DragWindow(new Rect(contentIndent + _windowMargin, _windowMargin, contentWidth + _windowMargin - 4 * _buttonSize, _windowMargin + _buttonSize));
+            GUI.Label(new Rect(contentIndent, contentTop, contentWidth - 4 * _buttonSize, entryHeight), StringUtils.Localize("#LOC_BDArmory_AIWindow_title"), Title);
+            #region AI Selection
+            if (ActiveAI != null)
             {
-                ToggleAIGUI();
+                if (AISelectionComboBox == null) UpdateAISelectionComboBox(new Rect(contentMargin, _windowMargin, columnIndent, _buttonSize));
+                if (AISelectionComboBox != null && AISelectionIndex != (AISelectionIndex = AISelectionComboBox.Show()))
+                {
+                    ActiveAI = (
+                        HighLogic.LoadedSceneIsEditor ? AIs[AISelectionIndex]
+                        : VesselModuleRegistry.GetIBDAIControls(FlightGlobals.ActiveVessel).Skip(AISelectionIndex).First()
+                    ) as BDGenericAIBase;
+                    activeAIType = ActiveAI.aiType;
+                    SetInputFields(activeAIType);
+                }
             }
+            #endregion
 
-            //Infolink button
-            buttonStyle = infoLinkEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button;
-            if (GUI.Button(TitleButtonRect(2), "i", buttonStyle))
+            if (GUI.Button(TitleButtonRect(1), "X", windowBDAAIGUIEnabled ? BDArmorySetup.BDGuiSkin.button : BDArmorySetup.BDGuiSkin.box)) //Exit Button
             {
-                infoLinkEnabled = !infoLinkEnabled;
+                if (button) button.SetFalse();
+                else HideAIGUI(); // In case the button is disabled.
             }
-
-            //Context labels button
-            buttonStyle = contextTipsEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button;
-            if (GUI.Button(TitleButtonRect(3), "?", buttonStyle))
-            {
-                contextTipsEnabled = !contextTipsEnabled;
-            }
-
-            //Numeric fields button
-            buttonStyle = NumFieldsEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button;
-            if (GUI.Button(TitleButtonRect(4), "#", buttonStyle))
+            if (GUI.Button(TitleButtonRect(2), "i", infoLinkEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)) //Infolink button
+            { infoLinkEnabled = !infoLinkEnabled; }
+            if (GUI.Button(TitleButtonRect(3), "?", contextTipsEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)) //Context labels button
+            { contextTipsEnabled = !contextTipsEnabled; }
+            if (GUI.Button(TitleButtonRect(4), "#", NumFieldsEnabled ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)) //Numeric fields button
             {
                 NumFieldsEnabled = !NumFieldsEnabled;
                 SyncInputFieldsNow(!NumFieldsEnabled);
             }
 
-            if (ActivePilot == null && ActiveDriver == null)
+            float minHeight = 0;
+            if (activeAIType == AIType.None || ActiveAI == null)
             {
-                GUI.Label(new Rect(leftIndent, contentTop + (1.75f * entryHeight), contentWidth, entryHeight),
+                GUI.Label(new Rect(contentMargin, contentTop + (1.75f * entryHeight), contentWidth, entryHeight),
                    StringUtils.Localize("#LOC_BDArmory_AIWindow_NoAI"), Title);// "No AI found."
-                line += 4;
             }
             else
             {
                 height = Mathf.Lerp(height, contentHeight, 0.15f);
-                if (ActivePilot != null)
+                contentHeight = 0;
+                switch (activeAIType)
                 {
-                    GUIStyle saveStyle = BDArmorySetup.BDGuiSkin.button;
-                    if (GUI.Button(new Rect(_windowMargin, _windowMargin, _buttonSize * 3, _buttonSize), "Save", saveStyle))
-                    {
-                        ActivePilot.StoreSettings();
-                    }
-
-                    if (ActivePilot.Events["RestoreSettings"].active == true)
-                    {
-                        GUIStyle restoreStyle = BDArmorySetup.BDGuiSkin.button;
-                        if (GUI.Button(new Rect(_windowMargin + _buttonSize * 3, _windowMargin, _buttonSize * 3, _buttonSize), "Restore", restoreStyle))
+                    case AIType.PilotAI:
                         {
-                            ActivePilot.RestoreSettings();
-                        }
-                    }
+                            var AI = ActiveAI as BDModulePilotAI;
+                            if (AI == null) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: AI module mismatch!"); activeAIType = AIType.None; break; }
 
-                    showPID = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        showPID, StringUtils.Localize("#LOC_BDArmory_PilotAI_PID"), showPID ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"PiD"
-                    line += 1.5f;
+                            if (AISelectionComboBox == null || !AISelectionComboBox.IsOpen)
+                            { // Section buttons
+                                float line = 1.5f;
+                                showSection[Section.PID] = GUI.Toggle(SubsectionRect(line), showSection[Section.PID], StringUtils.Localize("#LOC_BDArmory_AIWindow_PID"), showSection[Section.PID] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"PiD"
 
-                    showAltitude = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        showAltitude, StringUtils.Localize("#LOC_BDArmory_PilotAI_Altitudes"), showAltitude ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Altitude"
-                    line += 1.5f;
+                                line += 1.2f;
+                                showSection[Section.Altitude] = GUI.Toggle(SubsectionRect(line), showSection[Section.Altitude], StringUtils.Localize("#LOC_BDArmory_AIWindow_Altitudes"), showSection[Section.Altitude] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Altitude"
 
-                    showSpeed = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        showSpeed, StringUtils.Localize("#LOC_BDArmory_PilotAI_Speeds"), showSpeed ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Speed"
-                    line += 1.5f;
+                                line += 1.2f;
+                                showSection[Section.Speed] = GUI.Toggle(SubsectionRect(line), showSection[Section.Speed], StringUtils.Localize("#LOC_BDArmory_AIWindow_Speeds"), showSection[Section.Speed] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Speed"
 
-                    showControl = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        showControl, StringUtils.Localize("#LOC_BDArmory_AIWindow_ControlLimits"), showControl ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Control"
-                    line += 1.5f;
+                                line += 1.2f;
+                                showSection[Section.Control] = GUI.Toggle(SubsectionRect(line), showSection[Section.Control], StringUtils.Localize("#LOC_BDArmory_AIWindow_Control"), showSection[Section.Control] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Control"
 
-                    showEvade = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        showEvade, StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeExtend"), showEvade ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Evasion"
-                    line += 1.5f;
+                                line += 1.2f;
+                                showSection[Section.Evasion] = GUI.Toggle(SubsectionRect(line), showSection[Section.Evasion], StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeExtend"), showSection[Section.Evasion] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Evasion"
 
-                    showTerrain = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        showTerrain, StringUtils.Localize("#LOC_BDArmory_AIWindow_Terrain"), showTerrain ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Terrain"
-                    line += 1.5f;
+                                line += 1.2f;
+                                showSection[Section.Terrain] = GUI.Toggle(SubsectionRect(line), showSection[Section.Terrain], StringUtils.Localize("#LOC_BDArmory_AIWindow_Terrain"), showSection[Section.Terrain] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Terrain"
 
-                    showRam = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        showRam, StringUtils.Localize("#LOC_BDArmory_PilotAI_Ramming"), showRam ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Ramming"
-                    line += 1.5f;
+                                line += 1.2f;
+                                showSection[Section.Ramming] = GUI.Toggle(SubsectionRect(line), showSection[Section.Ramming], StringUtils.Localize("#LOC_BDArmory_AIWindow_Ramming"), showSection[Section.Ramming] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Ramming"
 
-                    showMisc = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        showMisc, StringUtils.Localize("#LOC_BDArmory_PilotAI_Misc"), showMisc ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Misc"
-                    line += 1.5f;
+                                line += 1.2f;
+                                showSection[Section.Misc] = GUI.Toggle(SubsectionRect(line), showSection[Section.Misc], StringUtils.Localize("#LOC_BDArmory_AIWindow_Misc"), showSection[Section.Misc] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Misc"
 
-                    ActivePilot.UpToEleven = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        ActivePilot.UpToEleven, ActivePilot.UpToEleven ? StringUtils.Localize("#LOC_BDArmory_UnclampTuning_enabledText") : StringUtils.Localize("#LOC_BDArmory_UnclampTuning_disabledText"), ActivePilot.UpToEleven ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Misc"
-                    if (ActivePilot.UpToEleven != oldClamp)
-                    {
-                        SetInputFields(ActivePilot.GetType());
-                    }
-                    line += 5;
-
-                    float pidLines = 0;
-                    float altLines = 0;
-                    float spdLines = 0;
-                    float ctrlLines = 0;
-                    float evadeLines = 0;
-                    float gndLines = 0;
-                    float ramLines = 0;
-                    float miscLines = 0;
-
-                    if (infoLinkEnabled)
-                    {
-                        windowColumns = 3;
-
-                        GUI.Label(new Rect(leftIndent + ColumnWidth * 2, contentTop, ColumnWidth - leftIndent, entryHeight), StringUtils.Localize("#LOC_BDArmory_AIWindow_infoLink"), Title);//"infolink"
-                        BeginArea(new Rect(leftIndent + ColumnWidth * 2, contentTop + entryHeight * 1.5f, ColumnWidth - leftIndent, WindowHeight - entryHeight * 1.5f - 2 * contentTop));
-                        using (var scrollViewScope = new ScrollViewScope(scrollInfoVector, Width(ColumnWidth - leftIndent), Height(WindowHeight - entryHeight * 1.5f - 2 * contentTop)))
-                        {
-                            scrollInfoVector = scrollViewScope.scrollPosition;
-
-                            if (showPID) //these autoalign, so if new entries need to be added, they can just be slotted in
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_PilotAI_PID"), BoldLabel, Width(ColumnWidth - leftIndent * 4 - 20)); //PID label
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_PidHelp"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //Pid desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_PidHelp_SteerMult"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //steer mult desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_PidHelp_SteerKi"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //steer ki desc.
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_PidHelp_Steerdamp"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //steer damp description
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_PidHelp_Dyndamp"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //dynamic damping desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_PidHelp_AutoTune") + (ActivePilot.AutoTune ? StringUtils.Localize("#LOC_BDArmory_AIWindow_PidHelp_AutoTune_details") : ""), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //auto-tuning desc
-                            }
-                            if (showAltitude)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_PilotAI_Altitudes"), BoldLabel, Width(ColumnWidth - (leftIndent * 4) - 20)); //Altitude label
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_AltHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //altitude description
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_AltHelp_Def"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //default alt desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_AltHelp_min"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //min alt desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_AltHelp_max"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //max alt desc
-                            }
-                            if (showSpeed)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_PilotAI_Speeds"), BoldLabel, Width(ColumnWidth - (leftIndent * 4) - 20)); //Speed header
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_SpeedHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //speed explanation
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_SpeedHelp_min"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //min+max speed desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_SpeedHelp_takeoff"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //takeoff speed
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_SpeedHelp_gnd"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //strafe speed
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_SpeedHelp_idle"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //idle speed
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_SpeedHelp_ABpriority"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //AB priority
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_SpeedHelp_ABOverrideThreshold"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //AB override threshold
-                            }
-                            if (showControl)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_PilotAI_ControlLimits"), BoldLabel, Width(ColumnWidth - (leftIndent * 4) - 20)); //conrrol header
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_ControlHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //control desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_ControlHelp_limiters"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //low + high speed limiters
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_ControlHelp_bank"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //max bank desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_ControlHelp_clamps"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //max G + max AoA
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_ControlHelp_modeSwitches"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //post-stall + Immelmann turn angle
-                            }
-                            if (showEvade)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_PilotAI_EvadeExtend"), BoldLabel, Width(ColumnWidth - (leftIndent * 4) - 20)); //evade header
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //evade description
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_Evade"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //evade dist/ time/ time threshold
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_Nonlinearity"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //evade/extend nonlinearity
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_Dodge"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //collision avoid
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_standoff"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //standoff distance
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_Extend"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //extend distances
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_ExtendVars"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //extend target dist/angle/vel
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_ExtendVel"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //extend target velocity
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_ExtendAngle"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //extend target angle
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_ExtendDist"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //extend target dist
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_ExtendAbortTime"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //extend abort time
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeHelp_ExtendToggle"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //evade/extend toggle
-                            }
-                            if (showTerrain)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_PilotAI_Terrain"), BoldLabel, Width(ColumnWidth - (leftIndent * 4) - 20)); //Terrain avoid header
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_TerrainHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //terrain avoid desc
-                            }
-                            if (showRam)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_PilotAI_Ramming"), BoldLabel, Width(ColumnWidth - (leftIndent * 4) - 20)); //ramming header
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_RamHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20));// ramming desc
-                            }
-                            if (showMisc)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_PilotAI_Misc"), BoldLabel, Width(ColumnWidth - (leftIndent * 4) - 20)); //misc header
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_miscHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //misc desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_orbitHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //orbit dir
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_standbyHelp"), infoLinkStyle, Width(ColumnWidth - (leftIndent * 4) - 20)); //standby
-                            }
-                        }
-                        EndArea();
-                    }
-
-                    if (showPID || showAltitude || showSpeed || showControl || showEvade || showTerrain || showRam || showMisc)
-                    {
-                        scrollViewVector = GUI.BeginScrollView(new Rect(leftIndent + 100, contentTop + (entryHeight * 1.5f), (ColumnWidth * 2) - 100 - (leftIndent), WindowHeight - entryHeight * 1.5f - (2 * contentTop)), scrollViewVector, new Rect(0, 0, (ColumnWidth * 2) - 120 - (leftIndent * 2), height + 5));
-
-                        GUI.BeginGroup(new Rect(leftIndent, 0, (ColumnWidth * 2) - 120 - (leftIndent * 2), height + 5), GUIContent.none, BDArmorySetup.BDGuiSkin.box); //darker box
-
-                        contentWidth -= 24;
-                        leftIndent += 3;
-
-                        if (showPID)
-                        {
-                            pidLines += 0.2f;
-                            GUI.BeginGroup(new Rect(0, (pidLines * entryHeight), contentWidth, pidHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                            pidLines += 0.25f;
-
-                            GUI.Label(SettinglabelRect(leftIndent, pidLines), StringUtils.Localize("#LOC_BDArmory_PilotAI_PID"), BoldLabel);//"Pid Controller"
-                            pidLines++;
-
-                            if (!NumFieldsEnabled)
-                            {
-                                if (ActivePilot.steerMult != (ActivePilot.steerMult = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines, contentWidth), ActivePilot.steerMult, 0.1f, ActivePilot.UpToEleven ? 200 : 20)))
-                                    ActivePilot.steerMult = BDAMath.RoundToUnit(ActivePilot.steerMult, 0.1f);
-                            }
-                            else
-                            {
-                                var field = inputFields["steerMult"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.steerMult = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, pidLines), StringUtils.Localize("#LOC_BDArmory_SteerFactor") + ": " + ActivePilot.steerMult.ToString("0.0"), Label);//"Steer Mult"
-
-
-                            pidLines++;
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, pidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_SteerMultLow"), Label);//"sluggish"
-                                GUI.Label(ContextLabelRectRight(leftIndent, pidLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_AIWindow_SteerMultHi"), rightLabel);//"twitchy"
-                                pidLines++;
-                            }
-                            if (!NumFieldsEnabled)
-                            {
-                                if (ActivePilot.steerKiAdjust != (ActivePilot.steerKiAdjust = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines, contentWidth), ActivePilot.steerKiAdjust, 0.01f, ActivePilot.UpToEleven ? 20 : 1)))
-                                    ActivePilot.steerKiAdjust = BDAMath.RoundToUnit(ActivePilot.steerKiAdjust, 0.01f);
-                            }
-                            else
-                            {
-                                var field = inputFields["steerKiAdjust"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.steerKiAdjust = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, pidLines), StringUtils.Localize("#LOC_BDArmory_SteerKi") + ": " + ActivePilot.steerKiAdjust.ToString("0.00"), Label);//"Steer Ki"
-                            pidLines++;
-
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, pidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_SteerKiLow"), Label);//"undershoot"
-                                GUI.Label(ContextLabelRectRight(leftIndent, pidLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_AIWindow_SteerKiHi"), rightLabel);//"Overshoot"
-                                pidLines++;
-                            }
-                            if (!NumFieldsEnabled)
-                            {
-                                if (ActivePilot.steerDamping != (ActivePilot.steerDamping = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines, contentWidth), ActivePilot.steerDamping, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                    ActivePilot.steerDamping = BDAMath.RoundToUnit(ActivePilot.steerDamping, 0.1f);
-                            }
-                            else
-                            {
-                                var field = inputFields["steerDamping"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.steerDamping = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, pidLines), StringUtils.Localize("#LOC_BDArmory_SteerDamping") + ": " + ActivePilot.steerDamping.ToString("0.00"), Label);//"Steer Damping"
-
-                            pidLines++;
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, pidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_SteerDampLow"), Label);//"Wobbly"
-                                GUI.Label(ContextLabelRectRight(leftIndent, pidLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_AIWindow_SteerDampHi"), rightLabel);//"Stiff"
-                                pidLines++;
-                            }
-
-                            ActivePilot.dynamicSteerDamping = GUI.Toggle(ToggleButtonRect(leftIndent, pidLines, contentWidth), ActivePilot.dynamicSteerDamping, StringUtils.Localize("#LOC_BDArmory_DynamicDamping"), ActivePilot.dynamicSteerDamping ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic damping"
-                            pidLines += 1.25f;
-
-                            if (ActivePilot.dynamicSteerDamping)
-                            {
-                                float dynPidLines = 0;
-                                ActivePilot.CustomDynamicAxisFields = GUI.Toggle(ToggleButtonRect(leftIndent, pidLines, contentWidth), ActivePilot.CustomDynamicAxisFields, StringUtils.Localize("#LOC_BDArmory_3AxisDynamicSteerDamping"), ActivePilot.CustomDynamicAxisFields ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"3 axis damping"
-                                dynPidLines++;
-                                if (!ActivePilot.CustomDynamicAxisFields)
+                                line += 1.5f;
+                                if (showSection[Section.UpToEleven] != (AI.UpToEleven = GUI.Toggle(SubsectionRect(line), AI.UpToEleven,
+                                    AI.UpToEleven ? StringUtils.Localize("#LOC_BDArmory_AI_UnclampTuning_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_UnclampTuning_disabledText"),
+                                    AI.UpToEleven ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))//"Misc"
                                 {
-                                    dynPidLines += 0.25f;
+                                    SetInputFields(activeAIType);
+                                }
 
-                                    GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDamping") + ": " + ActivePilot.dynSteerDampingValue.ToString(), Label);//"Dynamic Damping"
-                                    dynPidLines++;
-                                    if (!NumFieldsEnabled)
+                                #region Store/Restore
+                                line += 1.5f;
+                                GUIStyle saveStyle = BDArmorySetup.BDGuiSkin.button;
+                                if (GUI.Button(SubsectionRect(line), "Save", saveStyle))
+                                {
+                                    AI.StoreSettings();
+                                }
+
+                                if (AI.Events["RestoreSettings"].active == true)
+                                {
+                                    line += 1f;
+                                    GUIStyle restoreStyle = BDArmorySetup.BDGuiSkin.button;
+                                    if (GUI.Button(SubsectionRect(line), "Restore", restoreStyle))
                                     {
-                                        if (ActivePilot.DynamicDampingMin != (ActivePilot.DynamicDampingMin = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.DynamicDampingMin, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                            ActivePilot.DynamicDampingMin = BDAMath.RoundToUnit(ActivePilot.DynamicDampingMin, 0.1f);
+                                        AI.RestoreSettings();
+                                    }
+                                }
+                                #endregion
+
+                                minHeight = contentTop + (line + 1f) * entryHeight + _windowMargin;
+                            }
+
+                            if (showSection[Section.PID] || showSection[Section.Altitude] || showSection[Section.Speed] || showSection[Section.Control] || showSection[Section.Evasion] || showSection[Section.Terrain] || showSection[Section.Ramming] || showSection[Section.Misc])
+                            {
+                                scrollViewVectors[AIType.PilotAI] = GUI.BeginScrollView(new Rect(contentIndent, contentTop + entryHeight * 1.5f, ColumnWidth * 2 - contentIndent, WindowHeight - entryHeight * 1.5f - 2 * contentTop), scrollViewVectors.GetValueOrDefault(AIType.PilotAI), new Rect(0, 0, contentWidth - contentMargin * 2, height + contentTop));
+
+                                GUI.BeginGroup(new Rect(contentMargin, 0, contentWidth - contentMargin * 2, height + 2 * contentBorder), GUIContent.none, BDArmorySetup.BDGuiSkin.box); //darker box
+
+                                contentWidth -= 24 + contentBorder;
+
+                                if (showSection[Section.PID])
+                                {
+                                    float pidLines = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.PID);
+                                    GUI.BeginGroup(new Rect(contentBorder, pidLines * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    pidLines += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(pidLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PID"), BoldLabel);
+                                    if (AI.threeAxisPID)
+                                    {
+                                        if (AI.threeAxisPID != (AI.threeAxisPID = GUI.Toggle(ToggleButtonRects(pidLines, 0, 1, contentWidth), AI.threeAxisPID, StringUtils.Localize("#LOC_BDArmory_AI_3AxisPID"), AI.threeAxisPID ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))
+                                        { AI.OnPIDTogglesChanged(); }
+                                        pidLines += 1.25f;
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDPitchMult, nameof(AI.threeAxisPIDPitchMult), "3AxisPIDPitchMult", $"{AI.threeAxisPIDPitchMult:0.0}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDPitchKi, nameof(AI.threeAxisPIDPitchKi), "3AxisPIDPitchKi", $"{AI.threeAxisPIDPitchKi:0.00}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDPitchDamping, nameof(AI.threeAxisPIDPitchDamping), "3AxisPIDPitchDamping", $"{AI.threeAxisPIDPitchDamping:0.00}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDYawMult, nameof(AI.threeAxisPIDYawMult), "3AxisPIDYawMult", $"{AI.threeAxisPIDYawMult:0.0}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDYawKi, nameof(AI.threeAxisPIDYawKi), "3AxisPIDYawKi", $"{AI.threeAxisPIDYawKi:0.00}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDYawDamping, nameof(AI.threeAxisPIDYawDamping), "3AxisPIDYawDamping", $"{AI.threeAxisPIDYawDamping:0.00}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDRollMult, nameof(AI.threeAxisPIDRollMult), "3AxisPIDRollMult", $"{AI.threeAxisPIDRollMult:0.0}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDRollKi, nameof(AI.threeAxisPIDRollKi), "3AxisPIDRollKi", $"{AI.threeAxisPIDRollKi:0.00}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.threeAxisPIDRollDamping, nameof(AI.threeAxisPIDRollDamping), "3AxisPIDRollDamping", $"{AI.threeAxisPIDRollDamping:0.00}", splitContext: true);
                                     }
                                     else
                                     {
-                                        var field = inputFields["DynamicDampingMin"];
-                                        field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                        ActivePilot.DynamicDampingMin = (float)field.currentValue;
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.steerMult, nameof(AI.steerMult), "SteerPower", $"{AI.steerMult:0.0}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.steerKiAdjust, nameof(AI.steerKiAdjust), "SteerKi", $"{AI.steerKiAdjust:0.00}", splitContext: true);
+                                        if (!AI.threeAxisSteerDamping && !AI.dynamicSteerDamping)
+                                        {
+                                            pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.steerDamping, nameof(AI.steerDamping), "SteerDamping", $"{AI.steerDamping:0.00}", splitContext: true);
+                                        }
+                                        if (AI.threeAxisPID != (AI.threeAxisPID = GUI.Toggle(ToggleButtonRects(pidLines, 0, 3, contentWidth), AI.threeAxisPID, StringUtils.Localize("#LOC_BDArmory_AI_3AxisPID"), AI.threeAxisPID ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))
+                                        { AI.OnPIDTogglesChanged(); }
+                                        if (AI.threeAxisSteerDamping != (AI.threeAxisSteerDamping = GUI.Toggle(ToggleButtonRects(pidLines, 1, 3, contentWidth), AI.threeAxisSteerDamping, StringUtils.Localize("#LOC_BDArmory_AI_3AxisSteerDamping"), AI.threeAxisSteerDamping ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))
+                                        { AI.OnPIDTogglesChanged(); }
+                                        if (AI.dynamicSteerDamping != (AI.dynamicSteerDamping = GUI.Toggle(ToggleButtonRects(pidLines, 2, 3, contentWidth), AI.dynamicSteerDamping, StringUtils.Localize("#LOC_BDArmory_AI_DynamicDamping"), AI.dynamicSteerDamping ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))
+                                        { AI.OnPIDTogglesChanged(); }
+                                        pidLines += 1.25f;
+                                        if (!AI.threeAxisSteerDamping && AI.dynamicSteerDamping)
+                                        {
+                                            GUI.Label(SettinglabelRect(pidLines++), StringUtils.Localize("#LOC_BDArmory_AI_DynamicDamping") + $": {AI.dynSteerDampingValue}", Label);
+                                            pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.DynamicDampingMin, nameof(AI.DynamicDampingMin), "DynDampMin", $"{AI.DynamicDampingMin:0.0}");
+                                            pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.DynamicDampingMax, nameof(AI.DynamicDampingMax), "DynDampMax", $"{AI.DynamicDampingMax:0.0}");
+                                            pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.dynamicSteerDampingFactor, nameof(AI.dynamicSteerDampingFactor), "DynDampMult", $"{AI.dynamicSteerDampingFactor:0.0}");
+                                        }
+                                        if (AI.threeAxisSteerDamping)
+                                        {
+                                            // Pitch
+                                            if (AI.dynamicSteerDamping)
+                                            {
+                                                if (AI.dynamicDampingPitch != (AI.dynamicDampingPitch = GUI.Toggle(ToggleButtonRect(pidLines, contentWidth), AI.dynamicDampingPitch, StringUtils.Localize("#LOC_BDArmory_AI_DynamicDampingPitch"), AI.dynamicDampingPitch ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))
+                                                { AI.OnPIDTogglesChanged(); }
+                                                pidLines += 1.25f;
+                                            }
+                                            if (AI.dynamicSteerDamping && AI.dynamicDampingPitch)
+                                            {
+                                                GUI.Label(SettinglabelRect(pidLines++), StringUtils.Localize("#LOC_BDArmory_AI_DynamicDampingPitch") + $": {AI.dynSteerDampingPitchValue}", Label);
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.DynamicDampingPitchMin, nameof(AI.DynamicDampingPitchMin), "DynDampMin", $"{AI.DynamicDampingPitchMin:0.0}");
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.DynamicDampingPitchMax, nameof(AI.DynamicDampingPitchMax), "DynDampMax", $"{AI.DynamicDampingPitchMax:0.0}");
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.dynamicSteerDampingPitchFactor, nameof(AI.dynamicSteerDampingPitchFactor), "DynDampMult", $"{AI.dynamicSteerDampingPitchFactor:0.0}");
+                                            }
+                                            else
+                                            {
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.steerDampingPitch, nameof(AI.steerDampingPitch), "SteerDampingPitch", $"{AI.steerDampingPitch:0.00}", splitContext: true);
+                                            }
+                                            // Yaw
+                                            if (AI.dynamicSteerDamping)
+                                            {
+                                                if (AI.dynamicDampingYaw != (AI.dynamicDampingYaw = GUI.Toggle(ToggleButtonRect(pidLines, contentWidth), AI.dynamicDampingYaw, StringUtils.Localize("#LOC_BDArmory_AI_DynamicDampingYaw"), AI.dynamicDampingYaw ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))
+                                                { AI.OnPIDTogglesChanged(); }
+                                                pidLines += 1.25f;
+                                            }
+                                            if (AI.dynamicSteerDamping && AI.dynamicDampingYaw)
+                                            {
+                                                GUI.Label(SettinglabelRect(pidLines++), StringUtils.Localize("#LOC_BDArmory_AI_DynamicDampingYaw") + $": {AI.dynSteerDampingYawValue}", Label);
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.DynamicDampingYawMin, nameof(AI.DynamicDampingYawMin), "DynDampMin", $"{AI.DynamicDampingYawMin:0.0}");
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.DynamicDampingYawMax, nameof(AI.DynamicDampingYawMax), "DynDampMax", $"{AI.DynamicDampingYawMax:0.0}");
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.dynamicSteerDampingYawFactor, nameof(AI.dynamicSteerDampingYawFactor), "DynDampMult", $"{AI.dynamicSteerDampingYawFactor:0.0}");
+                                            }
+                                            else
+                                            {
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.steerDampingYaw, nameof(AI.steerDampingYaw), "SteerDampingYaw", $"{AI.steerDampingYaw:0.00}", splitContext: true);
+                                            }
+                                            // Roll
+                                            if (AI.dynamicSteerDamping)
+                                            {
+                                                if (AI.dynamicDampingRoll != (AI.dynamicDampingRoll = GUI.Toggle(ToggleButtonRect(pidLines, contentWidth), AI.dynamicDampingRoll, StringUtils.Localize("#LOC_BDArmory_AI_DynamicDampingRoll"), AI.dynamicDampingRoll ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))
+                                                { AI.OnPIDTogglesChanged(); }
+                                                pidLines += 1.25f;
+                                            }
+                                            if (AI.dynamicSteerDamping && AI.dynamicDampingRoll)
+                                            {
+                                                GUI.Label(SettinglabelRect(pidLines++), StringUtils.Localize("#LOC_BDArmory_AI_DynamicDampingRoll") + $": {AI.dynSteerDampingRollValue}", Label);
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.DynamicDampingRollMin, nameof(AI.DynamicDampingRollMin), "DynDampMin", $"{AI.DynamicDampingRollMin:0.0}");
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.DynamicDampingRollMax, nameof(AI.DynamicDampingRollMax), "DynDampMax", $"{AI.DynamicDampingRollMax:0.0}");
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.dynamicSteerDampingRollFactor, nameof(AI.dynamicSteerDampingRollFactor), "DynDampMult", $"{AI.dynamicSteerDampingRollFactor:0.0}");
+                                            }
+                                            else
+                                            {
+                                                pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.steerDampingRoll, nameof(AI.steerDampingRoll), "SteerDampingRoll", $"{AI.steerDampingRoll:0.00}", splitContext: true);
+                                            }
+                                        }
                                     }
-                                    GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingMin") + ": " + ActivePilot.DynamicDampingMin.ToString("0.0"), Label);//"dynamic damping min"
-                                    dynPidLines++;
+
+                                    #region AutoTune
+                                    if (AI.AutoTune != GUI.Toggle(ToggleButtonRect(pidLines, contentWidth), AI.AutoTune, StringUtils.Localize("#LOC_BDArmory_AI_PID_AutoTune"), AI.AutoTune ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+                                    {
+                                        AI.AutoTune = !AI.AutoTune; // Only actually toggle it when needed as the setter does extra stuff.
+                                    }
+                                    pidLines += 1.25f;
+                                    if (AI.AutoTune) // Auto-tuning
+                                    {
+                                        pidLines += 0.25f;
+                                        if (HighLogic.LoadedSceneIsEditor)
+                                        {
+                                            if (!string.IsNullOrEmpty(AI.autoTuningLossLabel)) // Not auto-tuning, but have been previously => show a summary of the last results.
+                                                GUI.Label(new Rect(contentInnerMargin + labelWidth / 8, pidLines++ * entryHeight, labelWidth, entryHeight),
+                                                    StringUtils.Localize("#LOC_BDArmory_AI_PID_AutoTuning_Summary") + $":   {AI.autoTuningSummary}", Label);
+                                        }
+                                        else
+                                        {
+                                            GUI.Label(SettinglabelRect(pidLines++), StringUtils.Localize("#LOC_BDArmory_AI_PID_AutoTuning_Loss") + $": {AI.autoTuningLossLabel}", Label);
+                                            GUI.Label(SettinglabelRect(pidLines++), $"\tParams: {AI.autoTuningLossLabel2}", Label);
+                                            GUI.Label(SettinglabelRect(pidLines++), $"\tField: {AI.autoTuningLossLabel3}", Label);
+                                        }
+
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.autoTuningOptionNumSamples, nameof(AI.autoTuningOptionNumSamples), "PIDAutoTuningNumSamples", $"{AI.autoTuningOptionNumSamples:0}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.autoTuningOptionFastResponseRelevance, nameof(AI.autoTuningOptionFastResponseRelevance), "PIDAutoTuningFastResponseRelevance", $"{AI.autoTuningOptionFastResponseRelevance:G3}", splitContext: true);
+                                        pidLines = ContentEntry(ContentType.FloatLogSlider, pidLines, contentWidth, ref AI.autoTuningOptionInitialLearningRate, nameof(AI.autoTuningOptionInitialLearningRate), "PIDAutoTuningInitialLearningRate", $"{AI.autoTuningOptionInitialLearningRate:G3}");
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.autoTuningOptionInitialRollRelevance, nameof(AI.autoTuningOptionInitialRollRelevance), "PIDAutoTuningInitialRollRelevance", $"{AI.autoTuningOptionInitialRollRelevance:G3}");
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.autoTuningAltitude, nameof(AI.autoTuningAltitude), "PIDAutoTuningAltitude", $"{AI.autoTuningAltitude:0}");
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.autoTuningSpeed, nameof(AI.autoTuningSpeed), "PIDAutoTuningSpeed", $"{AI.autoTuningSpeed:0}");
+                                        pidLines = ContentEntry(ContentType.FloatSlider, pidLines, contentWidth, ref AI.autoTuningRecenteringDistance, nameof(AI.autoTuningRecenteringDistance), "PIDAutoTuningRecenteringDistance", $"{AI.autoTuningRecenteringDistance:0}km");
+
+                                        showSection[Section.FixedAutoTuneFields] = GUI.Toggle(ToggleButtonRects(pidLines, 0, 2, contentWidth), showSection[Section.FixedAutoTuneFields], StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixedFields"), showSection[Section.FixedAutoTuneFields] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                        AI.autoTuningOptionClampMaximums = GUI.Toggle(ToggleButtonRects(pidLines, 1, 2, contentWidth), AI.autoTuningOptionClampMaximums, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningClampMaximums"), AI.autoTuningOptionClampMaximums ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                        pidLines += 1.25f;
+
+                                        if (showSection[Section.FixedAutoTuneFields])
+                                        {
+                                            bool resetAutoTuning = false;
+                                            if (AI.threeAxisPID) // Full 3-Axis PID
+                                            {
+                                                if (AI.autoTuningOptionFixedPp != (AI.autoTuningOptionFixedPp = GUI.Toggle(ToggleButtonRects(pidLines, 0, 9, contentWidth), AI.autoTuningOptionFixedPp, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Pp"), AI.autoTuningOptionFixedPp ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                if (AI.autoTuningOptionFixedIp != (AI.autoTuningOptionFixedIp = GUI.Toggle(ToggleButtonRects(pidLines, 1, 9, contentWidth), AI.autoTuningOptionFixedIp, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Ip"), AI.autoTuningOptionFixedIp ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                if (AI.autoTuningOptionFixedDp != (AI.autoTuningOptionFixedDp = GUI.Toggle(ToggleButtonRects(pidLines, 2, 9, contentWidth), AI.autoTuningOptionFixedDp, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Dp"), AI.autoTuningOptionFixedDp ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                if (AI.autoTuningOptionFixedPy != (AI.autoTuningOptionFixedPy = GUI.Toggle(ToggleButtonRects(pidLines, 3, 9, contentWidth), AI.autoTuningOptionFixedPy, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Py"), AI.autoTuningOptionFixedPy ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                if (AI.autoTuningOptionFixedIy != (AI.autoTuningOptionFixedIy = GUI.Toggle(ToggleButtonRects(pidLines, 4, 9, contentWidth), AI.autoTuningOptionFixedIy, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Iy"), AI.autoTuningOptionFixedIy ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                if (AI.autoTuningOptionFixedDy != (AI.autoTuningOptionFixedDy = GUI.Toggle(ToggleButtonRects(pidLines, 5, 9, contentWidth), AI.autoTuningOptionFixedDy, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Dy"), AI.autoTuningOptionFixedDy ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                if (AI.autoTuningOptionFixedPr != (AI.autoTuningOptionFixedPr = GUI.Toggle(ToggleButtonRects(pidLines, 6, 9, contentWidth), AI.autoTuningOptionFixedPr, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Pr"), AI.autoTuningOptionFixedPr ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                if (AI.autoTuningOptionFixedIr != (AI.autoTuningOptionFixedIr = GUI.Toggle(ToggleButtonRects(pidLines, 7, 9, contentWidth), AI.autoTuningOptionFixedIr, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Ir"), AI.autoTuningOptionFixedIr ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                if (AI.autoTuningOptionFixedDr != (AI.autoTuningOptionFixedDr = GUI.Toggle(ToggleButtonRects(pidLines, 8, 9, contentWidth), AI.autoTuningOptionFixedDr, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_Dr"), AI.autoTuningOptionFixedDr ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                            }
+                                            else if (!AI.dynamicSteerDamping)
+                                            {
+                                                if (!AI.threeAxisSteerDamping) // Normal PID
+                                                {
+                                                    if (AI.autoTuningOptionFixedP != (AI.autoTuningOptionFixedP = GUI.Toggle(ToggleButtonRects(pidLines, 0, 3, contentWidth), AI.autoTuningOptionFixedP, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_P"), AI.autoTuningOptionFixedP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedI != (AI.autoTuningOptionFixedI = GUI.Toggle(ToggleButtonRects(pidLines, 1, 3, contentWidth), AI.autoTuningOptionFixedI, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_I"), AI.autoTuningOptionFixedI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedD != (AI.autoTuningOptionFixedD = GUI.Toggle(ToggleButtonRects(pidLines, 2, 3, contentWidth), AI.autoTuningOptionFixedD, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_D"), AI.autoTuningOptionFixedD ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                }
+                                                else // PID with 3-axis static damping
+                                                {
+                                                    if (AI.autoTuningOptionFixedP != (AI.autoTuningOptionFixedP = GUI.Toggle(ToggleButtonRects(pidLines, 0, 5, contentWidth), AI.autoTuningOptionFixedP, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_P"), AI.autoTuningOptionFixedP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedI != (AI.autoTuningOptionFixedI = GUI.Toggle(ToggleButtonRects(pidLines, 1, 5, contentWidth), AI.autoTuningOptionFixedI, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_I"), AI.autoTuningOptionFixedI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedDP != (AI.autoTuningOptionFixedDP = GUI.Toggle(ToggleButtonRects(pidLines, 2, 5, contentWidth), AI.autoTuningOptionFixedDP, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DPitch"), AI.autoTuningOptionFixedDP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedDY != (AI.autoTuningOptionFixedDY = GUI.Toggle(ToggleButtonRects(pidLines, 3, 5, contentWidth), AI.autoTuningOptionFixedDY, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DYaw"), AI.autoTuningOptionFixedDY ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedDR != (AI.autoTuningOptionFixedDR = GUI.Toggle(ToggleButtonRects(pidLines, 4, 5, contentWidth), AI.autoTuningOptionFixedDR, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DRoll"), AI.autoTuningOptionFixedDR ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                if (!AI.threeAxisSteerDamping) // PID with dynamic damping
+                                                {
+                                                    if (AI.autoTuningOptionFixedP != (AI.autoTuningOptionFixedP = GUI.Toggle(ToggleButtonRects(pidLines, 0, 5, contentWidth), AI.autoTuningOptionFixedP, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_P"), AI.autoTuningOptionFixedP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedI != (AI.autoTuningOptionFixedI = GUI.Toggle(ToggleButtonRects(pidLines, 1, 5, contentWidth), AI.autoTuningOptionFixedI, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_I"), AI.autoTuningOptionFixedI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedDOff != (AI.autoTuningOptionFixedDOff = GUI.Toggle(ToggleButtonRects(pidLines, 2, 5, contentWidth), AI.autoTuningOptionFixedDOff, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_D_OffTarget"), AI.autoTuningOptionFixedDOff ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedDOn != (AI.autoTuningOptionFixedDOn = GUI.Toggle(ToggleButtonRects(pidLines, 3, 5, contentWidth), AI.autoTuningOptionFixedDOn, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_D_OnTarget"), AI.autoTuningOptionFixedDOn ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedDF != (AI.autoTuningOptionFixedDF = GUI.Toggle(ToggleButtonRects(pidLines, 4, 5, contentWidth), AI.autoTuningOptionFixedDF, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_D_Factor"), AI.autoTuningOptionFixedDF ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                }
+                                                else // PID with 3-axis dynamic damping (or mixed)
+                                                {
+                                                    int buttonCount = 2 + (AI.dynamicDampingPitch ? 3 : 1) + (AI.dynamicDampingRoll ? 3 : 1) + (AI.dynamicDampingYaw ? 3 : 1);
+                                                    int buttonIndex = -1;
+                                                    if (AI.autoTuningOptionFixedP != (AI.autoTuningOptionFixedP = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedP, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_P"), AI.autoTuningOptionFixedP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.autoTuningOptionFixedI != (AI.autoTuningOptionFixedI = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedI, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_I"), AI.autoTuningOptionFixedI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    if (AI.dynamicDampingPitch)
+                                                    {
+                                                        if (AI.autoTuningOptionFixedDPOff != (AI.autoTuningOptionFixedDPOff = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDPOff, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DPitch_OffTarget"), AI.autoTuningOptionFixedDPOff ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                        if (AI.autoTuningOptionFixedDPOn != (AI.autoTuningOptionFixedDPOn = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDPOn, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DPitch_OnTarget"), AI.autoTuningOptionFixedDPOn ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                        if (AI.autoTuningOptionFixedDPF != (AI.autoTuningOptionFixedDPF = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDPF, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DPitch_Factor"), AI.autoTuningOptionFixedDPF ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    }
+                                                    else
+                                                    {
+                                                        if (AI.autoTuningOptionFixedDP != (AI.autoTuningOptionFixedDP = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDP, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DPitch"), AI.autoTuningOptionFixedDP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    }
+                                                    if (AI.dynamicDampingYaw)
+                                                    {
+                                                        if (AI.autoTuningOptionFixedDYOff != (AI.autoTuningOptionFixedDYOff = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDYOff, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DYaw_OffTarget"), AI.autoTuningOptionFixedDYOff ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                        if (AI.autoTuningOptionFixedDYOn != (AI.autoTuningOptionFixedDYOn = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDYOn, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DYaw_OnTarget"), AI.autoTuningOptionFixedDYOn ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                        if (AI.autoTuningOptionFixedDYF != (AI.autoTuningOptionFixedDYF = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDYF, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DYaw_Factor"), AI.autoTuningOptionFixedDYF ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    }
+                                                    else
+                                                    {
+                                                        if (AI.autoTuningOptionFixedDY != (AI.autoTuningOptionFixedDY = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDY, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DYaw"), AI.autoTuningOptionFixedDY ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    }
+                                                    if (AI.dynamicDampingRoll)
+                                                    {
+                                                        if (AI.autoTuningOptionFixedDROff != (AI.autoTuningOptionFixedDROff = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDROff, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DRoll_OffTarget"), AI.autoTuningOptionFixedDROff ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                        if (AI.autoTuningOptionFixedDROn != (AI.autoTuningOptionFixedDROn = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDROn, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DRoll_OnTarget"), AI.autoTuningOptionFixedDROn ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                        if (AI.autoTuningOptionFixedDRF != (AI.autoTuningOptionFixedDRF = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDRF, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DRoll_Factor"), AI.autoTuningOptionFixedDRF ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    }
+                                                    else
+                                                    {
+                                                        if (AI.autoTuningOptionFixedDR != (AI.autoTuningOptionFixedDR = GUI.Toggle(ToggleButtonRects(pidLines, ++buttonIndex, buttonCount, contentWidth), AI.autoTuningOptionFixedDR, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixed_DRoll"), AI.autoTuningOptionFixedDR ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetAutoTuning = true;
+                                                    }
+                                                }
+                                            }
+                                            if (resetAutoTuning && HighLogic.LoadedSceneIsFlight) AI.pidAutoTuning.ResetGradient();
+                                            pidLines += 1.25f;
+                                        }
+                                    }
+                                    else if (!string.IsNullOrEmpty(AI.autoTuningLossLabel)) // Not auto-tuning, but have been previously => show a summary of the last results.
+                                    {
+                                        GUI.Label(new Rect(contentInnerMargin + labelWidth / 8, pidLines * entryHeight, labelWidth, entryHeight),
+                                            StringUtils.Localize("#LOC_BDArmory_AI_PID_AutoTuning_Summary") + $":   {AI.autoTuningSummary}", Label);
+                                        pidLines += 1.25f;
+                                    }
+                                    #endregion
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.PID] = Mathf.Lerp(sectionHeight, pidLines, 0.15f);
+                                    pidLines += 0.1f;
+                                    contentHeight += pidLines * entryHeight;
+                                }
+                                if (showSection[Section.Altitude])
+                                {
+                                    float altLines = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Altitude);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + altLines * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    altLines += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(altLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Altitudes"), BoldLabel);//"Altitudes"
+
+                                    var oldDefaultAlt = AI.defaultAltitude;
+                                    altLines = ContentEntry(ContentType.FloatSlider, altLines, contentWidth, ref AI.defaultAltitude, nameof(AI.defaultAltitude), "DefaultAltitude", $"{AI.defaultAltitude:0}m");
+                                    if (AI.defaultAltitude != oldDefaultAlt)
+                                    {
+                                        AI.ClampFields("defaultAltitude");
+                                        inputFields["minAltitude"].SetCurrentValue(AI.minAltitude);
+                                        inputFields["maxAltitude"].SetCurrentValue(AI.maxAltitude);
+                                    }
+
+                                    var oldMinAlt = AI.minAltitude;
+                                    altLines = ContentEntry(ContentType.FloatSlider, altLines, contentWidth, ref AI.minAltitude, nameof(AI.minAltitude), "MinAltitude", $"{AI.minAltitude:0}m");
+                                    if (AI.minAltitude != oldMinAlt)
+                                    {
+                                        AI.ClampFields("minAltitude");
+                                        inputFields["defaultAltitude"].SetCurrentValue(AI.defaultAltitude);
+                                        inputFields["maxAltitude"].SetCurrentValue(AI.maxAltitude);
+                                    }
+
+                                    AI.hardMinAltitude = GUI.Toggle(ToggleButtonRects(altLines, 0, 2, contentWidth), AI.hardMinAltitude,
+                                        StringUtils.Localize("#LOC_BDArmory_AI_HardMinAltitude"), AI.hardMinAltitude ? BDArmorySetup.SelectedButtonStyle : BDArmorySetup.ButtonStyle);//"Hard Min Altitude"
+                                    AI.maxAltitudeToggle = GUI.Toggle(ToggleButtonRects(altLines, 1, 2, contentWidth), AI.maxAltitudeToggle,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_MaxAltitude"), AI.maxAltitudeToggle ? BDArmorySetup.SelectedButtonStyle : BDArmorySetup.ButtonStyle);//"max altitude AGL"
+                                    altLines += 1.25f;
+
+                                    if (AI.maxAltitudeToggle)
+                                    {
+                                        var oldMaxAlt = AI.maxAltitude;
+                                        altLines = ContentEntry(ContentType.FloatSlider, altLines, contentWidth, ref AI.maxAltitude, nameof(AI.maxAltitude), "MaxAltitude", $"{AI.maxAltitude:0}m");
+                                        if (AI.maxAltitude != oldMaxAlt)
+                                        {
+                                            AI.ClampFields("maxAltitude");
+                                            inputFields["minAltitude"].SetCurrentValue(AI.minAltitude);
+                                            inputFields["defaultAltitude"].SetCurrentValue(AI.defaultAltitude);
+                                        }
+                                    }
+                                    altLines = ContentEntry(ContentType.FloatSlider, altLines, contentWidth, ref AI.bombingAltitude, nameof(AI.bombingAltitude), "BombingAltitude", $"{AI.bombingAltitude:0}m");
+
+                                    AI.divebombing = GUI.Toggle(ToggleButtonRects(altLines, 0, 2, contentWidth), AI.divebombing,
+StringUtils.Localize("#LOC_BDArmory_AIWindow_DiveBomb"), AI.divebombing ? BDArmorySetup.SelectedButtonStyle : BDArmorySetup.ButtonStyle);//"Hard Min Altitude"
+                                    altLines += 1.25f;
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Altitude] = Mathf.Lerp(sectionHeight, altLines, 0.15f);
+                                    altLines += 0.1f;
+                                    contentHeight += altLines * entryHeight;
+                                }
+                                if (showSection[Section.Speed])
+                                {
+                                    float spdLines = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Speed);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + spdLines * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    spdLines += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(spdLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Speeds"), BoldLabel);//"Speed"
+                                    spdLines = ContentEntry(ContentType.FloatSlider, spdLines, contentWidth, ref AI.maxSpeed, nameof(AI.maxSpeed), "MaxSpeed", $"{AI.maxSpeed:0}m/s");
+                                    spdLines = ContentEntry(ContentType.FloatSlider, spdLines, contentWidth, ref AI.takeOffSpeed, nameof(AI.takeOffSpeed), "TakeOffSpeed", $"{AI.takeOffSpeed:0}m/s");
+                                    spdLines = ContentEntry(ContentType.FloatSlider, spdLines, contentWidth, ref AI.minSpeed, nameof(AI.minSpeed), "MinSpeed", $"{AI.minSpeed:0}m/s");
+                                    spdLines = ContentEntry(ContentType.FloatSlider, spdLines, contentWidth, ref AI.strafingSpeed, nameof(AI.strafingSpeed), "StrafingSpeed", $"{AI.strafingSpeed:0}m/s");
+                                    spdLines = ContentEntry(ContentType.FloatSlider, spdLines, contentWidth, ref AI.idleSpeed, nameof(AI.idleSpeed), "IdleSpeed", $"{AI.idleSpeed:0}m/s");
+                                    spdLines = ContentEntry(ContentType.FloatSlider, spdLines, contentWidth, ref AI.ABPriority, nameof(AI.ABPriority), "ABPriority", $"{AI.ABPriority:0}%");
+                                    spdLines = ContentEntry(ContentType.FloatSlider, spdLines, contentWidth, ref AI.ABOverrideThreshold, nameof(AI.ABOverrideThreshold), "ABOverrideThreshold", $"{AI.ABOverrideThreshold:0}m/s");
+                                    spdLines = ContentEntry(ContentType.FloatSlider, spdLines, contentWidth, ref AI.brakingPriority, nameof(AI.brakingPriority), "BrakingPriority", $"{AI.brakingPriority:0}%");
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Speed] = Mathf.Lerp(sectionHeight, spdLines, 0.15f);
+                                    spdLines += 0.1f;
+                                    contentHeight += spdLines * entryHeight;
+                                }
+                                if (showSection[Section.Control])
+                                {
+                                    float ctrlLines = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Control);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + ctrlLines * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    ctrlLines += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(ctrlLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Control"), BoldLabel);//"Control"
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.maxSteer, nameof(AI.maxSteer), "LowSpeedSteerLimiter", $"{AI.maxSteer:0.00}");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.lowSpeedSwitch, nameof(AI.lowSpeedSwitch), "LowSpeedLimiterSpeed", $"{AI.lowSpeedSwitch:0}m/s");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.maxSteerAtMaxSpeed, nameof(AI.maxSteerAtMaxSpeed), "HighSpeedSteerLimiter", $"{AI.maxSteerAtMaxSpeed:0.00}");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.cornerSpeed, nameof(AI.cornerSpeed), "HighSpeedLimiterSpeed", $"{AI.cornerSpeed:0}m/s");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.altitudeSteerLimiterFactor, nameof(AI.altitudeSteerLimiterFactor), "AltitudeSteerLimiterFactor", $"{AI.altitudeSteerLimiterFactor:0}");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.altitudeSteerLimiterAltitude, nameof(AI.altitudeSteerLimiterAltitude), "AltitudeSteerLimiterAltitude", $"{AI.altitudeSteerLimiterAltitude:0}m");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.maxBank, nameof(AI.maxBank), "BankLimiter", $"{AI.maxBank:0}°");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.waypointPreRollTime, nameof(AI.waypointPreRollTime), "WaypointPreRollTime", $"{AI.waypointPreRollTime:0.00}s");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.waypointYawAuthorityTime, nameof(AI.waypointYawAuthorityTime), "WaypointYawAuthorityTime", $"{AI.waypointYawAuthorityTime:0.0}s");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.maxAllowedGForce, nameof(AI.maxAllowedGForce), "MaxAllowedGForce", $"{AI.maxAllowedGForce:0.0}<i>g</i>");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.maxAllowedAoA, nameof(AI.maxAllowedAoA), "MaxAllowedAoA", $"{AI.maxAllowedAoA:0.0}°");
+                                    if (!(BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55))
+                                    { ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.postStallAoA, nameof(AI.postStallAoA), "PostStallAoA", $"{AI.postStallAoA:0.0}"); }
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.ImmelmannTurnAngle, nameof(AI.ImmelmannTurnAngle), "ImmelmannTurnAngle", $"{AI.ImmelmannTurnAngle:0}°");
+                                    ctrlLines = ContentEntry(ContentType.FloatSlider, ctrlLines, contentWidth, ref AI.ImmelmannPitchUpBias, nameof(AI.ImmelmannPitchUpBias), "ImmelmannPitchUpBias", $"{AI.ImmelmannPitchUpBias:0}°/s");
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Control] = Mathf.Lerp(sectionHeight, ctrlLines, 0.15f);
+                                    ctrlLines += 0.1f;
+                                    contentHeight += ctrlLines * entryHeight;
+                                }
+                                if (showSection[Section.Evasion])
+                                {
+                                    float evadeLines = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Evasion);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + evadeLines * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    evadeLines += 0.25f;
+
+                                    #region Evasion
+                                    GUI.Label(SettinglabelRect(evadeLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Evade"), BoldLabel);
+                                    evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.minEvasionTime, nameof(AI.minEvasionTime), "MinEvasionTime", $"{AI.minEvasionTime:0.00}s");
+                                    evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.evasionThreshold, nameof(AI.evasionThreshold), "EvasionThreshold", $"{AI.evasionThreshold:0}m");
+                                    evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.evasionTimeThreshold, nameof(AI.evasionTimeThreshold), "EvasionTimeThreshold", $"{AI.evasionTimeThreshold:0.00}s");
+                                    evadeLines = ContentEntry(ContentType.SemiLogSlider, evadeLines, contentWidth, ref AI.evasionMinRangeThreshold, nameof(AI.evasionMinRangeThreshold), "EvasionMinRangeThreshold", AI.evasionMinRangeThreshold < 1000 ? $"{AI.evasionMinRangeThreshold:0}m" : $"{AI.evasionMinRangeThreshold / 1000:0}km");
+                                    evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.evasionNonlinearity, nameof(AI.evasionNonlinearity), "EvasionNonlinearity", $"{AI.evasionNonlinearity:0.0}°");
+
+                                    AI.evasionIgnoreMyTargetTargetingMe = GUI.Toggle(ToggleButtonRect(evadeLines, contentWidth), AI.evasionIgnoreMyTargetTargetingMe, StringUtils.Localize("#LOC_BDArmory_AI_EvasionIgnoreMyTargetTargetingMe"), AI.evasionIgnoreMyTargetTargetingMe ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    evadeLines += 1.25f;
+
+                                    AI.evasionMissileKinematic = GUI.Toggle(ToggleButtonRect(evadeLines, contentWidth), AI.evasionMissileKinematic, StringUtils.Localize("#LOC_BDArmory_AI_EvasionMissileKinematic"), AI.evasionMissileKinematic ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    evadeLines += 1.25f;
+                                    #endregion
+
+                                    #region Craft Avoidance
+                                    evadeLines += 0.5f;
+                                    GUI.Label(SettinglabelRect(evadeLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Avoidance"), BoldLabel);
+                                    evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.collisionAvoidanceThreshold, nameof(AI.collisionAvoidanceThreshold), "CollisionAvoidanceThreshold", $"{AI.collisionAvoidanceThreshold:0}m");
+                                    evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.vesselCollisionAvoidanceLookAheadPeriod, nameof(AI.vesselCollisionAvoidanceLookAheadPeriod), "CollisionAvoidanceLookAheadPeriod", $"{AI.vesselCollisionAvoidanceLookAheadPeriod:0.0}s");
+                                    evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.vesselCollisionAvoidanceStrength, nameof(AI.vesselCollisionAvoidanceStrength), "CollisionAvoidanceStrength", $"{AI.vesselCollisionAvoidanceStrength:0.0} ({AI.vesselCollisionAvoidanceStrength / Time.fixedDeltaTime:0}°/s)");
+                                    evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.vesselStandoffDistance, nameof(AI.vesselStandoffDistance), "StandoffDistance", $"{AI.vesselStandoffDistance:0}m");
+                                    #endregion
+
+                                    #region Extending
+                                    if (AI.canExtend)
+                                    {
+                                        evadeLines += 0.5f;
+                                        GUI.Label(SettinglabelRect(evadeLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Extend"), BoldLabel);
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendDistanceAirToAir, nameof(AI.extendDistanceAirToAir), "ExtendDistanceAirToAir", $"{AI.extendDistanceAirToAir:0}m");
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendAngleAirToAir, nameof(AI.extendAngleAirToAir), "ExtendAngleAirToAir", $"{AI.extendAngleAirToAir:0}°");
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendDistanceAirToGroundGuns, nameof(AI.extendDistanceAirToGroundGuns), "ExtendDistanceAirToGroundGuns", $"{AI.extendDistanceAirToGroundGuns:0}m");
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendDistanceAirToGround, nameof(AI.extendDistanceAirToGround), "ExtendDistanceAirToGround", $"{AI.extendDistanceAirToGround:0}m");
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendTargetVel, nameof(AI.extendTargetVel), "ExtendTargetVel", $"{AI.extendTargetVel:0.0}");
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendTargetAngle, nameof(AI.extendTargetAngle), "ExtendTargetAngle", $"{AI.extendTargetAngle:0}°");
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendTargetDist, nameof(AI.extendTargetDist), "ExtendTargetDist", $"{AI.extendTargetDist:0}m");
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendAbortTime, nameof(AI.extendAbortTime), "ExtendAbortTime", $"{AI.extendAbortTime:0}s");
+                                        evadeLines = ContentEntry(ContentType.FloatSlider, evadeLines, contentWidth, ref AI.extendMinGainRate, nameof(AI.extendMinGainRate), "ExtendMinGainRate", $"{AI.extendMinGainRate:0}m/s");
+                                    }
+                                    AI.canExtend = GUI.Toggle(ToggleButtonRect(evadeLines, contentWidth), AI.canExtend, StringUtils.Localize("#LOC_BDArmory_AI_ExtendToggle"), AI.canExtend ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic pid"
+                                    evadeLines += 1.25f;
+                                    #endregion
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Evasion] = Mathf.Lerp(sectionHeight, evadeLines, 0.15f);
+                                    evadeLines += 0.1f;
+                                    contentHeight += evadeLines * entryHeight;
+                                }
+                                if (showSection[Section.Terrain])
+                                {
+                                    float gndLines = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Terrain);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + gndLines * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    gndLines += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(gndLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Terrain"), BoldLabel);//"Speed"
+
+                                    var oldMinTwiddle = AI.turnRadiusTwiddleFactorMin;
+                                    gndLines = ContentEntry(ContentType.FloatSlider, gndLines, contentWidth, ref AI.turnRadiusTwiddleFactorMin, nameof(AI.turnRadiusTwiddleFactorMin), "TerrainAvoidanceMin", $"{AI.turnRadiusTwiddleFactorMin:0.0}");
+                                    if (AI.turnRadiusTwiddleFactorMin != oldMinTwiddle)
+                                    {
+                                        AI.OnMinUpdated(null, null);
+                                        var field = inputFields["turnRadiusTwiddleFactorMax"];
+                                        field.SetCurrentValue(AI.turnRadiusTwiddleFactorMax);
+                                    }
+
+                                    var oldMaxTwiddle = AI.turnRadiusTwiddleFactorMax;
+                                    gndLines = ContentEntry(ContentType.FloatSlider, gndLines, contentWidth, ref AI.turnRadiusTwiddleFactorMax, nameof(AI.turnRadiusTwiddleFactorMax), "TerrainAvoidanceMax", $"{AI.turnRadiusTwiddleFactorMax:0.0}");
+                                    if (AI.turnRadiusTwiddleFactorMax != oldMaxTwiddle)
+                                    {
+                                        AI.OnMaxUpdated(null, null);
+                                        var field = inputFields["turnRadiusTwiddleFactorMin"];
+                                        field.SetCurrentValue(AI.turnRadiusTwiddleFactorMin);
+                                    }
+
+                                    var oldTerrainAvoidanceCriticalAngle = AI.terrainAvoidanceCriticalAngle;
+                                    gndLines = ContentEntry(ContentType.FloatSlider, gndLines, contentWidth, ref AI.terrainAvoidanceCriticalAngle, nameof(AI.terrainAvoidanceCriticalAngle), "InvertedTerrainAvoidanceCriticalAngle", $"{AI.terrainAvoidanceCriticalAngle:0}°");
+                                    if (AI.terrainAvoidanceCriticalAngle != oldTerrainAvoidanceCriticalAngle) { AI.OnTerrainAvoidanceCriticalAngleChanged(); }
+
+                                    gndLines = ContentEntry(ContentType.FloatSlider, gndLines, contentWidth, ref AI.controlSurfaceDeploymentTime, nameof(AI.controlSurfaceDeploymentTime), "TerrainAvoidanceVesselReactionTime", $"{AI.controlSurfaceDeploymentTime:0.0}s");
+                                    gndLines = ContentEntry(ContentType.FloatSlider, gndLines, contentWidth, ref AI.postTerrainAvoidanceCoolDownDuration, nameof(AI.postTerrainAvoidanceCoolDownDuration), "TerrainAvoidancePostAvoidanceCoolDown", $"{AI.postTerrainAvoidanceCoolDownDuration:0.00}s");
+                                    gndLines = ContentEntry(ContentType.FloatSlider, gndLines, contentWidth, ref AI.waypointTerrainAvoidance, nameof(AI.waypointTerrainAvoidance), "WaypointTerrainAvoidance", $"{AI.waypointTerrainAvoidance:0.00}");
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Terrain] = Mathf.Lerp(sectionHeight, gndLines, 0.15f);
+                                    gndLines += 0.1f;
+                                    contentHeight += gndLines * entryHeight;
+                                }
+                                if (showSection[Section.Ramming])
+                                {
+                                    float ramLines = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Ramming);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + ramLines * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    ramLines += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(ramLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Ramming"), BoldLabel);//"Ramming"
+
+                                    AI.allowRamming = GUI.Toggle(ToggleButtonRect(ramLines, contentWidth), AI.allowRamming,
+                                        StringUtils.Localize("#LOC_BDArmory_AI_AllowRamming"), AI.allowRamming ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Allow Ramming"
+                                    ramLines += 1.25f;
+
+                                    if (AI.allowRamming)
+                                    {
+                                        AI.allowRammingGroundTargets = GUI.Toggle(ToggleButtonRect(ramLines, contentWidth), AI.allowRammingGroundTargets,
+                                            StringUtils.Localize("#LOC_BDArmory_AI_AllowRammingGroundTargets"), AI.allowRammingGroundTargets ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Include Ground Targets"
+                                        ramLines += 1.25f;
+                                        ramLines = ContentEntry(ContentType.FloatSlider, ramLines, contentWidth, ref AI.controlSurfaceLag, nameof(AI.controlSurfaceLag), "ControlSurfaceLag", $"{AI.controlSurfaceLag:0.00}s");
+                                    }
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Ramming] = Mathf.Lerp(sectionHeight, ramLines, 0.15f);
+                                    ramLines += 0.1f;
+                                    contentHeight += ramLines * entryHeight;
+                                }
+                                if (showSection[Section.Misc])
+                                {
+                                    float miscLines = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Misc);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + miscLines * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    miscLines += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(miscLines++), StringUtils.Localize("#LOC_BDArmory_AI_Orbit"), BoldLabel);//"orbit"
+                                    AI.ClockwiseOrbit = GUI.Toggle(ToggleButtonRect(miscLines, contentWidth), AI.ClockwiseOrbit,
+                                        AI.ClockwiseOrbit ? StringUtils.Localize("#LOC_BDArmory_AI_Orbit_Starboard") : StringUtils.Localize("#LOC_BDArmory_AI_Orbit_Port"),
+                                        AI.ClockwiseOrbit ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    miscLines += 1.25f;
+                                    if (contextTipsEnabled) GUI.Label(ContextLabelRect(miscLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Orbit_Context"), Label);//"orbit direction"
+
+                                    GUI.Label(SettinglabelRect(miscLines++), StringUtils.Localize("#LOC_BDArmory_AI_Standby"), BoldLabel);//"Standby"
+                                    AI.standbyMode = GUI.Toggle(ToggleButtonRect(miscLines, contentWidth),
+                                    AI.standbyMode, AI.standbyMode ? StringUtils.Localize("#LOC_BDArmory_On") : StringUtils.Localize("#LOC_BDArmory_Off"), AI.standbyMode ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic pid"
+                                    miscLines += 1.25f;
+                                    if (contextTipsEnabled) GUI.Label(ContextLabelRect(miscLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Standby_Context"), Label);//"Activate when target in guard range"
+
+                                    GUI.Label(SettinglabelRect(miscLines++), StringUtils.Localize("#LOC_BDArmory_ControlSurfaceSettings"), BoldLabel);//"Control Surface Settings"
+                                    if (GUI.Button(ToggleButtonRect(miscLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_StoreControlSurfaceSettings"), BDArmorySetup.BDGuiSkin.button))
+                                    {
+                                        AI.StoreControlSurfaceSettings(); //Hiding these in misc is probably not the best place to put them, but only so much space on the window header bar
+                                    }
+                                    miscLines += 1.25f;
+                                    if (AI.Events["RestoreControlSurfaceSettings"].active == true)
+                                    {
+                                        GUIStyle restoreStyle = BDArmorySetup.BDGuiSkin.button;
+                                        if (GUI.Button(ToggleButtonRect(miscLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_RestoreControlSurfaceSettings"), restoreStyle))
+                                        {
+                                            AI.RestoreControlSurfaceSettings();
+                                        }
+                                        miscLines += 1.25f;
+                                    }
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Misc] = Mathf.Lerp(sectionHeight, miscLines, 0.15f);
+                                    miscLines += 0.1f;
+                                    contentHeight += miscLines * entryHeight;
+                                }
+
+                                GUI.EndGroup();
+                                GUI.EndScrollView();
+                            }
+
+                            if (infoLinkEnabled)
+                            {
+                                windowColumns = 3;
+
+                                GUI.Label(new Rect(contentMargin + ColumnWidth * 2, contentTop, ColumnWidth - contentMargin, entryHeight), StringUtils.Localize("#LOC_BDArmory_AIWindow_infoLink"), Title);//"infolink"
+                                BeginArea(new Rect(contentMargin + ColumnWidth * 2, contentTop + entryHeight * 1.5f, ColumnWidth - contentMargin, WindowHeight - entryHeight * 1.5f - 2 * contentTop));
+                                using (var scrollViewScope = new ScrollViewScope(scrollInfoVector, Width(ColumnWidth - contentMargin), Height(WindowHeight - entryHeight * 1.5f - 2 * contentTop)))
+                                {
+                                    scrollInfoVector = scrollViewScope.scrollPosition;
+
+                                    if (showSection[Section.PID]) //these autoalign, so if new entries need to be added, they can just be slotted in
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_PID"), BoldLabel, Width(ColumnWidth - contentMargin * 4 - 20)); //PID label
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_PidHelp"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //Pid desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_PidHelp_SteerPower"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //steer mult desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_PidHelp_SteerKi"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //steer ki desc.
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_PidHelp_Steerdamp"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //steer damp description
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_PidHelp_Dyndamp"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //dynamic damping desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_PidHelp_AutoTune") + (AI.AutoTune ? StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_PidHelp_AutoTune_details") : ""), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //auto-tuning desc
+                                    }
+                                    if (showSection[Section.Altitude])
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_Altitudes"), BoldLabel, Width(ColumnWidth - (contentMargin * 4) - 20)); //Altitude label
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_AltHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //altitude description
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_AltHelp_Def"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //default alt desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_AltHelp_min"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //min alt desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_AltHelp_max"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //max alt desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_AltHelp_bombing"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //bombing alt desc
+                                    }
+                                    if (showSection[Section.Speed])
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_Speeds"), BoldLabel, Width(ColumnWidth - (contentMargin * 4) - 20)); //Speed header
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_SpeedHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //speed explanation
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_SpeedHelp_min"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //min+max speed desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_SpeedHelp_takeoff"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //takeoff speed
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_SpeedHelp_gnd"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //strafe speed
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_SpeedHelp_idle"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //idle speed
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_SpeedHelp_ABpriority"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //AB priority
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_SpeedHelp_ABOverrideThreshold"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //AB override threshold
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_SpeedHelp_BrakingPriority"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //Braking priority
+                                    }
+                                    if (showSection[Section.Control])
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_Control"), BoldLabel, Width(ColumnWidth - (contentMargin * 4) - 20)); //conrrol header
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_ControlHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //control desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_ControlHelp_limiters"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //low + high speed limiters
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_ControlHelp_bank"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //max bank desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_ControlHelp_clamps"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //max G + max AoA
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_ControlHelp_modeSwitches"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //post-stall
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_ControlHelp_Immelmann"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //Immelmann turn angle + bias
+                                    }
+                                    if (showSection[Section.Evasion])
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeExtend"), BoldLabel, Width(ColumnWidth - (contentMargin * 4) - 20)); //evade header
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //evade description
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_Evade"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //evade dist/ time/ time threshold
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_Nonlinearity"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //evade/extend nonlinearity
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_Dodge"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //collision avoid
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_standoff"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //standoff distance
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_Extend"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //extend distances
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_ExtendVars"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //extend target dist/angle/vel
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_ExtendVel"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //extend target velocity
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_ExtendAngle"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //extend target angle
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_ExtendDist"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //extend target dist
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_ExtendAbortTime"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //extend abort time
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_EvadeHelp_ExtendToggle"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //evade/extend toggle
+                                    }
+                                    if (showSection[Section.Terrain])
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_Terrain"), BoldLabel, Width(ColumnWidth - (contentMargin * 4) - 20)); //Terrain avoid header
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_TerrainHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //terrain avoid desc
+                                    }
+                                    if (showSection[Section.Ramming])
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AI_Ramming"), BoldLabel, Width(ColumnWidth - (contentMargin * 4) - 20)); //ramming header
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_RamHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20));// ramming desc
+                                    }
+                                    if (showSection[Section.Misc])
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_Misc"), BoldLabel, Width(ColumnWidth - (contentMargin * 4) - 20)); //misc header
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_miscHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //misc desc
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_orbitHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //orbit dir
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Pilot_standbyHelp"), infoLinkStyle, Width(ColumnWidth - (contentMargin * 4) - 20)); //standby
+                                    }
+                                }
+                                EndArea();
+                            }
+                        }
+                        break;
+                    case AIType.SurfaceAI:
+                        {
+                            var AI = ActiveAI as BDModuleSurfaceAI;
+                            if (AI == null) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: AI module mismatch!"); activeAIType = AIType.None; break; }
+
+                            if (AISelectionComboBox == null || !AISelectionComboBox.IsOpen)
+                            { // Section buttons
+                                float line = 1.5f;
+                                showSection[Section.PID] = GUI.Toggle(SubsectionRect(line), showSection[Section.PID], StringUtils.Localize("#LOC_BDArmory_AIWindow_PID"), showSection[Section.PID] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"PiD"
+
+                                line += 1.2f;
+                                showSection[Section.Speed] = GUI.Toggle(SubsectionRect(line), showSection[Section.Speed], StringUtils.Localize("#LOC_BDArmory_AIWindow_Speeds"), showSection[Section.Speed] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Speed"
+
+                                line += 1.2f;
+                                showSection[Section.Control] = GUI.Toggle(SubsectionRect(line), showSection[Section.Control], StringUtils.Localize("#LOC_BDArmory_AIWindow_Control"), showSection[Section.Control] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Control"
+
+                                line += 1.2f;
+                                showSection[Section.Combat] = GUI.Toggle(SubsectionRect(line), showSection[Section.Combat], StringUtils.Localize("#LOC_BDArmory_AIWindow_Combat"), showSection[Section.Combat] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Combat"
+
+                                line += 1.5f;
+                                if (showSection[Section.UpToEleven] != (AI.UpToEleven = GUI.Toggle(SubsectionRect(line), AI.UpToEleven,
+                                    AI.UpToEleven ? StringUtils.Localize("#LOC_BDArmory_AI_UnclampTuning_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_UnclampTuning_disabledText"),
+                                    AI.UpToEleven ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))//"Misc"
+                                {
+                                    SetInputFields(activeAIType);
+                                }
+
+                                minHeight = contentTop + (line + 1f) * entryHeight + _windowMargin;
+                            }
+
+                            { // Controls panel
+                                scrollViewVectors[AIType.SurfaceAI] = GUI.BeginScrollView(
+                                    new Rect(contentMargin + 100, contentTop + entryHeight * 1.5f, (ColumnWidth * 2) - 100 - contentMargin, WindowHeight - entryHeight * 1.5f - 2 * contentTop),
+                                    scrollViewVectors.GetValueOrDefault(AIType.SurfaceAI),
+                                    new Rect(0, 0, ColumnWidth * 2 - 120 - contentMargin * 2, height + contentTop)
+                                );
+
+                                GUI.BeginGroup(new Rect(contentMargin, 0, ColumnWidth * 2 - 120 - contentMargin * 2, height + 2 * contentBorder), GUIContent.none, BDArmorySetup.BDGuiSkin.box); //darker box
+
+                                contentWidth -= 24 + contentBorder;
+
+                                { // Vehicle Type
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.VehicleType);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(line), StringUtils.Localize("#LOC_BDArmory_AIWindow_VehicleType") + $": {AI.SurfaceTypeName}", Label);
+                                    if (Drivertype != (Drivertype = Mathf.RoundToInt(GUI.HorizontalSlider(SettingSliderRect(line++, contentWidth), Drivertype, 0, VehicleMovementTypes.Length - 1))))
+                                    {
+                                        AI.SurfaceTypeName = VehicleMovementTypes[Drivertype].ToString();
+                                        AI.ChooseOptionsUpdated(null, null);
+                                    }
                                     if (contextTipsEnabled)
                                     {
-                                        GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMin"), Label);//"dynamic damp min"
-                                        dynPidLines++;
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_VehicleType_Context"), contextLabel);
                                     }
-                                    if (!NumFieldsEnabled)
-                                    {
-                                        if (ActivePilot.DynamicDampingMax != (ActivePilot.DynamicDampingMax = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.DynamicDampingMax, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                            ActivePilot.DynamicDampingMax = BDAMath.RoundToUnit(ActivePilot.DynamicDampingMax, 0.1f);
-                                    }
-                                    else
-                                    {
-                                        var field = inputFields["DynamicDampingMax"];
-                                        field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                        ActivePilot.DynamicDampingMax = (float)field.currentValue;
-                                    }
-                                    GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingMax") + ": " + ActivePilot.DynamicDampingMax.ToString("0.0"), Label);//"dynamic damping max"
 
-                                    dynPidLines++;
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.VehicleType] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
+                                }
+
+                                if (AI.SurfaceType != AIUtils.VehicleMovementType.Stationary)
+                                {
+                                    if (showSection[Section.PID])
+                                    {
+                                        float line = 0.2f;
+                                        var sectionHeight = sectionHeights.GetValueOrDefault(Section.PID);
+                                        GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                        line += 0.25f;
+
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerMult, nameof(AI.steerMult), "SteerPower", $"{AI.steerMult:0.0}", true);
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerDamping, nameof(AI.steerDamping), "SteerDamping", $"{AI.steerDamping:0.0}", true);
+
+                                        GUI.EndGroup();
+                                        sectionHeights[Section.PID] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                        line += 0.1f;
+                                        contentHeight += line * entryHeight;
+                                    }
+                                    if (showSection[Section.Speed])
+                                    {
+                                        float line = 0.2f;
+                                        var sectionHeight = sectionHeights.GetValueOrDefault(Section.Speed);
+                                        GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                        line += 0.25f;
+
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.CruiseSpeed, nameof(AI.CruiseSpeed), "CruiseSpeed", $"{AI.CruiseSpeed:0}m/s");
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MaxSpeed, nameof(AI.MaxSpeed), "MaxSpeed", $"{AI.MaxSpeed:0}m/s");
+
+                                        GUI.EndGroup();
+                                        sectionHeights[Section.Speed] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                        line += 0.1f;
+                                        contentHeight += line * entryHeight;
+                                    }
+                                    if (showSection[Section.Control])
+                                    {
+                                        float line = 0.2f;
+                                        var sectionHeight = sectionHeights.GetValueOrDefault(Section.Control);
+                                        GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                        line += 0.25f;
+
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MaxSlopeAngle, nameof(AI.MaxSlopeAngle), "MaxSlopeAngle", $"{AI.MaxSlopeAngle:0}°");
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MaxDrift, nameof(AI.MaxDrift), "MaxDrift", $"{AI.MaxDrift:0}°");
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.TargetPitch, nameof(AI.TargetPitch), "TargetPitch", $"{AI.TargetPitch:0.0}°");
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.BankAngle, nameof(AI.BankAngle), "BankAngle", $"{AI.BankAngle:0}°");
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.AvoidMass, nameof(AI.AvoidMass), "MinObstacleMass", $"{AI.AvoidMass:0}t");
+
+                                        if (broadsideDir != (broadsideDir = Mathf.RoundToInt(GUI.HorizontalSlider(SettingSliderRect(line, contentWidth), broadsideDir, 0, AI.orbitDirections.Length - 1))))
+                                        {
+                                            AI.SetBroadsideDirection(AI.orbitDirections[broadsideDir]);
+                                            AI.ChooseOptionsUpdated(null, null);
+                                        }
+                                        GUI.Label(SettinglabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PreferredBroadsideDirection") + $": {AI.OrbitDirectionName}", Label);
+                                        if (contextTipsEnabled)
+                                        {
+                                            GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PreferredBroadsideDirection_Context"), contextLabel);
+                                        }
+
+                                        AI.ManeuverRCS = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.ManeuverRCS,
+                                            StringUtils.Localize("#LOC_BDArmory_AIWindow_ManeuverRCS") + " : " + (AI.ManeuverRCS ? StringUtils.Localize("#LOC_BDArmory_AI_ManeuverRCS_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_ManeuverRCS_disabledText")),
+                                            AI.ManeuverRCS ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                        line += 1.25f;
+                                        if (contextTipsEnabled)
+                                        {
+                                            GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_ManeuverRCS_Context"), contextLabel);
+                                        }
+
+                                        GUI.EndGroup();
+                                        sectionHeights[Section.Control] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                        line += 0.1f;
+                                        contentHeight += line * entryHeight;
+                                    }
+                                }
+                                if (showSection[Section.Combat])
+                                {
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Combat);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MinEngagementRange, nameof(AI.MinEngagementRange), "MinEngagementRange", $"{AI.MinEngagementRange:0}m");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MaxEngagementRange, nameof(AI.MaxEngagementRange), "MaxEngagementRange", $"{AI.MaxEngagementRange:0}m");
+                                    if (AI.SurfaceType == AIUtils.VehicleMovementType.Submarine)
+                                    { line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.CombatAltitude, nameof(AI.CombatAltitude), "CombatAltitude", $"{AI.CombatAltitude:0}m"); }
+                                    if (AI.SurfaceType != AIUtils.VehicleMovementType.Stationary)
+                                    {
+                                        line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.WeaveFactor, nameof(AI.WeaveFactor), "WeaveFactor", $"{AI.WeaveFactor:0.0}");
+                                        if (AI.SurfaceType == AIUtils.VehicleMovementType.Land)
+                                        {
+                                            AI.maintainMinRange = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.maintainMinRange,
+                                                StringUtils.Localize("#LOC_BDArmory_AIWindow_MaintainEngagementRange") + " : " + (AI.maintainMinRange ? StringUtils.Localize("#LOC_BDArmory_true") : StringUtils.Localize("#LOC_BDArmory_false")),
+                                                AI.maintainMinRange ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Maintain Min range"
+                                            line += 1.25f;
+                                            if (contextTipsEnabled)
+                                            {
+                                                GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_MaintainEngagementRange_Context"), contextLabel);
+                                            }
+                                        }
+
+                                        AI.BroadsideAttack = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.BroadsideAttack,
+                                            StringUtils.Localize("#LOC_BDArmory_AIWindow_BroadsideAttack") + " : " + (AI.BroadsideAttack ? StringUtils.Localize("#LOC_BDArmory_AI_BroadsideAttack_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_BroadsideAttack_disabledText")),
+                                            AI.BroadsideAttack ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//Broadside Attack"
+                                        line += 1.25f;
+                                        if (contextTipsEnabled)
+                                        {
+                                            GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_BroadsideAttack_Context"), contextLabel);
+                                        }
+                                    }
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Combat] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
+                                }
+
+                                GUI.EndGroup();
+                                GUI.EndScrollView();
+                            }
+
+                            if (infoLinkEnabled)
+                            {
+                                windowColumns = 3;
+
+                                GUI.Label(new Rect(contentMargin + ColumnWidth * 2, contentTop, ColumnWidth - contentMargin, entryHeight), StringUtils.Localize("#LOC_BDArmory_AIWindow_infoLink"), Title);//"infolink"
+                                BeginArea(new Rect(contentMargin + ColumnWidth * 2, contentTop + entryHeight * 1.5f, ColumnWidth - contentMargin, WindowHeight - entryHeight * 1.5f - 2 * contentTop));
+                                using (var scrollViewScope = new ScrollViewScope(scrollInfoVector, Width(ColumnWidth - contentMargin), Height(WindowHeight - entryHeight * 1.5f - 2 * contentTop)))
+                                {
+                                    scrollInfoVector = scrollViewScope.scrollPosition;
+
+                                    GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Type"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //Pid desc
+                                    if (AI.SurfaceType != AIUtils.VehicleMovementType.Stationary)
+                                    {
+                                        if (showSection[Section.PID])
+                                        {
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_SteerPower"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //steer mult desc
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_SteerDamping"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //steer damp desc
+                                        }
+                                        if (showSection[Section.Speed])
+                                        {
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Speeds"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //cruise, flank speed desc
+                                        }
+                                        if (showSection[Section.Control])
+                                        {
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Slopes"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //tgt pitch, slope angle desc
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Drift"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //drift angle desc
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Bank"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //bank angle desc
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_AvoidMass"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //avoid mass desc
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Orientation"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //attack vector, broadside desc
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_RCS"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //RCS desc
+                                        }
+                                    }
+                                    if (showSection[Section.Combat])
+                                    {
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Engagement"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //engage ranges desc
+                                        if (AI.SurfaceType == AIUtils.VehicleMovementType.Submarine)
+                                        {
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Altitude"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //sub cruise/combat depth
+                                        }
+                                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_Weave"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //weave factor desc
+                                        if (AI.SurfaceType == AIUtils.VehicleMovementType.Land)
+                                        {
+                                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Surface_MaintainMinRange"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); //maintain min range desc
+                                        }
+                                    }
+                                }
+                                EndArea();
+                            }
+                        }
+                        break;
+                    case AIType.VTOLAI:
+                        {
+                            var AI = ActiveAI as BDModuleVTOLAI;
+                            if (AI == null) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: AI module mismatch!"); activeAIType = AIType.None; break; }
+
+                            if (AISelectionComboBox == null || !AISelectionComboBox.IsOpen)
+                            { // Section buttons
+                                float line = 1.5f;
+                                showSection[Section.PID] = GUI.Toggle(SubsectionRect(line), showSection[Section.PID], StringUtils.Localize("#LOC_BDArmory_AIWindow_PID"), showSection[Section.PID] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"PiD"
+
+                                line += 1.2f;
+                                showSection[Section.Altitude] = GUI.Toggle(SubsectionRect(line), showSection[Section.Altitude], StringUtils.Localize("#LOC_BDArmory_AIWindow_Altitudes"), showSection[Section.Altitude] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Altitude"
+
+                                line += 1.2f;
+                                showSection[Section.Speed] = GUI.Toggle(SubsectionRect(line), showSection[Section.Speed], StringUtils.Localize("#LOC_BDArmory_AIWindow_Speeds"), showSection[Section.Speed] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Speed"
+
+                                line += 1.2f;
+                                showSection[Section.Control] = GUI.Toggle(SubsectionRect(line), showSection[Section.Control], StringUtils.Localize("#LOC_BDArmory_AIWindow_Control"), showSection[Section.Control] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Control"
+
+                                line += 1.2f;
+                                showSection[Section.Combat] = GUI.Toggle(SubsectionRect(line), showSection[Section.Combat], StringUtils.Localize("#LOC_BDArmory_AIWindow_Combat"), showSection[Section.Combat] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Combat"
+
+                                line += 1.5f;
+                                if (showSection[Section.UpToEleven] != (AI.UpToEleven = GUI.Toggle(SubsectionRect(line), AI.UpToEleven,
+                                    AI.UpToEleven ? StringUtils.Localize("#LOC_BDArmory_AI_UnclampTuning_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_UnclampTuning_disabledText"),
+                                    AI.UpToEleven ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button)))//"Misc"
+                                {
+                                    SetInputFields(activeAIType);
+                                }
+
+                                minHeight = contentTop + (line + 1f) * entryHeight + _windowMargin;
+                            }
+
+                            if (showSection[Section.PID] || showSection[Section.Altitude] || showSection[Section.Speed] || showSection[Section.Control] || showSection[Section.Combat]) // Controls panel
+                            {
+                                scrollViewVectors[AIType.VTOLAI] = GUI.BeginScrollView(
+                                    new Rect(contentMargin + 100, contentTop + entryHeight * 1.5f, (ColumnWidth * 2) - 100 - contentMargin, WindowHeight - entryHeight * 1.5f - 2 * contentTop),
+                                    scrollViewVectors.GetValueOrDefault(AIType.VTOLAI),
+                                    new Rect(0, 0, ColumnWidth * 2 - 120 - contentMargin * 2, height + contentTop)
+                                );
+
+                                GUI.BeginGroup(new Rect(contentMargin, 0, ColumnWidth * 2 - 120 - contentMargin * 2, height + 2 * contentBorder), GUIContent.none, BDArmorySetup.BDGuiSkin.box); //darker box
+
+                                contentWidth -= 24 + contentBorder;
+
+                                if (showSection[Section.PID])
+                                {
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.PID);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerMult, nameof(AI.steerMult), "SteerPower", $"{AI.steerMult:0.0}", true);
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerKiAdjust, nameof(AI.steerKiAdjust), "SteerKi", $"{AI.steerKiAdjust:0.00}", true);
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerDamping, nameof(AI.steerDamping), "SteerDamping", $"{AI.steerDamping:0.0}", true);
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.PID] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
+                                }
+                                if (showSection[Section.Altitude])
+                                {
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Altitude);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.defaultAltitude, nameof(AI.defaultAltitude), "DefaultAltitude", $"{AI.defaultAltitude:0}m");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.CombatAltitude, nameof(AI.CombatAltitude), "CombatAltitude", $"{AI.CombatAltitude:0}m");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.bombingAltitude, nameof(AI.bombingAltitude), "BombingAltitude", $"{AI.bombingAltitude:0}m");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.minAltitude, nameof(AI.minAltitude), "MinAltitude", $"{AI.minAltitude:0}m");
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Altitude] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
+                                }
+                                if (showSection[Section.Speed])
+                                {
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Speed);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MaxSpeed, nameof(AI.MaxSpeed), "MaxSpeed", $"{AI.MaxSpeed:0}m/s");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.CombatSpeed, nameof(AI.CombatSpeed), "CombatSpeed", $"{AI.CombatSpeed:0}m/s");
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Speed] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
+                                }
+                                if (showSection[Section.Control])
+                                {
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Control);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MaxPitchAngle, nameof(AI.MaxPitchAngle), "MaxPitchAngle", $"{AI.MaxPitchAngle:0}°");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MaxBankAngle, nameof(AI.MaxBankAngle), "MaxBankAngle", $"{AI.MaxBankAngle:0}°");
+
+                                    GUI.Label(SettinglabelRect(line), StringUtils.Localize("#LOC_BDArmory_AIWindow_PreferredBroadsideDirection") + ": " + AI.OrbitDirectionName, Label);
+                                    if (broadsideDir != (broadsideDir = Mathf.RoundToInt(GUI.HorizontalSlider(SettingSliderRect(line++, contentWidth), broadsideDir, 0, AI.orbitDirections.Length - 1))))
+                                    {
+                                        AI.SetBroadsideDirection(AI.orbitDirections[broadsideDir]);
+                                        AI.ChooseOptionsUpdated(null, null);
+                                    }
                                     if (contextTipsEnabled)
                                     {
-                                        GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMax"), Label);//"dynamic damp max"
-                                        dynPidLines++;
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PreferredBroadsideDirection_Context"), contextLabel);
                                     }
-                                    if (!NumFieldsEnabled)
-                                    {
-                                        if (ActivePilot.dynamicSteerDampingFactor != (ActivePilot.dynamicSteerDampingFactor = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.dynamicSteerDampingFactor, 0.1f, ActivePilot.UpToEleven ? 100 : 10)))
-                                            ActivePilot.dynamicSteerDampingFactor = BDAMath.RoundToUnit(ActivePilot.dynamicSteerDampingFactor, 0.1f);
-                                    }
-                                    else
-                                    {
-                                        var field = inputFields["dynamicSteerDampingFactor"];
-                                        field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                        ActivePilot.dynamicSteerDampingFactor = (float)field.currentValue;
-                                    }
-                                    GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMult") + ": " + ActivePilot.dynamicSteerDampingFactor.ToString("0.0"), Label);//"dynamic damping mult"
 
-                                    dynPidLines++;
+                                    AI.ManeuverRCS = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.ManeuverRCS,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_ManeuverRCS") + " : " + (AI.ManeuverRCS ? StringUtils.Localize("#LOC_BDArmory_AI_ManeuverRCS_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_ManeuverRCS_disabledText")),
+                                        AI.ManeuverRCS ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
                                     if (contextTipsEnabled)
                                     {
-                                        GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMult"), Label);//"dynamic damp mult"
-                                        dynPidLines++;
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_ManeuverRCS_Context"), contextLabel);
                                     }
-                                }
-                                else
-                                {
-                                    ActivePilot.dynamicDampingPitch = GUI.Toggle(ToggleButtonRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.dynamicDampingPitch, StringUtils.Localize("#LOC_BDArmory_DynamicDampingPitch"), ActivePilot.dynamicDampingPitch ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic damp pitch"
-                                    dynPidLines += 1.25f;
 
-                                    if (ActivePilot.dynamicDampingPitch)
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Control] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
+                                }
+                                if (showSection[Section.Combat])
+                                {
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Combat);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.WeaveFactor, nameof(AI.WeaveFactor), "WeaveFactor", $"{AI.WeaveFactor:0.0}");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MinEngagementRange, nameof(AI.MinEngagementRange), "MinEngagementRange", $"{AI.MinEngagementRange:0}m");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.MaxEngagementRange, nameof(AI.MaxEngagementRange), "MaxEngagementRange", $"{AI.MaxEngagementRange:0}m");
+
+                                    AI.BroadsideAttack = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.BroadsideAttack,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_BroadsideAttack") + " : " + (AI.BroadsideAttack ? StringUtils.Localize("#LOC_BDArmory_AI_BroadsideAttack_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_BroadsideAttack_disabledText")),
+                                        AI.BroadsideAttack ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
                                     {
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingPitch") + ": " + ActivePilot.dynSteerDampingPitchValue.ToString(), Label);//"dynamic damp pitch"
-                                        dynPidLines++;
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.DynamicDampingPitchMin != (ActivePilot.DynamicDampingPitchMin = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.DynamicDampingPitchMin, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                                ActivePilot.DynamicDampingPitchMin = BDAMath.RoundToUnit(ActivePilot.DynamicDampingPitchMin, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["DynamicDampingPitchMin"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.DynamicDampingPitchMin = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingPitchMin") + ": " + ActivePilot.DynamicDampingPitchMin.ToString("0.0"), Label);//"dynamic damping min"
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMin"), contextLabel);//"dynamic damp min"
-                                            dynPidLines++;
-                                        }
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.DynamicDampingPitchMax != (ActivePilot.DynamicDampingPitchMax = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.DynamicDampingPitchMax, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                                ActivePilot.DynamicDampingPitchMax = BDAMath.RoundToUnit(ActivePilot.DynamicDampingPitchMax, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["DynamicDampingPitchMax"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.DynamicDampingPitchMax = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingMax") + ": " + ActivePilot.DynamicDampingPitchMax.ToString("0.0"), Label);//"dynamic damping max"
-
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMax"), contextLabel);//"damp max"
-                                            dynPidLines++;
-                                        }
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.dynamicSteerDampingPitchFactor != (ActivePilot.dynamicSteerDampingPitchFactor = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.dynamicSteerDampingPitchFactor, 0.1f, ActivePilot.UpToEleven ? 100 : 10)))
-                                                ActivePilot.dynamicSteerDampingPitchFactor = BDAMath.RoundToUnit(ActivePilot.dynamicSteerDampingPitchFactor, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["dynamicSteerDampingPitchFactor"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.dynamicSteerDampingPitchFactor = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingPitchFactor") + ": " + ActivePilot.dynamicSteerDampingPitchFactor.ToString("0.0"), Label);//"dynamic damping mult"
-
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMult"), contextLabel);//"dynamic damp Mult"
-                                            dynPidLines++;
-                                        }
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_BroadsideAttack_Context"), contextLabel);
                                     }
 
-                                    ActivePilot.dynamicDampingYaw = GUI.Toggle(ToggleButtonRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.dynamicDampingYaw, StringUtils.Localize("#LOC_BDArmory_DynamicDampingYaw"), ActivePilot.dynamicDampingYaw ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic damp yaw"
-                                    dynPidLines += 1.25f;
-                                    if (ActivePilot.dynamicDampingYaw)
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Combat] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
+                                }
+
+                                GUI.EndGroup();
+                                GUI.EndScrollView();
+                            }
+
+                            if (infoLinkEnabled)
+                            {
+                                windowColumns = 3;
+
+                                GUI.Label(new Rect(contentMargin + ColumnWidth * 2, contentTop, ColumnWidth - contentMargin, entryHeight), StringUtils.Localize("#LOC_BDArmory_AIWindow_infoLink"), Title);//"infolink"
+                                BeginArea(new Rect(contentMargin + ColumnWidth * 2, contentTop + entryHeight * 1.5f, ColumnWidth - contentMargin, WindowHeight - entryHeight * 1.5f - 2 * contentTop));
+                                using (var scrollViewScope = new ScrollViewScope(scrollInfoVector, Width(ColumnWidth - contentMargin), Height(WindowHeight - entryHeight * 1.5f - 2 * contentTop)))
+                                {
+                                    scrollInfoVector = scrollViewScope.scrollPosition;
+
+                                    // FIXME
+                                    if (showSection[Section.PID]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_VTOL_PID"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                    if (showSection[Section.Altitude]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_VTOL_Altitudes"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                    if (showSection[Section.Speed]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_VTOL_Speeds"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                    if (showSection[Section.Control]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_VTOL_Control"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                    if (showSection[Section.Combat]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_VTOL_Combat"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                }
+                                EndArea();
+                            }
+                        }
+                        break;
+                    case AIType.OrbitalAI:
+                        {
+                            var AI = ActiveAI as BDModuleOrbitalAI;
+                            if (AI == null) { Debug.LogError($"[BDArmory.BDArmoryAIGUI]: AI module mismatch!"); activeAIType = AIType.None; break; }
+
+                            if (AISelectionComboBox == null || !AISelectionComboBox.IsOpen)
+                            { // Section buttons
+                                float line = 1.5f;
+                                showSection[Section.PID] = GUI.Toggle(SubsectionRect(line), showSection[Section.PID], StringUtils.Localize("#LOC_BDArmory_AIWindow_PID"), showSection[Section.PID] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"PiD"
+
+                                line += 1.2f;
+                                showSection[Section.Combat] = GUI.Toggle(SubsectionRect(line), showSection[Section.Combat], StringUtils.Localize("#LOC_BDArmory_AIWindow_Combat"), showSection[Section.Combat] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Combat"
+
+                                line += 1.2f;
+                                showSection[Section.Speed] = GUI.Toggle(SubsectionRect(line), showSection[Section.Speed], StringUtils.Localize("#LOC_BDArmory_AIWindow_Speeds"), showSection[Section.Speed] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Speed"
+
+                                line += 1.2f;
+                                showSection[Section.Control] = GUI.Toggle(SubsectionRect(line), showSection[Section.Control], StringUtils.Localize("#LOC_BDArmory_AIWindow_Control"), showSection[Section.Control] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Control"
+
+                                line += 1.2f;
+                                showSection[Section.Evasion] = GUI.Toggle(SubsectionRect(line), showSection[Section.Evasion], StringUtils.Localize("#LOC_BDArmory_AIWindow_EvadeExtend"), showSection[Section.Evasion] ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Evasion"
+
+                                minHeight = contentTop + (line + 1f) * entryHeight + _windowMargin;
+                            }
+
+                            if (showSection[Section.PID] || showSection[Section.Combat] || showSection[Section.Speed] || showSection[Section.Control] || showSection[Section.Evasion]) // Controls panel
+                            {
+                                scrollViewVectors[AIType.OrbitalAI] = GUI.BeginScrollView(
+                                    new Rect(contentMargin + 100, contentTop + entryHeight * 1.5f, (ColumnWidth * 2) - 100 - contentMargin, WindowHeight - entryHeight * 1.5f - 2 * contentTop),
+                                    scrollViewVectors.GetValueOrDefault(AIType.OrbitalAI),
+                                    new Rect(0, 0, ColumnWidth * 2 - 120 - contentMargin * 2, height + contentTop)
+                                );
+
+                                GUI.BeginGroup(new Rect(contentMargin, 0, ColumnWidth * 2 - 120 - contentMargin * 2, height + 2 * contentBorder), GUIContent.none, BDArmorySetup.BDGuiSkin.box); //darker box
+
+                                contentWidth -= 24 + contentBorder;
+
+                                if (showSection[Section.PID])
+                                {
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.PID);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    // PID Mode
+                                    GUI.Label(SettinglabelRect(line), StringUtils.Localize("#LOC_BDArmory_AIWindow_OrbitalPIDActive") + $": {AI.pidMode}", Label);
+                                    if (pidMode != (pidMode = Mathf.RoundToInt(GUI.HorizontalSlider(SettingSliderRect(line++, contentWidth), pidMode, 0, PIDModeTypes.Length - 1))))
                                     {
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingYaw") + ": " + ActivePilot.dynSteerDampingYawValue.ToString(), Label);//"dynamic damp yaw"
-                                        dynPidLines++;
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.DynamicDampingYawMin != (ActivePilot.DynamicDampingYawMin = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.DynamicDampingYawMin, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                                ActivePilot.DynamicDampingYawMin = BDAMath.RoundToUnit(ActivePilot.DynamicDampingYawMin, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["DynamicDampingYawMin"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.DynamicDampingYawMin = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingYawMin") + ": " + ActivePilot.DynamicDampingYawMin.ToString("0.0"), Label);//"dynamic damping min"
-
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMin"), contextLabel);//"dynamic damp min"
-                                            dynPidLines++;
-                                        }
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.DynamicDampingYawMax != (ActivePilot.DynamicDampingYawMax = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.DynamicDampingYawMax, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                                ActivePilot.DynamicDampingYawMax = BDAMath.RoundToUnit(ActivePilot.DynamicDampingYawMax, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["DynamicDampingYawMax"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.DynamicDampingYawMax = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingYawMax") + ": " + ActivePilot.DynamicDampingYawMax.ToString("0.0"), Label);//"dynamic damping max"
-
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMax"), contextLabel);//"dynamic damp max"
-                                            dynPidLines++;
-                                        }
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.dynamicSteerDampingYawFactor != (ActivePilot.dynamicSteerDampingYawFactor = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.dynamicSteerDampingYawFactor, 0.1f, ActivePilot.UpToEleven ? 100 : 10)))
-                                                ActivePilot.dynamicSteerDampingYawFactor = BDAMath.RoundToUnit(ActivePilot.dynamicSteerDampingYawFactor, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["dynamicSteerDampingYawFactor"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.dynamicSteerDampingYawFactor = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingYawFactor") + ": " + ActivePilot.dynamicSteerDampingYawFactor.ToString("0.0"), Label);//"dynamic damping yaw mult"
-
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMult"), contextLabel);//"dynamic damp mult"
-                                            dynPidLines++;
-                                        }
+                                        AI.pidMode = PIDModeTypes[pidMode].ToString();
+                                        AI.ChooseOptionsUpdated(null, null);
                                     }
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerMult, nameof(AI.steerMult), "SteerPower", $"{AI.steerMult:0.0}", true);
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerKiAdjust, nameof(AI.steerKiAdjust), "SteerKi", $"{AI.steerKiAdjust:0.00}", true);
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerDamping, nameof(AI.steerDamping), "SteerDamping", $"{AI.steerDamping:0.0}", true);
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.steerMaxError, nameof(AI.steerMaxError), "SteerMaxError", $"{AI.steerMaxError:0.0}", true);
 
-                                    ActivePilot.dynamicDampingRoll = GUI.Toggle(ToggleButtonRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.dynamicDampingRoll, StringUtils.Localize("#LOC_BDArmory_DynamicDampingRoll"), ActivePilot.dynamicDampingRoll ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic damp roll"
-                                    dynPidLines += 1.25f;
-                                    if (ActivePilot.dynamicDampingRoll)
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.PID] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
+                                }
+                                if (showSection[Section.Combat])
+                                {
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Combat);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    AI.BroadsideAttack = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.BroadsideAttack,
+                                    StringUtils.Localize("#LOC_BDArmory_AIWindow_BroadsideAttack") + " : " + (AI.BroadsideAttack ? StringUtils.Localize("#LOC_BDArmory_AI_BroadsideAttack_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_BroadsideAttack_disabledText")),
+                                    AI.BroadsideAttack ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//Broadside Attack"
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
                                     {
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingRoll") + ": " + ActivePilot.dynSteerDampingRollValue.ToString(), Label);//"dynamic damp roll"
-                                        dynPidLines++;
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.DynamicDampingRollMin != (ActivePilot.DynamicDampingRollMin = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.DynamicDampingRollMin, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                                ActivePilot.DynamicDampingRollMin = BDAMath.RoundToUnit(ActivePilot.DynamicDampingRollMin, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["DynamicDampingRollMin"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.DynamicDampingRollMin = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingRollMin") + ": " + ActivePilot.DynamicDampingRollMin.ToString("0.0"), Label);//"dynamic damping min"
-
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMin"), contextLabel);//"dynamic damp min"
-                                            dynPidLines++;
-                                        }
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.DynamicDampingRollMax != (ActivePilot.DynamicDampingRollMax = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.DynamicDampingRollMax, 0.1f, ActivePilot.UpToEleven ? 100 : 8)))
-                                                ActivePilot.DynamicDampingRollMax = BDAMath.RoundToUnit(ActivePilot.DynamicDampingRollMax, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["DynamicDampingRollMax"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.DynamicDampingRollMax = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingRollMax") + ": " + ActivePilot.DynamicDampingRollMax.ToString("0.0"), Label);//"dynamic damping max"
-
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMax"), contextLabel);//"dynamic damp max"
-                                            dynPidLines++;
-                                        }
-                                        if (!NumFieldsEnabled)
-                                        {
-                                            if (ActivePilot.dynamicSteerDampingRollFactor != (ActivePilot.dynamicSteerDampingRollFactor = GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + dynPidLines, contentWidth), ActivePilot.dynamicSteerDampingRollFactor, 0.1f, ActivePilot.UpToEleven ? 100 : 10)))
-                                                ActivePilot.dynamicSteerDampingRollFactor = BDAMath.RoundToUnit(ActivePilot.dynamicSteerDampingRollFactor, 0.1f);
-                                        }
-                                        else
-                                        {
-                                            var field = inputFields["dynamicSteerDampingRollFactor"];
-                                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + dynPidLines, contentWidth), field.possibleValue, 8, field.style));
-                                            ActivePilot.dynamicSteerDampingRollFactor = (float)field.currentValue;
-                                        }
-                                        GUI.Label(SettinglabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_DynamicDampingRollFactor") + ": " + ActivePilot.dynamicSteerDampingRollFactor.ToString("0.0"), Label);//"dynamic damping roll mult"
-                                        dynPidLines++;
-                                        if (contextTipsEnabled)
-                                        {
-                                            GUI.Label(ContextLabelRect(leftIndent, pidLines + dynPidLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMult"), contextLabel);//"dynamic damp mult"
-                                            dynPidLines++;
-                                        }
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_BroadsideAttack_Context"), contextLabel);
                                     }
-                                }
-                                pidLines += dynPidLines;
-                            }
 
-                            #region AutoTune
-                            if (ActivePilot.AutoTune != GUI.Toggle(ToggleButtonRect(leftIndent, pidLines, contentWidth), ActivePilot.AutoTune, StringUtils.Localize("#LOC_BDArmory_PIDAutoTune"), ActivePilot.AutoTune ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
-                            {
-                                ActivePilot.AutoTune = !ActivePilot.AutoTune; // Only actually toggle it when needed as the setter does extra stuff.
-                            }
-                            pidLines += 1.25f;
-                            if (ActivePilot.AutoTune) // Auto-tuning
-                            {
-                                float autoTuneLines = 0.25f;
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AutoTuningLoss") + $": {ActivePilot.autoTuningLossLabel}", Label);
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), $"\tParams: {ActivePilot.autoTuningLossLabel2}", Label);
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), $"\tField: {ActivePilot.autoTuningLossLabel3}", Label);
-
-                                if (!NumFieldsEnabled) ActivePilot.autoTuningOptionNumSamples = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + autoTuneLines, contentWidth), ActivePilot.autoTuningOptionNumSamples, 1f, 10f), 1f);
-                                else
-                                {
-                                    var field = inputFields["autoTuningOptionNumSamples"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + autoTuneLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.autoTuningOptionNumSamples = (float)field.currentValue;
-                                }
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningNumSamples") + $": {ActivePilot.autoTuningOptionNumSamples}", Label);
-                                if (contextTipsEnabled)
-                                {
-                                    GUI.Label(ContextLabelRect(leftIndent, pidLines + autoTuneLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningNumSamplesMin"), Label);
-                                    GUI.Label(ContextLabelRectRight(leftIndent, pidLines + autoTuneLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningNumSamplesMax"), rightLabel);
-                                    ++autoTuneLines;
-                                }
-
-                                if (!NumFieldsEnabled) ActivePilot.autoTuningOptionFastResponseRelevance = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + autoTuneLines, contentWidth), ActivePilot.autoTuningOptionFastResponseRelevance, 0f, 0.5f), 0.01f);
-                                else
-                                {
-                                    var field = inputFields["autoTuningOptionFastResponseRelevance"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + autoTuneLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.autoTuningOptionFastResponseRelevance = (float)field.currentValue;
-                                }
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFastResponseRelevance") + $": {ActivePilot.autoTuningOptionFastResponseRelevance:G3}", Label);
-                                if (contextTipsEnabled)
-                                {
-                                    GUI.Label(ContextLabelRect(leftIndent, pidLines + autoTuneLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFastResponseRelevanceMin"), Label);
-                                    GUI.Label(ContextLabelRectRight(leftIndent, pidLines + autoTuneLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFastResponseRelevanceMax"), rightLabel);
-                                    ++autoTuneLines;
-                                }
-
-                                if (!NumFieldsEnabled) ActivePilot.autoTuningOptionInitialLearningRate = Mathf.Pow(10f, BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + autoTuneLines, contentWidth), Mathf.Log10(ActivePilot.autoTuningOptionInitialLearningRate), -3f, 0f), 0.5f));
-                                else
-                                {
-                                    var field = inputFields["autoTuningOptionInitialLearningRate"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + autoTuneLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.autoTuningOptionInitialLearningRate = (float)field.currentValue;
-                                }
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningInitialLearningRate") + $": {ActivePilot.autoTuningOptionInitialLearningRate:G3}", Label);
-                                if (contextTipsEnabled)
-                                {
-                                    GUI.Label(ContextLabelRect(leftIndent, pidLines + autoTuneLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningInitialLearningRateContext"), Label);
-                                    ++autoTuneLines;
-                                }
-
-                                if (!NumFieldsEnabled) ActivePilot.autoTuningAltitude = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + autoTuneLines, contentWidth), ActivePilot.autoTuningAltitude, 50f, ActivePilot.UpToEleven ? 100000f : 5000f), 50f);
-                                else
-                                {
-                                    var field = inputFields["autoTuningAltitude"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + autoTuneLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.autoTuningAltitude = (float)field.currentValue;
-                                }
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningAltitude") + $": {ActivePilot.autoTuningAltitude}", Label);
-                                if (contextTipsEnabled)
-                                {
-                                    GUI.Label(ContextLabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningAltitudeContext"), Label);
-                                }
-
-                                if (!NumFieldsEnabled) ActivePilot.autoTuningSpeed = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + autoTuneLines, contentWidth), ActivePilot.autoTuningSpeed, 50f, ActivePilot.UpToEleven ? 3000f : 800f), 5f);
-                                else
-                                {
-                                    var field = inputFields["autoTuningSpeed"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + autoTuneLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.autoTuningSpeed = (float)field.currentValue;
-                                }
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningSpeed") + $": {ActivePilot.autoTuningSpeed}", Label);
-                                if (contextTipsEnabled)
-                                {
-                                    GUI.Label(ContextLabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningSpeedContext"), Label);
-                                }
-
-                                if (!NumFieldsEnabled) ActivePilot.autoTuningRecenteringDistance = Mathf.Round(GUI.HorizontalSlider(SettingSliderRect(leftIndent, pidLines + autoTuneLines, contentWidth), ActivePilot.autoTuningRecenteringDistance, 5f, 100f));
-                                else
-                                {
-                                    var field = inputFields["autoTuningRecenteringDistance"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, pidLines + autoTuneLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.autoTuningRecenteringDistance = (float)field.currentValue;
-                                }
-                                GUI.Label(SettinglabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningRecenteringDistance") + $": {ActivePilot.autoTuningRecenteringDistance}km", Label);
-                                if (contextTipsEnabled)
-                                {
-                                    GUI.Label(ContextLabelRect(leftIndent, pidLines + autoTuneLines++), StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningRecenteringDistanceContext"), Label);
-                                }
-
-                                fixedAutoTuneFields = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 0, 2, contentWidth), fixedAutoTuneFields, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningFixedFields"), fixedAutoTuneFields ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
-
-                                ActivePilot.autoTuningOptionClampMaximums = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 1, 2, contentWidth), ActivePilot.autoTuningOptionClampMaximums, StringUtils.Localize("#LOC_BDArmory_AIWindow_PIDAutoTuningClampMaximums"), ActivePilot.autoTuningOptionClampMaximums ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
-                                ++autoTuneLines;
-
-                                if (fixedAutoTuneFields)
-                                {
-                                    bool resetGradient = false;
-                                    if (!ActivePilot.dynamicSteerDamping)
+                                    GUI.Label(SettinglabelRect(line), StringUtils.Localize("#LOC_BDArmory_AIWindow_RollMode") + $": {AI.rollTowards}", Label);
+                                    if (rollTowards != (rollTowards = Mathf.RoundToInt(GUI.HorizontalSlider(SettingSliderRect(line++, contentWidth), rollTowards, 0, RollModeTypes.Length - 1))))
                                     {
-                                        if (ActivePilot.autoTuningOptionFixedP != (ActivePilot.autoTuningOptionFixedP = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 0, 3, contentWidth), ActivePilot.autoTuningOptionFixedP, StringUtils.Localize("P"), ActivePilot.autoTuningOptionFixedP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedI != (ActivePilot.autoTuningOptionFixedI = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 1, 3, contentWidth), ActivePilot.autoTuningOptionFixedI, StringUtils.Localize("I"), ActivePilot.autoTuningOptionFixedI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedD != (ActivePilot.autoTuningOptionFixedD = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 2, 3, contentWidth), ActivePilot.autoTuningOptionFixedD, StringUtils.Localize("D"), ActivePilot.autoTuningOptionFixedD ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
+                                        AI.rollTowards = RollModeTypes[rollTowards].ToString();
+                                        AI.ChooseOptionsUpdated(null, null);
                                     }
-                                    else if (!ActivePilot.CustomDynamicAxisFields)
+
+                                    var oldMinEngagementRange = AI.MinEngagementRange;
+                                    line = ContentEntry(ContentType.SemiLogSlider, line, contentWidth, ref AI.MinEngagementRange, nameof(AI.MinEngagementRange), "MinEngagementRange", $"{AI.MinEngagementRange:0}m");
+                                    if (AI.MinEngagementRange != oldMinEngagementRange)
                                     {
-                                        if (ActivePilot.autoTuningOptionFixedP != (ActivePilot.autoTuningOptionFixedP = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 0, 5, contentWidth), ActivePilot.autoTuningOptionFixedP, StringUtils.Localize("P"), ActivePilot.autoTuningOptionFixedP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedI != (ActivePilot.autoTuningOptionFixedI = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 1, 5, contentWidth), ActivePilot.autoTuningOptionFixedI, StringUtils.Localize("I"), ActivePilot.autoTuningOptionFixedI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDOff != (ActivePilot.autoTuningOptionFixedDOff = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 2, 5, contentWidth), ActivePilot.autoTuningOptionFixedDOff, StringUtils.Localize("DOff"), ActivePilot.autoTuningOptionFixedDOff ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDOn != (ActivePilot.autoTuningOptionFixedDOn = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 3, 5, contentWidth), ActivePilot.autoTuningOptionFixedDOn, StringUtils.Localize("DOn"), ActivePilot.autoTuningOptionFixedDOn ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDF != (ActivePilot.autoTuningOptionFixedDF = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 4, 5, contentWidth), ActivePilot.autoTuningOptionFixedDF, StringUtils.Localize("DF"), ActivePilot.autoTuningOptionFixedDF ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
+                                        AI.OnMinUpdated(null, null);
+                                        var field = inputFields["ForceFiringRange"];
+                                        field.SetCurrentValue(AI.ForceFiringRange);
                                     }
-                                    else
+
+                                    var oldForceFiringRange = AI.ForceFiringRange;
+                                    line = ContentEntry(ContentType.SemiLogSlider, line, contentWidth, ref AI.ForceFiringRange, nameof(AI.ForceFiringRange), "ForceFiringRange", $"{AI.ForceFiringRange:0}m");
+                                    if (AI.ForceFiringRange != oldForceFiringRange)
                                     {
-                                        if (ActivePilot.autoTuningOptionFixedP != (ActivePilot.autoTuningOptionFixedP = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 0, 11, contentWidth), ActivePilot.autoTuningOptionFixedP, StringUtils.Localize("P"), ActivePilot.autoTuningOptionFixedP ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedI != (ActivePilot.autoTuningOptionFixedI = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 1, 11, contentWidth), ActivePilot.autoTuningOptionFixedI, StringUtils.Localize("I"), ActivePilot.autoTuningOptionFixedI ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDPOff != (ActivePilot.autoTuningOptionFixedDPOff = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 2, 11, contentWidth), ActivePilot.autoTuningOptionFixedDPOff, StringUtils.Localize("DPOff"), ActivePilot.autoTuningOptionFixedDPOff ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDPOn != (ActivePilot.autoTuningOptionFixedDPOn = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 3, 11, contentWidth), ActivePilot.autoTuningOptionFixedDPOn, StringUtils.Localize("DPOn"), ActivePilot.autoTuningOptionFixedDPOn ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDPF != (ActivePilot.autoTuningOptionFixedDPF = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 4, 11, contentWidth), ActivePilot.autoTuningOptionFixedDPF, StringUtils.Localize("DPF"), ActivePilot.autoTuningOptionFixedDPF ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDYOff != (ActivePilot.autoTuningOptionFixedDYOff = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 5, 11, contentWidth), ActivePilot.autoTuningOptionFixedDYOff, StringUtils.Localize("DYOff"), ActivePilot.autoTuningOptionFixedDYOff ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDYOn != (ActivePilot.autoTuningOptionFixedDYOn = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 6, 11, contentWidth), ActivePilot.autoTuningOptionFixedDYOn, StringUtils.Localize("DYOn"), ActivePilot.autoTuningOptionFixedDYOn ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDYF != (ActivePilot.autoTuningOptionFixedDYF = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 7, 11, contentWidth), ActivePilot.autoTuningOptionFixedDYF, StringUtils.Localize("DYF"), ActivePilot.autoTuningOptionFixedDYF ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDROff != (ActivePilot.autoTuningOptionFixedDROff = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 8, 11, contentWidth), ActivePilot.autoTuningOptionFixedDROff, StringUtils.Localize("DROff"), ActivePilot.autoTuningOptionFixedDROff ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDROn != (ActivePilot.autoTuningOptionFixedDROn = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 9, 11, contentWidth), ActivePilot.autoTuningOptionFixedDROn, StringUtils.Localize("DROn"), ActivePilot.autoTuningOptionFixedDROn ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
-                                        if (ActivePilot.autoTuningOptionFixedDRF != (ActivePilot.autoTuningOptionFixedDRF = GUI.Toggle(ToggleButtonRects(leftIndent, pidLines + autoTuneLines, 10, 11, contentWidth), ActivePilot.autoTuningOptionFixedDRF, StringUtils.Localize("DRF"), ActivePilot.autoTuningOptionFixedDRF ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))) resetGradient = true;
+                                        AI.OnMaxUpdated(null, null);
+                                        var field = inputFields["MinEngagementRange"];
+                                        field.SetCurrentValue(AI.MinEngagementRange);
                                     }
-                                    if (resetGradient && HighLogic.LoadedSceneIsFlight) ActivePilot.pidAutoTuning.ResetGradient();
-                                    ++autoTuneLines;
+
+                                    AI.allowRamming = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.allowRamming,
+                                        StringUtils.Localize("#LOC_BDArmory_AI_AllowRamming"), AI.allowRamming ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Allow Ramming"
+                                    line += 1.25f;
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Combat] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
                                 }
-
-                                pidLines += autoTuneLines + 0.25f;
-                            }
-                            #endregion
-
-                            GUI.EndGroup();
-                            pidHeight = Mathf.Lerp(pidHeight, pidLines, 0.15f);
-                            pidLines += 0.1f;
-
-                        }
-
-                        if (showAltitude)
-                        {
-                            altLines += 0.2f;
-                            GUI.BeginGroup(
-                                new Rect(0, ((pidLines + altLines) * entryHeight), contentWidth, altitudeHeight * entryHeight),
-                                GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                            altLines += 0.25f;
-
-                            GUI.Label(SettinglabelRect(leftIndent, altLines), StringUtils.Localize("#LOC_BDArmory_PilotAI_Altitudes"), BoldLabel);//"Altitudes"
-                            altLines++;
-                            var oldDefaultAlt = ActivePilot.defaultAltitude;
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.defaultAltitude =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, altLines, contentWidth),
-                                        ActivePilot.defaultAltitude, 100, ActivePilot.UpToEleven ? 100000 : 15000);
-                                ActivePilot.defaultAltitude = Mathf.Round(ActivePilot.defaultAltitude / 50) * 50;
-                            }
-                            else
-                            {
-                                var field = inputFields["defaultAltitude"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, altLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.defaultAltitude = (float)field.currentValue;
-                            }
-                            if (ActivePilot.defaultAltitude != oldDefaultAlt)
-                            {
-                                ActivePilot.ClampFields("defaultAltitude");
-                                inputFields["minAltitude"].SetCurrentValue(ActivePilot.minAltitude);
-                                inputFields["maxAltitude"].SetCurrentValue(ActivePilot.maxAltitude);
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, altLines), StringUtils.Localize("#LOC_BDArmory_DefaultAltitude") + ": " + ActivePilot.defaultAltitude.ToString("0"), Label);//"default altitude"
-                            altLines++;
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, altLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DefAlt"), contextLabel);//"defalult alt"
-                                altLines++;
-                            }
-                            var oldMinAlt = ActivePilot.minAltitude;
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.minAltitude =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, altLines, contentWidth),
-                                        ActivePilot.minAltitude, 25, ActivePilot.UpToEleven ? 60000 : 6000);
-                                ActivePilot.minAltitude = Mathf.Round(ActivePilot.minAltitude / 10) * 10;
-                            }
-                            else
-                            {
-                                var field = inputFields["minAltitude"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, altLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.minAltitude = (float)field.currentValue;
-                            }
-                            if (ActivePilot.minAltitude != oldMinAlt)
-                            {
-                                ActivePilot.ClampFields("minAltitude");
-                                inputFields["defaultAltitude"].SetCurrentValue(ActivePilot.defaultAltitude);
-                                inputFields["maxAltitude"].SetCurrentValue(ActivePilot.maxAltitude);
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, altLines), StringUtils.Localize("#LOC_BDArmory_MinAltitude") + ": " + ActivePilot.minAltitude.ToString("0"), Label);//"min altitude"
-                            altLines++;
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, altLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_MinAlt"), contextLabel);//"min alt"
-                                altLines++;
-                            }
-
-                            ActivePilot.hardMinAltitude = GUI.Toggle(ToggleButtonRects(leftIndent, altLines, 0, 2, contentWidth), ActivePilot.hardMinAltitude,
-                                StringUtils.Localize("#LOC_BDArmory_HardMinAltitude"), ActivePilot.hardMinAltitude ? BDArmorySetup.SelectedButtonStyle : BDArmorySetup.ButtonStyle);//"Hard Min Altitude"
-                            ActivePilot.maxAltitudeToggle = GUI.Toggle(ToggleButtonRects(leftIndent, altLines, 1, 2, contentWidth), ActivePilot.maxAltitudeToggle,
-                                StringUtils.Localize("#LOC_BDArmory_MaxAltitude"), ActivePilot.maxAltitudeToggle ? BDArmorySetup.SelectedButtonStyle : BDArmorySetup.ButtonStyle);//"max altitude AGL"
-                            altLines += 1.25f;
-
-                            if (ActivePilot.maxAltitudeToggle)
-                            {
-                                var oldMaxAlt = ActivePilot.maxAltitude;
-                                if (!NumFieldsEnabled)
+                                if (showSection[Section.Speed])
                                 {
-                                    ActivePilot.maxAltitude =
-                                        GUI.HorizontalSlider(SettingSliderRect(leftIndent, altLines, contentWidth),
-                                            ActivePilot.maxAltitude, 100, ActivePilot.UpToEleven ? 100000 : 15000);
-                                    ActivePilot.maxAltitude = Mathf.Round(ActivePilot.maxAltitude / 100) * 100;
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Speed);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    var oldManeuverSpeed = AI.ManeuverSpeed;
+                                    line = ContentEntry(ContentType.SemiLogSlider, line, contentWidth, ref AI.ManeuverSpeed, nameof(AI.ManeuverSpeed), "ManeuverSpeed", $"{AI.ManeuverSpeed:0}m/s");
+                                    if (AI.ManeuverSpeed != oldManeuverSpeed)
+                                    {
+                                        AI.OnMaxUpdated(null, null);
+                                        var field = inputFields["FiringSpeed"];
+                                        field.SetCurrentValue(AI.firingSpeed);
+                                    }
+
+                                    var oldMinFiringSpeed = AI.minFiringSpeed;
+                                    line = ContentEntry(ContentType.SemiLogSlider, line, contentWidth, ref AI.minFiringSpeed, nameof(AI.minFiringSpeed), "minFiringSpeed", $"{AI.minFiringSpeed:0}m/s");
+                                    if (AI.minFiringSpeed != oldMinFiringSpeed)
+                                    {
+                                        AI.OnMinUpdated(null, null);
+                                        var field = inputFields["FiringSpeed"];
+                                        field.SetCurrentValue(AI.firingSpeed);
+                                    }
+
+                                    var oldFiringSpeed = AI.firingSpeed;
+                                    line = ContentEntry(ContentType.SemiLogSlider, line, contentWidth, ref AI.firingSpeed, nameof(AI.firingSpeed), "FiringSpeed", $"{AI.firingSpeed:0}m/s");
+                                    if (AI.firingSpeed != oldFiringSpeed)
+                                    {
+                                        AI.OnMaxUpdated(null, null);
+                                        var field = inputFields["minFiringSpeed"];
+                                        field.SetCurrentValue(AI.minFiringSpeed);
+
+                                        AI.OnMinUpdated(null, null);
+                                        var field2 = inputFields["ManeuverSpeed"];
+                                        field2.SetCurrentValue(AI.ManeuverSpeed);
+                                    }
+                                    line = ContentEntry(ContentType.SemiLogSlider, line, contentWidth, ref AI.firingAngularVelocityLimit, nameof(AI.firingAngularVelocityLimit), "FiringAngularVelocityLimit", $"{AI.firingAngularVelocityLimit:0}deg/s");
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Speed] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
                                 }
-                                else
+                                if (showSection[Section.Control])
                                 {
-                                    var field = inputFields["maxAltitude"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, altLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.maxAltitude = (float)field.currentValue;
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Control);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    AI.FiringRCS = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.FiringRCS,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_FiringRCS") + " : " + (AI.FiringRCS ? StringUtils.Localize("#LOC_BDArmory_AI_FiringRCS_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_FiringRCS_disabledText")),
+                                        AI.FiringRCS ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
+                                    {
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_FiringRCS_Context"), contextLabel);
+                                    }
+
+                                    AI.ManeuverRCS = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.ManeuverRCS,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_ManeuverRCS") + " : " + (AI.ManeuverRCS ? StringUtils.Localize("#LOC_BDArmory_AI_ManeuverRCS_enabledText") : StringUtils.Localize("#LOC_BDArmory_AI_ManeuverRCS_disabledText")),
+                                        AI.ManeuverRCS ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
+                                    {
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_ManeuverRCS_Context"), contextLabel);
+                                    }
+
+                                    AI.ReverseThrust = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.ReverseThrust,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_ReverseEngines") + " : " + (AI.ReverseThrust ? StringUtils.Localize("#LOC_BDArmory_Enabled") : StringUtils.Localize("#LOC_BDArmory_Disabled")),
+                                        AI.ReverseThrust ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
+                                    {
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_ReverseEngines_Context"), contextLabel);
+                                    }
+
+                                    AI.EngineRCSRotation = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.EngineRCSRotation,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_EngineRCSRotation") + " : " + (AI.EngineRCSRotation ? StringUtils.Localize("#LOC_BDArmory_Enabled") : StringUtils.Localize("#LOC_BDArmory_Disabled")),
+                                        AI.EngineRCSRotation ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
+                                    {
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_EngineRCSRotation_Context"), contextLabel);
+                                    }
+
+                                    AI.EngineRCSTranslation = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.EngineRCSTranslation,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_EngineRCSTranslation") + " : " + (AI.EngineRCSTranslation ? StringUtils.Localize("#LOC_BDArmory_Enabled") : StringUtils.Localize("#LOC_BDArmory_Disabled")),
+                                        AI.EngineRCSTranslation ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
+                                    {
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_EngineRCSTranslation_Context"), contextLabel);
+                                    }
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Control] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
                                 }
-                                if (ActivePilot.maxAltitude != oldMaxAlt)
+                                if (showSection[Section.Evasion])
                                 {
-                                    ActivePilot.ClampFields("maxAltitude");
-                                    inputFields["minAltitude"].SetCurrentValue(ActivePilot.minAltitude);
-                                    inputFields["defaultAltitude"].SetCurrentValue(ActivePilot.defaultAltitude);
+                                    float line = 0.2f;
+                                    var sectionHeight = sectionHeights.GetValueOrDefault(Section.Evasion);
+                                    GUI.BeginGroup(new Rect(contentBorder, contentHeight + line * entryHeight, contentWidth, sectionHeight * entryHeight), GUIContent.none, BDArmorySetup.BDGuiSkin.box);
+                                    line += 0.25f;
+
+                                    GUI.Label(SettinglabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Evade"), BoldLabel);
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.minEvasionTime, nameof(AI.minEvasionTime), "MinEvasionTime", $"{AI.minEvasionTime:0.00}s");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.evasionThreshold, nameof(AI.evasionThreshold), "EvasionThreshold", $"{AI.evasionThreshold:0}m");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.evasionTimeThreshold, nameof(AI.evasionTimeThreshold), "EvasionTimeThreshold", $"{AI.evasionTimeThreshold:0.0}s");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.evasionErraticness, nameof(AI.evasionErraticness), "EvasionErraticness", $"{AI.evasionErraticness:0.00}");
+                                    line = ContentEntry(ContentType.SemiLogSlider, line, contentWidth, ref AI.evasionMinRangeThreshold, nameof(AI.evasionMinRangeThreshold), "EvasionMinRangeThreshold", AI.evasionMinRangeThreshold < 1000 ? $"{AI.evasionMinRangeThreshold:0}m" : $"{AI.evasionMinRangeThreshold / 1000:0}km");
+                                    AI.evasionRCS = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.evasionRCS,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_EvasionRCS") + " : " + (AI.evasionRCS ? StringUtils.Localize("#LOC_BDArmory_Enabled") : StringUtils.Localize("#LOC_BDArmory_Disabled")),
+                                        AI.evasionRCS ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
+                                    {
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_EvasionRCS_Context"), contextLabel);
+                                    }
+
+                                    AI.evasionEngines = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.evasionEngines,
+                                        StringUtils.Localize("#LOC_BDArmory_AIWindow_EvasionEngines") + " : " + (AI.evasionEngines ? StringUtils.Localize("#LOC_BDArmory_Enabled") : StringUtils.Localize("#LOC_BDArmory_Disabled")),
+                                        AI.evasionEngines ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+                                    if (contextTipsEnabled)
+                                    {
+                                        GUI.Label(ContextLabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_EvasionEngines_Context"), contextLabel);
+                                    }
+
+                                    AI.evasionIgnoreMyTargetTargetingMe = GUI.Toggle(ToggleButtonRect(line, contentWidth), AI.evasionIgnoreMyTargetTargetingMe, StringUtils.Localize("#LOC_BDArmory_AI_EvasionIgnoreMyTargetTargetingMe"), AI.evasionIgnoreMyTargetTargetingMe ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                                    line += 1.25f;
+
+                                    #region Craft Avoidance
+                                    line += 0.5f;
+                                    GUI.Label(SettinglabelRect(line++), StringUtils.Localize("#LOC_BDArmory_AIWindow_Avoidance"), BoldLabel);
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.collisionAvoidanceThreshold, nameof(AI.collisionAvoidanceThreshold), "CollisionAvoidanceThreshold", $"{AI.collisionAvoidanceThreshold:0}m");
+                                    line = ContentEntry(ContentType.FloatSlider, line, contentWidth, ref AI.vesselCollisionAvoidanceLookAheadPeriod, nameof(AI.vesselCollisionAvoidanceLookAheadPeriod), "CollisionAvoidanceLookAheadPeriod", $"{AI.vesselCollisionAvoidanceLookAheadPeriod:0.0}s");
+                                    #endregion
+
+                                    GUI.EndGroup();
+                                    sectionHeights[Section.Evasion] = Mathf.Lerp(sectionHeight, line, 0.15f);
+                                    line += 0.1f;
+                                    contentHeight += line * entryHeight;
                                 }
-                                GUI.Label(SettinglabelRect(leftIndent, altLines), StringUtils.Localize("#LOC_BDArmory_MaxAltitude") + ": " + ActivePilot.maxAltitude.ToString("0"), Label);//"max altitude"
-                                altLines++;
-                                if (contextTipsEnabled)
+
+                                GUI.EndGroup();
+                                GUI.EndScrollView();
+                            }
+
+                            if (infoLinkEnabled)
+                            {
+                                windowColumns = 3;
+
+                                GUI.Label(new Rect(contentMargin + ColumnWidth * 2, contentTop, ColumnWidth - contentMargin, entryHeight), StringUtils.Localize("#LOC_BDArmory_AIWindow_infoLink"), Title);//"infolink"
+                                BeginArea(new Rect(contentMargin + ColumnWidth * 2, contentTop + entryHeight * 1.5f, ColumnWidth - contentMargin, WindowHeight - entryHeight * 1.5f - 2 * contentTop));
+                                using (var scrollViewScope = new ScrollViewScope(scrollInfoVector, Width(ColumnWidth - contentMargin), Height(WindowHeight - entryHeight * 1.5f - 2 * contentTop)))
                                 {
-                                    GUI.Label(ContextLabelRect(leftIndent, altLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_MaxAlt"), contextLabel);//"max alt"
-                                    altLines++;
+                                    scrollInfoVector = scrollViewScope.scrollPosition;
+
+                                    if (showSection[Section.PID]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Orbital_PID"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                    if (showSection[Section.Combat]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Orbital_Combat"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                    if (showSection[Section.Speed]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Orbital_Speeds"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                    if (showSection[Section.Control]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Orbital_Control"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
+                                    if (showSection[Section.Evasion]) { GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_AIWindow_infolink_Orbital_Evasion"), infoLinkStyle, Width(ColumnWidth - contentMargin * 4 - 20)); }
                                 }
-                            }
-                            GUI.EndGroup();
-                            altitudeHeight = Mathf.Lerp(altitudeHeight, altLines, 0.15f);
-                            altLines += 0.1f;
-                        }
-
-                        if (showSpeed)
-                        {
-                            spdLines += 0.2f;
-                            GUI.BeginGroup(
-                                new Rect(0, ((pidLines + altLines + spdLines) * entryHeight), contentWidth, speedHeight * entryHeight),
-                                GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                            spdLines += 0.25f;
-
-                            GUI.Label(SettinglabelRect(leftIndent, spdLines), StringUtils.Localize("#LOC_BDArmory_PilotAI_Speeds"), BoldLabel);//"Speed"
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.maxSpeed = GUI.HorizontalSlider(SettingSliderRect(leftIndent, ++spdLines, contentWidth), ActivePilot.maxSpeed, 20, ActivePilot.UpToEleven ? 3000 : 800);
-                                ActivePilot.maxSpeed = Mathf.Round(ActivePilot.maxSpeed / 5) * 5;
-                            }
-                            else
-                            {
-                                var field = inputFields["maxSpeed"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ++spdLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.maxSpeed = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, spdLines), StringUtils.Localize("#LOC_BDArmory_MaxSpeed") + ": " + ActivePilot.maxSpeed.ToString("0"), Label);//"max speed"
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++spdLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_maxSpeed"), contextLabel);//"max speed"
-
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.takeOffSpeed = GUI.HorizontalSlider(SettingSliderRect(leftIndent, ++spdLines, contentWidth), ActivePilot.takeOffSpeed, 10f, ActivePilot.UpToEleven ? 2000 : 200);
-                                ActivePilot.takeOffSpeed = Mathf.Round(ActivePilot.takeOffSpeed);
-                            }
-                            else
-                            {
-                                var field = inputFields["takeOffSpeed"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ++spdLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.takeOffSpeed = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, spdLines), StringUtils.Localize("#LOC_BDArmory_TakeOffSpeed") + ": " + ActivePilot.takeOffSpeed.ToString("0"), Label);//"takeoff speed"
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++spdLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_takeoff"), contextLabel);//"takeoff speed help"
-
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.minSpeed = GUI.HorizontalSlider(SettingSliderRect(leftIndent, ++spdLines, contentWidth), ActivePilot.minSpeed, 10, ActivePilot.UpToEleven ? 2000 : 200);
-                                ActivePilot.minSpeed = Mathf.Round(ActivePilot.minSpeed);
-                            }
-                            else
-                            {
-                                var field = inputFields["minSpeed"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ++spdLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.minSpeed = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, spdLines), StringUtils.Localize("#LOC_BDArmory_MinSpeed") + ": " + ActivePilot.minSpeed.ToString("0"), Label);//"min speed"
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++spdLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_minSpeed"), contextLabel);//"min speed help"
-
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.strafingSpeed = GUI.HorizontalSlider(SettingSliderRect(leftIndent, ++spdLines, contentWidth), ActivePilot.strafingSpeed, 10, 200);
-                                ActivePilot.strafingSpeed = Mathf.Round(ActivePilot.strafingSpeed);
-                            }
-                            else
-                            {
-                                var field = inputFields["strafingSpeed"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ++spdLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.strafingSpeed = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, spdLines), StringUtils.Localize("#LOC_BDArmory_StrafingSpeed") + ": " + ActivePilot.strafingSpeed.ToString("0"), Label);//"strafing speed"
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++spdLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_atkSpeed"), contextLabel);//"strafe speed"
-
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.idleSpeed = GUI.HorizontalSlider(SettingSliderRect(leftIndent, ++spdLines, contentWidth), ActivePilot.idleSpeed, 10, ActivePilot.UpToEleven ? 3000 : 200);
-                                ActivePilot.idleSpeed = Mathf.Round(ActivePilot.idleSpeed);
-                            }
-                            else
-                            {
-                                var field = inputFields["idleSpeed"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ++spdLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.idleSpeed = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, spdLines), StringUtils.Localize("#LOC_BDArmory_IdleSpeed") + ": " + ActivePilot.idleSpeed.ToString("0"), Label);//"idle speed"
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++spdLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_idleSpeed"), contextLabel);//"idle speed context help"
-
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.ABPriority = GUI.HorizontalSlider(SettingSliderRect(leftIndent, ++spdLines, contentWidth), ActivePilot.ABPriority, 0, 100);
-                                ActivePilot.ABPriority = Mathf.Round(ActivePilot.ABPriority);
-                            }
-                            else
-                            {
-                                var field = inputFields["ABPriority"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ++spdLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.ABPriority = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, spdLines), StringUtils.Localize("#LOC_BDArmory_ABPriority") + ": " + ActivePilot.ABPriority.ToString("0"), Label);//"AB priority"
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++spdLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ABPriority"), contextLabel);//"AB priority context help"
-
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.ABOverrideThreshold = GUI.HorizontalSlider(SettingSliderRect(leftIndent, ++spdLines, contentWidth), ActivePilot.ABOverrideThreshold, 0, 200);
-                                ActivePilot.ABOverrideThreshold = Mathf.Round(ActivePilot.ABOverrideThreshold);
-                            }
-                            else
-                            {
-                                var field = inputFields["ABOverrideThreshold"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ++spdLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.ABOverrideThreshold = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, spdLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ABOverrideThreshold") + ": " + ActivePilot.ABOverrideThreshold.ToString("0"), Label);//"AB Override Threshold"
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++spdLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ABOverrideThreshold_Context"), contextLabel);//"AB priority context help"
-
-                            GUI.EndGroup();
-                            speedHeight = Mathf.Lerp(speedHeight, ++spdLines, 0.15f);
-                            spdLines += 0.1f;
-                        }
-
-                        if (showControl)
-                        {
-                            ctrlLines += 0.2f;
-                            GUI.BeginGroup(
-                                new Rect(0, ((pidLines + altLines + spdLines + ctrlLines) * entryHeight), contentWidth, controlHeight * entryHeight),
-                                GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                            ctrlLines += 0.25f;
-                            GUI.Label(SettinglabelRect(leftIndent, ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ControlLimits"), BoldLabel);//"Control"
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_LowSpeedSteerLimiter") + ": " + ActivePilot.maxSteer.ToString("0.00"), Label);//"Low speed Limiter"
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.maxSteer = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.maxSteer, 0.1f, 1), 0.05f);
-                            }
-                            else
-                            {
-                                var field = inputFields["maxSteer"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.maxSteer = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_LSSL"), contextLabel);//"Low limiter context"
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_LowSpeedLimiterSpeed") + ": " + ActivePilot.lowSpeedSwitch.ToString("0"), Label);//"dynamic damping max"
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.lowSpeedSwitch = Mathf.Round(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.lowSpeedSwitch, 10f, 500));
-                            }
-                            else
-                            {
-                                var field = inputFields["lowSpeedSwitch"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.lowSpeedSwitch = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_LSLS"), contextLabel);//"dynamic damp max"
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_HighSpeedSteerLimiter") + ": " + ActivePilot.maxSteerAtMaxSpeed.ToString("0.00"), Label);//"dynamic damping min"
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.maxSteerAtMaxSpeed =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth),
-                                        ActivePilot.maxSteerAtMaxSpeed, 0.1f, 1);
-                                ActivePilot.maxSteerAtMaxSpeed = Mathf.Round(ActivePilot.maxSteerAtMaxSpeed * 20f) / 20f;
-                            }
-                            else
-                            {
-                                var field = inputFields["maxSteerAtMaxSpeed"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.maxSteerAtMaxSpeed = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_HSSL"), contextLabel);//"dynamic damp min"
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_HighSpeedLimiterSpeed") + ": " + ActivePilot.cornerSpeed.ToString("0"), Label);//"dynamic damping min"
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.cornerSpeed = Mathf.Round(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.cornerSpeed, 10, 500));
-                            }
-                            else
-                            {
-                                var field = inputFields["cornerSpeed"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.cornerSpeed = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_HSLS"), contextLabel);//"dynamic damp min"
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_AltitudeSteerLimiterFactor") + ": " + ActivePilot.altitudeSteerLimiterFactor.ToString("0.00"), Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.altitudeSteerLimiterFactor = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.altitudeSteerLimiterFactor, -1f, 1f), 0.05f);
-                            }
-                            else
-                            {
-                                var field = inputFields["altitudeSteerLimiterFactor"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.altitudeSteerLimiterFactor = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ASLF"), contextLabel);//"Altitude Steer Limiter Factor"
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_AltitudeSteerLimiterAltitude") + ": " + ActivePilot.altitudeSteerLimiterAltitude.ToString("0"), Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.altitudeSteerLimiterAltitude = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.altitudeSteerLimiterAltitude, 100f, 10000f), 100f);
-                            }
-                            else
-                            {
-                                var field = inputFields["altitudeSteerLimiterAltitude"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.altitudeSteerLimiterAltitude = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ASLA"), contextLabel);//"Altitude Steer Limiter Altitude"
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_BankLimiter") + ": " + ActivePilot.maxBank.ToString("0"), Label);//"dynamic damping min"
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.maxBank = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.maxBank, 10, (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55) ? 40 : 180), 5f);
-                            }
-                            else
-                            {
-                                var field = inputFields["maxBank"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.maxBank = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_bankLimit"), contextLabel);//"dynamic damp min"
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_WaypointPreRollTime") + ": " + ActivePilot.waypointPreRollTime.ToString("0.00"), Label);//
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.waypointPreRollTime = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.waypointPreRollTime, 0, 2), 0.05f);
-                            }
-                            else
-                            {
-                                var field = inputFields["waypointPreRollTime"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.waypointPreRollTime = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_WPPreRoll"), contextLabel);// Waypoint Pre-Roll Time
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_WaypointYawAuthorityTime") + ": " + ActivePilot.waypointYawAuthorityTime.ToString("0.00"), Label);//
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.waypointYawAuthorityTime = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.waypointYawAuthorityTime, 0, 10), 0.1f);
-                            }
-                            else
-                            {
-                                var field = inputFields["waypointYawAuthorityTime"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.waypointYawAuthorityTime = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_WPYawAuth"), contextLabel);// Waypoint Yaw Authority Time
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_maxAllowedGForce") + ": " + ActivePilot.maxAllowedGForce.ToString("0.00"), Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.maxAllowedGForce = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.maxAllowedGForce, 2, ActivePilot.UpToEleven ? 1000 : 45), 0.25f);
-                            }
-                            else
-                            {
-                                var field = inputFields["maxAllowedGForce"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.maxAllowedGForce = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_GForce"), contextLabel);
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_maxAllowedAoA") + ": " + ActivePilot.maxAllowedAoA.ToString("0.0"), Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.maxAllowedAoA = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.maxAllowedAoA, 0f, ActivePilot.UpToEleven ? 180f : 90f), 2.5f);
-                            }
-                            else
-                            {
-                                var field = inputFields["maxAllowedAoA"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.maxAllowedAoA = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_AoA"), contextLabel);
-                            }
-
-                            if (!(BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 55))
-                            {
-                                GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_postStallAoA") + ": " + ActivePilot.postStallAoA.ToString("0.0"), Label);
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.postStallAoA = BDAMath.RoundToUnit(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.postStallAoA, 0f, ActivePilot.UpToEleven ? 180f : 90f), 2.5f);
-                                }
-                                else
-                                {
-                                    var field = inputFields["postStallAoA"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.postStallAoA = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled)
-                                {
-                                    GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_AoAPostStall"), contextLabel);
-                                }
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ImmelmannTurnAngle") + ": " + ActivePilot.ImmelmannTurnAngle.ToString("0"), Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.ImmelmannTurnAngle = Mathf.Round(GUI.HorizontalSlider(SettingSliderRect(leftIndent, ctrlLines, contentWidth), ActivePilot.ImmelmannTurnAngle, 0f, 90f));
-                            }
-                            else
-                            {
-                                var field = inputFields["ImmelmannTurnAngle"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ctrlLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.ImmelmannTurnAngle = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++ctrlLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ImmelmannTurnAngleContext"), contextLabel);
-                            }
-
-                            ++ctrlLines;
-                            GUI.EndGroup();
-                            controlHeight = Mathf.Lerp(controlHeight, ctrlLines, 0.15f);
-                            ctrlLines += 0.1f;
-                        }
-
-                        if (showEvade)
-                        {
-                            evadeLines += 0.2f;
-                            GUI.BeginGroup(
-                                new Rect(0, ((pidLines + altLines + spdLines + ctrlLines + evadeLines) * entryHeight), contentWidth, evasionHeight * entryHeight),
-                                GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                            #region Evasion
-                            evadeLines += 0.25f;
-                            GUI.Label(SettinglabelRect(leftIndent, evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_Evade"), BoldLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_MinEvasionTime")}: {ActivePilot.minEvasionTime:0.00}s", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.minEvasionTime =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                        ActivePilot.minEvasionTime, 0f, ActivePilot.UpToEleven ? 10 : 1);
-                                ActivePilot.minEvasionTime = Mathf.Round(ActivePilot.minEvasionTime * 20f) / 20f;
-                            }
-                            else
-                            {
-                                var field = inputFields["minEvasionTime"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.minEvasionTime = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_MinEvade"), contextLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_EvasionThreshold")}: {ActivePilot.evasionThreshold:0}m", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.evasionThreshold =
-                                    GUI.HorizontalSlider(
-                                        SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                        ActivePilot.evasionThreshold, 0, ActivePilot.UpToEleven ? 300 : 100);
-                                ActivePilot.evasionThreshold = Mathf.Round(ActivePilot.evasionThreshold);
-                            }
-                            else
-                            {
-                                var field = inputFields["evasionThreshold"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.evasionThreshold = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_evadeDist"), contextLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_EvasionTimeThreshold")}: {ActivePilot.evasionTimeThreshold:0.00}s", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.evasionTimeThreshold =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                        ActivePilot.evasionTimeThreshold, 0, ActivePilot.UpToEleven ? 1 : 3);
-                                ActivePilot.evasionTimeThreshold = Mathf.Round(ActivePilot.evasionTimeThreshold * 100f) / 100f;
-                            }
-                            else
-                            {
-                                var field = inputFields["evasionTimeThreshold"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.evasionTimeThreshold = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_evadetimeDist"), contextLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_EvasionMinRangeThreshold")}: {(ActivePilot.evasionMinRangeThreshold < 1000 ? $"{ActivePilot.evasionMinRangeThreshold:0}m" : $"{ActivePilot.evasionMinRangeThreshold / 1000:0}km")}", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                if (ActivePilot.UpToEleven)
-                                {
-                                    ActivePilot.evasionMinRangeThreshold = UI_FloatSemiLogRange.ToSemiLogValue(Mathf.Round(GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth), UI_FloatSemiLogRange.FromSemiLogValue(ActivePilot.evasionMinRangeThreshold, 1), 1, UI_FloatSemiLogRange.FromSemiLogValue(1000000, 1))), 1, 1);
-                                }
-                                else
-                                {
-                                    ActivePilot.evasionMinRangeThreshold = UI_FloatSemiLogRange.ToSemiLogValue(Mathf.Round(GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth), UI_FloatSemiLogRange.FromSemiLogValue(ActivePilot.evasionMinRangeThreshold, 10), 1, UI_FloatSemiLogRange.FromSemiLogValue(10000, 10))), 10, 1);
-                                }
-                            }
-                            else
-                            {
-                                var field = inputFields["evasionMinRangeThreshold"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.evasionMinRangeThreshold = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_evadeMinRange"), contextLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_EvasionNonlinearity")}: {ActivePilot.evasionNonlinearity:0.0}°", Label);//"Evasion/Extension Nonlinearity"
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.evasionNonlinearity =
-                                    GUI.HorizontalSlider(
-                                        SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                        ActivePilot.evasionNonlinearity, 0, ActivePilot.UpToEleven ? 90 : 10);
-                                ActivePilot.evasionNonlinearity = Mathf.Round(ActivePilot.evasionNonlinearity * 10f) / 10f;
-                            }
-                            else
-                            {
-                                var field = inputFields["evasionNonlinearity"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.evasionNonlinearity = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_EvExNonlin"), contextLabel);
-
-                            ActivePilot.evasionIgnoreMyTargetTargetingMe = GUI.Toggle(ToggleButtonRect(leftIndent, ++evadeLines, contentWidth), ActivePilot.evasionIgnoreMyTargetTargetingMe, StringUtils.Localize("#LOC_BDArmory_EvasionIgnoreMyTargetTargetingMe"), ActivePilot.evasionIgnoreMyTargetTargetingMe ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
-                            #endregion
-
-                            #region Craft Avoidance
-                            evadeLines += 1.5f;
-                            GUI.Label(SettinglabelRect(leftIndent, evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_Avoidance"), BoldLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_CollisionAvoidanceThreshold")}: {ActivePilot.collisionAvoidanceThreshold:0}m", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.collisionAvoidanceThreshold =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                        ActivePilot.collisionAvoidanceThreshold, 0, 50);
-                                ActivePilot.collisionAvoidanceThreshold = Mathf.Round(ActivePilot.collisionAvoidanceThreshold);
-                            }
-                            else
-                            {
-                                var field = inputFields["collisionAvoidanceThreshold"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.collisionAvoidanceThreshold = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ColDist"), contextLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_CollisionAvoidanceLookAheadPeriod")}: {ActivePilot.vesselCollisionAvoidanceLookAheadPeriod:0.0}s", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.vesselCollisionAvoidanceLookAheadPeriod =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                        ActivePilot.vesselCollisionAvoidanceLookAheadPeriod, 0, 3);
-                                ActivePilot.vesselCollisionAvoidanceLookAheadPeriod = Mathf.Round(ActivePilot.vesselCollisionAvoidanceLookAheadPeriod * 10f) / 10f;
-                            }
-                            else
-                            {
-                                var field = inputFields["vesselCollisionAvoidanceLookAheadPeriod"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.vesselCollisionAvoidanceLookAheadPeriod = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ColTime"), contextLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_CollisionAvoidanceStrength")}: {ActivePilot.vesselCollisionAvoidanceStrength:0.0} ({ActivePilot.vesselCollisionAvoidanceStrength / Time.fixedDeltaTime:0}°/s)", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.vesselCollisionAvoidanceStrength =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                        ActivePilot.vesselCollisionAvoidanceStrength, 0, 4);
-                                ActivePilot.vesselCollisionAvoidanceStrength = BDAMath.RoundToUnit(ActivePilot.vesselCollisionAvoidanceStrength, 0.1f);
-                            }
-                            else
-                            {
-                                var field = inputFields["vesselCollisionAvoidanceStrength"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.vesselCollisionAvoidanceStrength = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ColStrength"), contextLabel);
-
-                            GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_StandoffDistance")}: {ActivePilot.vesselStandoffDistance:0}m", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.vesselStandoffDistance =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                        ActivePilot.vesselStandoffDistance, 2, ActivePilot.UpToEleven ? 5000 : 1000);
-                                ActivePilot.vesselStandoffDistance = Mathf.Round(ActivePilot.vesselStandoffDistance / 50) * 50;
-                            }
-                            else
-                            {
-                                var field = inputFields["vesselStandoffDistance"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.vesselStandoffDistance = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_standoff"), contextLabel);
-                            #endregion
-
-                            #region Extending
-                            if (ActivePilot.canExtend)
-                            {
-                                evadeLines += 1.5f;
-                                GUI.Label(SettinglabelRect(leftIndent, evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_Extend"), BoldLabel);
-                                #region Extend Distance Air-to-Air
-                                GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendDistanceAirToAir")}: {ActivePilot.extendDistanceAirToAir:0}m", Label); // Extend Distance Air-To-Air
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.extendDistanceAirToAir =
-                                        GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                            ActivePilot.extendDistanceAirToAir, 0, ActivePilot.UpToEleven ? 20000 : 2000);
-                                    ActivePilot.extendDistanceAirToAir = BDAMath.RoundToUnit(ActivePilot.extendDistanceAirToAir, 10f);
-                                }
-                                else
-                                {
-                                    var field = inputFields["extendDistanceAirToAir"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.extendDistanceAirToAir = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendDistanceAirToAir_Context"), contextLabel);
-                                #endregion
-
-                                #region Extend Angle Air-to-Air
-                                GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendAngleAirToAir")}: {ActivePilot.extendAngleAirToAir:0}°", Label); // Extend Angle Air-To-Air
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.extendAngleAirToAir =
-                                        GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                            ActivePilot.extendAngleAirToAir, ActivePilot.UpToEleven ? -90 : -10, ActivePilot.UpToEleven ? 90 : 45);
-                                    ActivePilot.extendAngleAirToAir = BDAMath.RoundToUnit(ActivePilot.extendAngleAirToAir, 1f);
-                                }
-                                else
-                                {
-                                    var field = inputFields["extendAngleAirToAir"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.extendAngleAirToAir = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendAngleAirToAir_Context"), contextLabel);
-                                #endregion
-
-                                #region Extend Distance Air-to-Ground (Guns)
-                                GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendDistanceAirToGroundGuns")}: {ActivePilot.extendDistanceAirToGroundGuns:0}m", Label); // Extend Distance Air-To-Ground (Guns)
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.extendDistanceAirToGroundGuns =
-                                        GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                            ActivePilot.extendDistanceAirToGroundGuns, 0, ActivePilot.UpToEleven ? 20000 : 5000);
-                                    ActivePilot.extendDistanceAirToGroundGuns = BDAMath.RoundToUnit(ActivePilot.extendDistanceAirToGroundGuns, 50f);
-                                }
-                                else
-                                {
-                                    var field = inputFields["extendDistanceAirToGroundGuns"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.extendDistanceAirToGroundGuns = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendDistanceAirToGroundGuns_Context"), contextLabel);
-                                #endregion
-
-                                #region Extend Distance Air-to-Ground
-                                GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendDistanceAirToGround")}: {ActivePilot.extendDistanceAirToGround:0}m", Label); // Extend Distance Air-To-Ground
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.extendDistanceAirToGround =
-                                        GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth),
-                                            ActivePilot.extendDistanceAirToGround, 0, ActivePilot.UpToEleven ? 20000 : 5000);
-                                    ActivePilot.extendDistanceAirToGround = BDAMath.RoundToUnit(ActivePilot.extendDistanceAirToGround, 50f);
-                                }
-                                else
-                                {
-                                    var field = inputFields["extendDistanceAirToGround"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.extendDistanceAirToGround = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendDistanceAirToGround_Context"), contextLabel);
-                                #endregion
-
-                                #region Extend Target triggers
-                                GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendTargetVel")}: {ActivePilot.extendTargetVel:0.0}", Label);
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.extendTargetVel = GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth), ActivePilot.extendTargetVel, 0, 2);
-                                    ActivePilot.extendTargetVel = BDAMath.RoundToUnit(ActivePilot.extendTargetVel, 0.1f);
-                                }
-                                else
-                                {
-                                    var field = inputFields["extendTargetVel"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.extendTargetVel = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_Extendvel"), contextLabel);
-
-                                GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendTargetAngle")}: {ActivePilot.extendTargetAngle}°", Label);
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.extendTargetAngle = GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth), ActivePilot.extendTargetAngle, 0, 180);
-                                    ActivePilot.extendTargetAngle = Mathf.Round(ActivePilot.extendTargetAngle);
-                                }
-                                else
-                                {
-                                    var field = inputFields["extendTargetAngle"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.extendTargetAngle = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendAngle"), contextLabel);
-
-                                GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendTargetDist")}: {ActivePilot.extendTargetDist}m", Label);
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.extendTargetDist = GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth), ActivePilot.extendTargetDist, 0, 5000);
-                                    ActivePilot.extendTargetDist = BDAMath.RoundToUnit(ActivePilot.extendTargetDist, 25);
-                                }
-                                else
-                                {
-                                    var field = inputFields["extendTargetDist"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.extendTargetDist = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendDist"), contextLabel);
-
-                                GUI.Label(SettinglabelRect(leftIndent, ++evadeLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendAbortTime")}: {ActivePilot.extendAbortTime}s", Label);
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.extendAbortTime = GUI.HorizontalSlider(SettingSliderRect(leftIndent, evadeLines, contentWidth), ActivePilot.extendAbortTime, 5, 30);
-                                    ActivePilot.extendAbortTime = Mathf.Round(ActivePilot.extendAbortTime);
-                                }
-                                else
-                                {
-                                    var field = inputFields["extendAbortTime"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, evadeLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.extendAbortTime = (float)field.currentValue;
-                                }
-                                if (contextTipsEnabled) GUI.Label(ContextLabelRect(leftIndent, ++evadeLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ExtendAbortTimeContext"), contextLabel);
-                                #endregion
-                            }
-                            ActivePilot.canExtend = GUI.Toggle(ToggleButtonRect(leftIndent, ++evadeLines, contentWidth), ActivePilot.canExtend, StringUtils.Localize("#LOC_BDArmory_ExtendToggle"), ActivePilot.canExtend ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic pid"
-                            evadeLines += 1.25f;
-                            #endregion
-
-                            GUI.EndGroup();
-                            evasionHeight = Mathf.Lerp(evasionHeight, evadeLines, 0.15f);
-                            evadeLines += 0.1f;
-                        }
-
-                        if (showTerrain)
-                        {
-                            gndLines += 0.2f;
-                            GUI.BeginGroup(
-                                new Rect(0, ((pidLines + altLines + spdLines + ctrlLines + evadeLines + gndLines) * entryHeight), contentWidth, terrainHeight * entryHeight),
-                                GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                            gndLines += 0.25f;
-
-                            GUI.Label(SettinglabelRect(leftIndent, gndLines), StringUtils.Localize("#LOC_BDArmory_PilotAI_Terrain"), BoldLabel);//"Speed"
-
-                            #region Terrain Avoidance Min
-                            GUI.Label(SettinglabelRect(leftIndent, ++gndLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_TurnRadiusMin") + ": " + ActivePilot.turnRadiusTwiddleFactorMin.ToString("0.0"), Label);
-                            var oldMinTwiddle = ActivePilot.turnRadiusTwiddleFactorMin;
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.turnRadiusTwiddleFactorMin = GUI.HorizontalSlider(SettingSliderRect(leftIndent, gndLines, contentWidth), ActivePilot.turnRadiusTwiddleFactorMin, 0.1f, ActivePilot.UpToEleven ? 10 : 5);
-                                ActivePilot.turnRadiusTwiddleFactorMin = Mathf.Round(ActivePilot.turnRadiusTwiddleFactorMin * 10f) / 10f;
-                            }
-                            else
-                            {
-                                var field = inputFields["turnRadiusTwiddleFactorMin"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, gndLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.turnRadiusTwiddleFactorMin = (float)field.currentValue;
-                            }
-                            if (ActivePilot.turnRadiusTwiddleFactorMin != oldMinTwiddle)
-                            {
-                                ActivePilot.OnMinUpdated(null, null);
-                                var field = inputFields["turnRadiusTwiddleFactorMax"];
-                                field.SetCurrentValue(ActivePilot.turnRadiusTwiddleFactorMax);
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++gndLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_terrainMin"), contextLabel);
-                            }
-                            #endregion
-
-                            #region Terrain Avoidance Max
-                            GUI.Label(SettinglabelRect(leftIndent, ++gndLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_TurnRadiusMax") + ": " + ActivePilot.turnRadiusTwiddleFactorMax.ToString("0.0"), Label);
-                            var oldMaxTwiddle = ActivePilot.turnRadiusTwiddleFactorMax;
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.turnRadiusTwiddleFactorMax = GUI.HorizontalSlider(SettingSliderRect(leftIndent, gndLines, contentWidth), ActivePilot.turnRadiusTwiddleFactorMax, 0.1f, ActivePilot.UpToEleven ? 10 : 5);
-                                ActivePilot.turnRadiusTwiddleFactorMax = Mathf.Round(ActivePilot.turnRadiusTwiddleFactorMax * 10) / 10;
-                            }
-                            else
-                            {
-                                var field = inputFields["turnRadiusTwiddleFactorMax"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, gndLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.turnRadiusTwiddleFactorMax = (float)field.currentValue;
-                            }
-                            if (ActivePilot.turnRadiusTwiddleFactorMax != oldMaxTwiddle)
-                            {
-                                ActivePilot.OnMaxUpdated(null, null);
-                                var field = inputFields["turnRadiusTwiddleFactorMin"];
-                                field.SetCurrentValue(ActivePilot.turnRadiusTwiddleFactorMin);
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++gndLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_terrainMax"), contextLabel);
-                            }
-                            #endregion
-
-                            #region Inverted Terrain Avoidance Critical Angle
-                            GUI.Label(SettinglabelRect(leftIndent, ++gndLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_InvertedTerrainAvoidanceCriticalAngle")}: {ActivePilot.terrainAvoidanceCriticalAngle:0}", Label);
-                            var oldTerrainAvoidanceCriticalAngle = ActivePilot.terrainAvoidanceCriticalAngle;
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.terrainAvoidanceCriticalAngle = GUI.HorizontalSlider(SettingSliderRect(leftIndent, gndLines, contentWidth), ActivePilot.terrainAvoidanceCriticalAngle, 90f, 180f);
-                                ActivePilot.terrainAvoidanceCriticalAngle = Mathf.Round(ActivePilot.terrainAvoidanceCriticalAngle);
-                            }
-                            else
-                            {
-                                var field = inputFields["terrainAvoidanceCriticalAngle"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, gndLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.terrainAvoidanceCriticalAngle = (float)field.currentValue;
-                            }
-                            if (ActivePilot.terrainAvoidanceCriticalAngle != oldTerrainAvoidanceCriticalAngle)
-                            {
-                                ActivePilot.OnTerrainAvoidanceCriticalAngleChanged(null, null);
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++gndLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_InvertedTerrainAvoidanceCriticalAngleContext"), contextLabel);
-                            }
-                            #endregion
-
-                            #region Terrain Avoidance Control Surface Deployment Time
-                            GUI.Label(SettinglabelRect(leftIndent, ++gndLines), $"{StringUtils.Localize("#LOC_BDArmory_AIWindow_TerrainAvoidanceVesselReactionTime")}: {ActivePilot.controlSurfaceDeploymentTime:0.0}", Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.controlSurfaceDeploymentTime = GUI.HorizontalSlider(SettingSliderRect(leftIndent, gndLines, contentWidth), ActivePilot.controlSurfaceDeploymentTime, 0f, 4f);
-                                ActivePilot.controlSurfaceDeploymentTime = BDAMath.RoundToUnit(ActivePilot.controlSurfaceDeploymentTime, 0.1f);
-                            }
-                            else
-                            {
-                                var field = inputFields["controlSurfaceDeploymentTime"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, gndLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.controlSurfaceDeploymentTime = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++gndLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_TerrainAvoidanceVesselReactionTimeContext"), contextLabel);
-                            }
-                            #endregion
-
-                            #region Waypoint Terrain Avoidance
-                            GUI.Label(SettinglabelRect(leftIndent, ++gndLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_WaypointTerrainAvoidance") + ": " + ActivePilot.waypointTerrainAvoidance.ToString("0.00"), Label);
-                            if (!NumFieldsEnabled)
-                            {
-                                ActivePilot.waypointTerrainAvoidance = GUI.HorizontalSlider(SettingSliderRect(leftIndent, gndLines, contentWidth), ActivePilot.waypointTerrainAvoidance, 0f, 1f);
-                                ActivePilot.waypointTerrainAvoidance = BDAMath.RoundToUnit(ActivePilot.waypointTerrainAvoidance, 0.01f);
-                            }
-                            else
-                            {
-                                var field = inputFields["waypointTerrainAvoidance"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, gndLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActivePilot.waypointTerrainAvoidance = (float)field.currentValue;
-                            }
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, ++gndLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_WaypointTerrainAvoidanceContext"), contextLabel);
-                            }
-                            #endregion
-
-                            ++gndLines;
-                            GUI.EndGroup();
-                            terrainHeight = Mathf.Lerp(terrainHeight, gndLines, 0.15f);
-                            gndLines += 0.1f;
-                        }
-
-                        if (showRam)
-                        {
-                            ramLines += 0.2f;
-                            GUI.BeginGroup(
-                                new Rect(0, ((pidLines + altLines + spdLines + ctrlLines + evadeLines + gndLines + ramLines) * entryHeight), contentWidth, rammingHeight * entryHeight),
-                                GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                            ramLines += 0.25f;
-
-                            GUI.Label(SettinglabelRect(leftIndent, ramLines), StringUtils.Localize("#LOC_BDArmory_PilotAI_Ramming"), BoldLabel);//"Ramming"
-
-                            ActivePilot.allowRamming = GUI.Toggle(ToggleButtonRect(leftIndent, ++ramLines, contentWidth),
-                            ActivePilot.allowRamming, StringUtils.Localize("#LOC_BDArmory_AllowRamming"), ActivePilot.allowRamming ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Allow Ramming"
-
-                            if (ActivePilot.allowRamming)
-                            {
-                                ActivePilot.allowRammingGroundTargets = GUI.Toggle(ToggleButtonRect(leftIndent, ++ramLines, contentWidth),
-                                ActivePilot.allowRammingGroundTargets, StringUtils.Localize("#LOC_BDArmory_AllowRammingGroundTargets"), ActivePilot.allowRammingGroundTargets ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Include Ground Targets"
-
-                                ramLines += 1.25f;
-                                if (!NumFieldsEnabled)
-                                {
-                                    ActivePilot.controlSurfaceLag =
-                                        GUI.HorizontalSlider(SettingSliderRect(leftIndent, ramLines, contentWidth),
-                                            ActivePilot.controlSurfaceLag, 0, ActivePilot.UpToEleven ? 1f : 0.2f);
-                                    ActivePilot.controlSurfaceLag = Mathf.Round(ActivePilot.controlSurfaceLag * 100) / 100;
-                                }
-                                else
-                                {
-                                    var field = inputFields["controlSurfaceLag"];
-                                    field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, ramLines, contentWidth), field.possibleValue, 8, field.style));
-                                    ActivePilot.controlSurfaceLag = (float)field.currentValue;
-                                }
-                                GUI.Label(SettinglabelRect(leftIndent, ramLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ControlSurfaceLag") + ": " + ActivePilot.controlSurfaceLag.ToString("0.00"), Label);
-
-                                if (contextTipsEnabled)
-                                {
-                                    GUI.Label(ContextLabelRect(leftIndent, ++ramLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_ramLag"), contextLabel);
-                                }
-                            }
-                            ramLines += 1.25f;
-                            GUI.EndGroup();
-                            rammingHeight = Mathf.Lerp(rammingHeight, ramLines, 0.15f);
-                            ramLines += 0.1f;
-                        }
-
-                        if (showMisc)
-                        {
-                            miscLines += 0.2f;
-                            GUI.BeginGroup(
-                                new Rect(0, ((pidLines + altLines + spdLines + ctrlLines + evadeLines + gndLines + ramLines + miscLines) * entryHeight), contentWidth, miscHeight * entryHeight),
-                                GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                            miscLines += 0.25f;
-
-                            GUI.Label(SettinglabelRect(leftIndent, miscLines), StringUtils.Localize("#LOC_BDArmory_Orbit"), BoldLabel);//"orbit"
-                            miscLines++;
-
-                            ActivePilot.ClockwiseOrbit = GUI.Toggle(ToggleButtonRect(leftIndent, miscLines, contentWidth),
-                            ActivePilot.ClockwiseOrbit, ActivePilot.ClockwiseOrbit ? StringUtils.Localize("#LOC_BDArmory_Orbit_Starboard") : StringUtils.Localize("#LOC_BDArmory_Orbit_Port"), ActivePilot.ClockwiseOrbit ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic pid"
-                            miscLines += 1.25f;
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, miscLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_orbit"), Label);//"orbit direction"
-                                miscLines++;
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, miscLines), StringUtils.Localize("#LOC_BDArmory_StandbyMode"), BoldLabel);//"Standby"
-                            miscLines++;
-
-                            ActivePilot.standbyMode = GUI.Toggle(ToggleButtonRect(leftIndent, miscLines, contentWidth),
-                            ActivePilot.standbyMode, ActivePilot.standbyMode ? StringUtils.Localize("#LOC_BDArmory_On") : StringUtils.Localize("#LOC_BDArmory_Off"), ActivePilot.standbyMode ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic pid"
-                            miscLines += 1.25f;
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, miscLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_standby"), Label);//"Activate when target in guard range"
-                                miscLines++;
-                            }
-
-                            GUI.Label(SettinglabelRect(leftIndent, miscLines), StringUtils.Localize("#LOC_BDArmory_ControlSurfaceSettings"), BoldLabel);//"Control Surface Settings"
-                            miscLines++;
-
-                            if (GUI.Button(ToggleButtonRect(leftIndent, miscLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_StoreControlSurfaceSettings"), BDArmorySetup.BDGuiSkin.button))
-                            {
-                                ActivePilot.StoreControlSurfaceSettings(); //Hiding these in misc is probably not the best place to put them, but only so much space on the window header bar
-                            }
-                            miscLines += 1.25f;
-                            if (ActivePilot.Events["RestoreControlSurfaceSettings"].active == true)
-                            {
-                                GUIStyle restoreStyle = BDArmorySetup.BDGuiSkin.button;
-                                if (GUI.Button(ToggleButtonRect(leftIndent, miscLines, contentWidth), StringUtils.Localize("#LOC_BDArmory_RestoreControlSurfaceSettings"), restoreStyle))
-                                {
-                                    ActivePilot.RestoreControlSurfaceSettings();
-                                }
-                                miscLines += 1.25f;
-                            }
-
-                            GUI.EndGroup();
-                            miscHeight = Mathf.Lerp(miscHeight, miscLines, 0.15f);
-                            miscLines += 0.1f;
-                        }
-                        contentHeight = (pidLines + altLines + spdLines + ctrlLines + evadeLines + gndLines + ramLines + miscLines) * entryHeight;
-                        GUI.EndGroup();
-                        GUI.EndScrollView();
-                    }
-                    else contentHeight = 0;
-                }
-                else if (ActiveDriver != null)
-                {
-                    line++;
-                    ActiveDriver.UpToEleven = GUI.Toggle(SubsectionRect(leftIndent, line),
-                        ActiveDriver.UpToEleven, ActiveDriver.UpToEleven ? StringUtils.Localize("#LOC_BDArmory_UnclampTuning_enabledText") : StringUtils.Localize("#LOC_BDArmory_UnclampTuning_disabledText"), ActiveDriver.UpToEleven ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Misc"
-                    if (ActiveDriver.UpToEleven != oldClamp)
-                    {
-                        SetInputFields(ActiveDriver.GetType());
-                    }
-                    line += 12;
-
-                    float driverLines = 0;
-
-                    if (infoLinkEnabled)
-                    {
-                        windowColumns = 3;
-
-                        GUI.Label(new Rect(leftIndent + ColumnWidth * 2, contentTop, ColumnWidth - leftIndent, entryHeight), StringUtils.Localize("#LOC_BDArmory_AIWindow_infoLink"), Title);//"infolink"
-                        BeginArea(new Rect(leftIndent + ColumnWidth * 2, contentTop + entryHeight * 1.5f, ColumnWidth - leftIndent, WindowHeight - entryHeight * 1.5f - 2 * contentTop));
-                        using (var scrollViewScope = new ScrollViewScope(scrollInfoVector, Width(ColumnWidth - leftIndent), Height(WindowHeight - entryHeight * 1.5f - 2 * contentTop)))
-                        {
-                            scrollInfoVector = scrollViewScope.scrollPosition;
-
-                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_Help"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //Pid desc
-                            if (ActiveDriver.SurfaceType != AIUtils.VehicleMovementType.Stationary)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_Slopes"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //tgt pitch, slope angle desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_Speeds"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //cruise, flank speed desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_Drift"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //drift angle desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_bank"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //bank angle desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_Weave"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //weave factor desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_steerMult"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //steer mult desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_SteerDamp"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //steer damp desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_Orientation"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //attack vector, broadside desc
-                            }
-                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_Engagement"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //engage ranges desc
-                            if (ActiveDriver.SurfaceType != AIUtils.VehicleMovementType.Stationary)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_RCSdesc"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //RCS desc
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_TargetMass"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //avoid mass desc
-                            }
-                            if (ActiveDriver.SurfaceType == AIUtils.VehicleMovementType.Land)
-                            {
-                                GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_DriverAI_Range"), infoLinkStyle, Width(ColumnWidth - leftIndent * 4 - 20)); //maintain min range desc
+                                EndArea();
                             }
                         }
-                        EndArea();
-                    }
-
-                    scrollViewSAIVector = GUI.BeginScrollView(new Rect(leftIndent + 100, contentTop + entryHeight * 1.5f, (ColumnWidth * 2) - 100 - leftIndent, WindowHeight - entryHeight * 1.5f - 2 * contentTop), scrollViewSAIVector,
-                                           new Rect(0, 0, ColumnWidth * 2 - 120 - leftIndent * 2, height + contentTop));
-
-                    GUI.BeginGroup(new Rect(leftIndent, 0, ColumnWidth * 2 - 120 - leftIndent * 2, height + 2 * contentTop), GUIContent.none, BDArmorySetup.BDGuiSkin.box); //darker box
-
-                    contentWidth -= 24;
-                    leftIndent += 3;
-
-                    driverLines += 0.2f;
-                    GUI.BeginGroup(
-                        new Rect(0, (driverLines * entryHeight), contentWidth, height * entryHeight),
-                        GUIContent.none, BDArmorySetup.BDGuiSkin.box);
-                    driverLines += 0.25f;
-
-                    if (Drivertype != (Drivertype = Mathf.RoundToInt(GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth), Drivertype, 0, VehicleMovementTypes.Length - 1))))
-                    {
-                        ActiveDriver.SurfaceTypeName = VehicleMovementTypes[Drivertype].ToString();
-                        ActiveDriver.ChooseOptionsUpdated(null, null);
-                    }
-                    GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_VehicleType") + ": " + ActiveDriver.SurfaceTypeName, Label);//"Wobbly"
-
-                    driverLines++;
-                    if (contextTipsEnabled)
-                    {
-                        GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_VeeType"), contextLabel);//"Wobbly"
-                        driverLines++;
-                    }
-
-                    if (ActiveDriver.SurfaceType != AIUtils.VehicleMovementType.Stationary)
-                    {
-                        if (!NumFieldsEnabled)
-                        {
-                            ActiveDriver.MaxSlopeAngle =
-                                GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                                    ActiveDriver.MaxSlopeAngle, 10, ActiveDriver.UpToEleven ? 90 : 30);
-                            ActiveDriver.MaxSlopeAngle = Mathf.Round(ActiveDriver.MaxSlopeAngle);
-                        }
-                        else
-                        {
-                            var field = inputFields["MaxSlopeAngle"];
-                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                            ActiveDriver.MaxSlopeAngle = (float)field.currentValue;
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_MaxSlopeAngle") + ": " + ActiveDriver.MaxSlopeAngle.ToString("0"), Label);//"Steer Ki"
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_SlopeAngle"), contextLabel);//"undershoot"
-                            driverLines++;
-                        }
-
-                        if (ActiveDriver.SurfaceType == AIUtils.VehicleMovementType.Submarine)
-                        {
-                            if (!NumFieldsEnabled)
-                            {
-                                ActiveDriver.CombatAltitude =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                                        ActiveDriver.CombatAltitude, -200, -15);
-                                ActiveDriver.CombatAltitude = Mathf.Round(ActiveDriver.CombatAltitude);
-                            }
-                            else
-                            {
-                                var field = inputFields["CombatAltitude"];
-                                field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                                ActiveDriver.CombatAltitude = (float)field.currentValue;
-                            }
-                            GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_CombatAltitude") + ": " + ActiveDriver.CombatAltitude.ToString("0"), Label);//"Steer Ki"
-                            driverLines++;
-                            if (contextTipsEnabled)
-                            {
-                                GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_CombatAlt"), contextLabel);//"undershoot"
-                                driverLines++;
-                            }
-                        }
-
-                        if (!NumFieldsEnabled)
-                        {
-                            ActiveDriver.CruiseSpeed =
-                                    GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                                        ActiveDriver.CruiseSpeed, 5, ActiveDriver.UpToEleven ? 300 : 60);
-                            ActiveDriver.CruiseSpeed = Mathf.Round(ActiveDriver.CruiseSpeed);
-                        }
-                        else
-                        {
-                            var field = inputFields["CruiseSpeed"];
-                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                            ActiveDriver.CruiseSpeed = (float)field.currentValue;
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_CruiseSpeed") + ": " + ActiveDriver.CruiseSpeed.ToString("0"), Label);//"Steer Damping"
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_idleSpeed"), contextLabel);//"Wobbly"
-                            driverLines++;
-                        }
-
-                        if (!NumFieldsEnabled)
-                        {
-                            ActiveDriver.MaxSpeed =
-                                   GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                                ActiveDriver.MaxSpeed, 5, ActiveDriver.UpToEleven ? 400 : 80);
-                            ActiveDriver.MaxSpeed = Mathf.Round(ActiveDriver.MaxSpeed);
-                        }
-                        else
-                        {
-                            var field = inputFields["MaxSpeed"];
-                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                            ActiveDriver.MaxSpeed = (float)field.currentValue;
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_MaxSpeed") + ": " + ActiveDriver.MaxSpeed.ToString("0"), Label);//"Steer Damping"
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_MaxSpeed"), contextLabel);//"Wobbly"
-                            driverLines++;
-                        }
-
-                        if (!NumFieldsEnabled)
-                        {
-                            ActiveDriver.MaxDrift =
-                            GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                                ActiveDriver.MaxDrift, 1, 180);
-                            ActiveDriver.MaxDrift = Mathf.Round(ActiveDriver.MaxDrift);
-                        }
-                        else
-                        {
-                            var field = inputFields["MaxDrift"];
-                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                            ActiveDriver.MaxDrift = (float)field.currentValue;
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_MaxDrift") + ": " + ActiveDriver.MaxDrift.ToString("0"), Label);//"Steer Damping"
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_MaxDrift"), contextLabel);//"Wobbly"
-                            driverLines++;
-                        }
-
-                        if (!NumFieldsEnabled)
-                        {
-                            ActiveDriver.TargetPitch =
-                                GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                                    ActiveDriver.TargetPitch, -10, 10);
-                            ActiveDriver.TargetPitch = Mathf.Round(ActiveDriver.TargetPitch * 10) / 10;
-                        }
-                        else
-                        {
-                            var field = inputFields["TargetPitch"];
-                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                            ActiveDriver.TargetPitch = (float)field.currentValue;
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_TargetPitch") + ": " + ActiveDriver.TargetPitch.ToString("0.0"), Label);//"Steer Damping"
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_Pitch"), contextLabel);//"Wobbly"
-                            driverLines++;
-                        }
-
-                        if (!NumFieldsEnabled)
-                        {
-                            ActiveDriver.BankAngle =
-                                GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                                    ActiveDriver.BankAngle, -45, 45);
-                            ActiveDriver.BankAngle = Mathf.Round(ActiveDriver.BankAngle);
-                        }
-                        else
-                        {
-                            var field = inputFields["BankAngle"];
-                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                            ActiveDriver.BankAngle = (float)field.currentValue;
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_BankAngle") + ": " + ActiveDriver.BankAngle.ToString("0"), Label);//"Steer Damping"
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_bankLimit"), contextLabel);//"Wobbly"
-                            driverLines++;
-                        }
-
-                        if (!NumFieldsEnabled)
-                        {
-                            ActiveDriver.WeaveFactor = GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth), ActiveDriver.WeaveFactor, 0, 10);
-                            ActiveDriver.WeaveFactor = BDAMath.RoundToUnit(ActiveDriver.WeaveFactor, 0.1f);
-                        }
-                        else
-                        {
-                            var field = inputFields["WeaveFactor"];
-                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                            ActiveDriver.WeaveFactor = (float)field.currentValue;
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_WeaveFactor") + ": " + ActiveDriver.WeaveFactor.ToString("0.0"), Label);
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_WeaveFactor"), contextLabel);
-                            driverLines++;
-                        }
-                    }
-
-                    if (!NumFieldsEnabled)
-                    {
-                        ActiveDriver.steerMult =
-                            GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                            ActiveDriver.steerMult, 0.2f, ActiveDriver.UpToEleven ? 200 : 20);
-                        ActiveDriver.steerMult = Mathf.Round(ActiveDriver.steerMult * 10) / 10;
-                    }
-                    else
-                    {
-                        var field = inputFields["steerMult"];
-                        field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                        ActiveDriver.steerMult = (float)field.currentValue;
-                    }
-                    GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_SteerFactor") + ": " + ActiveDriver.steerMult.ToString("0.0"), Label);//"Steer Damping"
-                    driverLines++;
-                    if (contextTipsEnabled)
-                    {
-                        GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_SteerMult"), contextLabel);//"Wobbly"
-                        driverLines++;
-                    }
-
-                    if (!NumFieldsEnabled)
-                    {
-                        ActiveDriver.steerDamping =
-                            GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                            ActiveDriver.steerDamping, 0.1f, ActiveDriver.UpToEleven ? 100 : 10);
-                        ActiveDriver.steerDamping = Mathf.Round(ActiveDriver.steerDamping * 10) / 10;
-                    }
-                    else
-                    {
-                        var field = inputFields["steerDamping"];
-                        field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                        ActiveDriver.steerDamping = (float)field.currentValue;
-                    }
-                    GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_SteerDamping") + ": " + ActiveDriver.steerDamping.ToString("0.0"), Label);//"Steer Damping"
-                    driverLines++;
-                    if (contextTipsEnabled)
-                    {
-                        GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_AIWindow_DynDampMult"), contextLabel);//"Wobbly"
-                        driverLines++;
-                    }
-                    if (ActiveDriver.SurfaceType == AIUtils.VehicleMovementType.Land)
-                    {
-                        ActiveDriver.maintainMinRange = GUI.Toggle(ToggleButtonRect(leftIndent, driverLines, contentWidth),
-                            ActiveDriver.maintainMinRange, StringUtils.Localize("#LOC_BDArmory_MaintainEngagementRange") + " : " + (ActiveDriver.maintainMinRange ? StringUtils.Localize("#LOC_BDArmory_true") : StringUtils.Localize("#LOC_BDArmory_false")), ActiveDriver.maintainMinRange ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Maintain Min range"
-                        driverLines += 1.25f;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_maintainRange"), contextLabel);
-                            driverLines++;
-                        }
-                    }
-                    if (ActiveDriver.SurfaceType != AIUtils.VehicleMovementType.Stationary)
-                    {
-                        ActiveDriver.BroadsideAttack = GUI.Toggle(ToggleButtonRect(leftIndent, driverLines, contentWidth),
-                            ActiveDriver.BroadsideAttack, StringUtils.Localize("#LOC_BDArmory_BroadsideAttack") + " : " + (ActiveDriver.BroadsideAttack ? StringUtils.Localize("#LOC_BDArmory_BroadsideAttack_enabledText") : StringUtils.Localize("#LOC_BDArmory_BroadsideAttack_disabledText")), ActiveDriver.BroadsideAttack ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//Broadside Attack"
-                        driverLines += 1.25f;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_AtkVector"), contextLabel);
-                            driverLines++;
-                        }
-                    }
-
-                    if (!NumFieldsEnabled)
-                    {
-                        ActiveDriver.MinEngagementRange =
-                            GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                            ActiveDriver.MinEngagementRange, 0, ActiveDriver.UpToEleven ? 20000 : 6000);
-                        ActiveDriver.MinEngagementRange = Mathf.Round(ActiveDriver.MinEngagementRange / 100) * 100;
-                    }
-                    else
-                    {
-                        var field = inputFields["MinEngagementRange"];
-                        field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                        ActiveDriver.MinEngagementRange = (float)field.currentValue;
-                    }
-                    GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_EngageRangeMin") + ": " + ActiveDriver.MinEngagementRange.ToString("0"), Label);//"Steer Damping"
-                    driverLines++;
-                    if (contextTipsEnabled)
-                    {
-                        GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_MinEngage"), contextLabel);//"Wobbly"
-                        driverLines++;
-                    }
-
-                    if (!NumFieldsEnabled)
-                    {
-                        ActiveDriver.MaxEngagementRange =
-                            GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                            ActiveDriver.MaxEngagementRange, 500, ActiveDriver.UpToEleven ? 20000 : 8000);
-                        ActiveDriver.MaxEngagementRange = Mathf.Round(ActiveDriver.MaxEngagementRange / 100) * 100;
-                    }
-                    else
-                    {
-                        var field = inputFields["MaxEngagementRange"];
-                        field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                        ActiveDriver.MaxEngagementRange = (float)field.currentValue;
-                    }
-                    GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_EngageRangeMax") + ": " + ActiveDriver.MaxEngagementRange.ToString("0"), Label);//"Steer Damping"
-                    driverLines++;
-                    if (contextTipsEnabled)
-                    {
-                        GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_MaxEngage"), contextLabel);//"Wobbly"
-                        driverLines++;
-                    }
-
-                    ActiveDriver.ManeuverRCS = GUI.Toggle(ToggleButtonRect(leftIndent, driverLines, contentWidth),
-                        ActiveDriver.ManeuverRCS, StringUtils.Localize("#LOC_BDArmory_ManeuverRCS") + " : " + (ActiveDriver.ManeuverRCS ? StringUtils.Localize("#LOC_BDArmory_ManeuverRCS_enabledText") : StringUtils.Localize("#LOC_BDArmory_ManeuverRCS_disabledText")), ActiveDriver.BroadsideAttack ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);//"Dynamic pid"
-                    driverLines += 1.25f;
-                    if (contextTipsEnabled)
-                    {
-                        GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_RCS"), contextLabel);
-                        driverLines++;
-                    }
-                    if (ActiveDriver.SurfaceType != AIUtils.VehicleMovementType.Stationary)
-                    {
-                        if (!NumFieldsEnabled)
-                        {
-                            ActiveDriver.AvoidMass =
-                                GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth),
-                                ActiveDriver.AvoidMass, 0, ActiveDriver.UpToEleven ? 1000000f : 100);
-                            ActiveDriver.AvoidMass = Mathf.Round(ActiveDriver.AvoidMass);
-                        }
-                        else
-                        {
-                            var field = inputFields["AvoidMass"];
-                            field.tryParseValue(GUI.TextField(SettingTextRect(leftIndent, driverLines, contentWidth), field.possibleValue, 8, field.style));
-                            ActiveDriver.AvoidMass = (float)field.currentValue;
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_MinObstacleMass") + ": " + ActiveDriver.AvoidMass.ToString("0"), Label);//"Steer Damping"
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_Mass"), contextLabel);//"Wobbly"
-                            driverLines++;
-                        }
-
-                        if (broadsideDir != (broadsideDir = Mathf.RoundToInt(GUI.HorizontalSlider(SettingSliderRect(leftIndent, driverLines, contentWidth), broadsideDir, 0, ActiveDriver.orbitDirections.Length - 1))))
-                        {
-                            ActiveDriver.SetBroadsideDirection(ActiveDriver.orbitDirections[broadsideDir]);
-                            ActiveDriver.ChooseOptionsUpdated(null, null);
-                        }
-                        GUI.Label(SettinglabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_PreferredBroadsideDirection") + ": " + ActiveDriver.OrbitDirectionName, Label);//"Wobbly"
-                        driverLines++;
-                        if (contextTipsEnabled)
-                        {
-                            GUI.Label(ContextLabelRect(leftIndent, driverLines), StringUtils.Localize("#LOC_BDArmory_DriverAI_BroadsideDir"), contextLabel);//"Wobbly"
-                            driverLines++;
-                        }
-                    }
-                    GUI.EndGroup();
-
-                    contentHeight = driverLines * entryHeight;
-
-                    GUI.EndGroup();
-                    GUI.EndScrollView();
+                        break;
                 }
             }
             WindowWidth = Mathf.Lerp(WindowWidth, windowColumns * ColumnWidth, 0.15f);
+            if (minHeight == 0 && AISelectionComboBox != null) minHeight = 2 * _windowMargin + _buttonSize + AISelectionComboBox.Height;
+            WindowHeight = Mathf.Max(WindowHeight, minHeight);
 
             #region Resizing
             var resizeRect = new Rect(WindowWidth - 16, WindowHeight - 16, 16, 16);
             GUI.DrawTexture(resizeRect, GUIUtils.resizeTexture, ScaleMode.StretchToFill, true);
             if (Event.current.type == EventType.MouseDown && resizeRect.Contains(Event.current.mousePosition))
             {
-                resizingWindow = true;
+                if (Event.current.button == 1)
+                {
+                    resizingWindow = false;
+                    autoResizingWindow = true;
+                }
+                else
+                {
+                    resizingWindow = true;
+                    autoResizingWindow = false;
+                }
             }
 
-            if (Event.current.type == EventType.Repaint && resizingWindow)
+            if (Event.current.type == EventType.Repaint)
             {
-                WindowHeight += Mouse.delta.y;
-                WindowHeight = Mathf.Max(WindowHeight, 305);
-                GUI.Label(new Rect(WindowWidth / 2, WindowHeight - 26, WindowWidth / 2 - 26, 26), $"Resizing: {WindowHeight}", Label);
+                if (resizingWindow)
+                {
+                    WindowHeight += Mouse.delta.y / BDArmorySettings.UI_SCALE_ACTUAL;
+                    WindowHeight = Mathf.Max(WindowHeight, minHeight);
+                    if (BDArmorySettings.DEBUG_OTHER) GUI.Label(new Rect(WindowWidth / 2, WindowHeight - 26, WindowWidth / 2 - 26, 26), $"Resizing: {Mathf.Round(WindowHeight * BDArmorySettings.UI_SCALE_ACTUAL)}", Label);
+                }
+                else if (autoResizingWindow)
+                {
+                    WindowHeight = Mathf.Clamp((_windowMargin + _buttonSize) * 2 + contentHeight + 1, minHeight, (Screen.height - BDArmorySetup.WindowRectAI.yMin) / BDArmorySettings.UI_SCALE_ACTUAL);
+                    if (BDArmorySetup.WindowRectAI.height > WindowHeight) BDArmorySetup.WindowRectAI.height = WindowHeight; // Avoid sticking to bottom of screen during RepositionWindow.
+                }
             }
             #endregion
 
             var previousWindowHeight = BDArmorySetup.WindowRectAI.height;
             BDArmorySetup.WindowRectAI.height = WindowHeight;
             BDArmorySetup.WindowRectAI.width = WindowWidth;
-            if (!resizingWindow && BDArmorySettings.STRICT_WINDOW_BOUNDARIES && WindowHeight < previousWindowHeight && Mathf.Round(BDArmorySetup.WindowRectAI.y + previousWindowHeight) == Screen.height) // Window shrunk while being at edge of screen.
-                BDArmorySetup.WindowRectAI.y = Screen.height - BDArmorySetup.WindowRectAI.height;
+            GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectAI, previousWindowHeight);
+            GUIUtils.UpdateGUIRect(BDArmorySetup.WindowRectAI, _guiCheckIndex);
+            GUIUtils.UseMouseEventInRect(BDArmorySetup.WindowRectAI);
         }
         #endregion GUI
 
         internal void OnDestroy()
         {
             GameEvents.onVesselChange.Remove(OnVesselChange);
+            GameEvents.onVesselPartCountChanged.Remove(OnVesselModified);
+            GameEvents.onPartDestroyed.Remove(OnPartDestroyed);
             GameEvents.onEditorLoad.Remove(OnEditorLoad);
             GameEvents.onEditorPartPlaced.Remove(OnEditorPartPlacedEvent);
             GameEvents.onEditorPartDeleted.Remove(OnEditorPartDeletedEvent);
+            if (HighLogic.LoadedSceneIsEditor) GUIUtils.PreventClickThrough(BDArmorySetup.WindowRectAI, "AIGUI lock", true);
         }
     }
 }

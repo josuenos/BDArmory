@@ -187,10 +187,11 @@ namespace BDArmory.Bullets
                     { throw new ArgumentException("Invalid type specified."); }
                 }
                 catch (Exception e)
-                { throw new ArgumentException("Field '" + field + "': '" + value + "' could not be parsed as '" + type.ToString() + "' | " + e.ToString(), field); }
+                { throw new ArgumentException($"Field '{field}': '{value}' could not be parsed as '{type}' | {e.Message}", field); }
             }
             catch (Exception e)
             {
+                if (field == "name") throw; // Sanity check for field "name" to avoid potential stack overflow.
                 if (defaultRocket != null)
                 {
                     // Give a warning about the missing or invalid value, then use the default value using reflection to find the field.
@@ -203,7 +204,9 @@ namespace BDArmory.Bullets
                     }
                     else
                     {
-                        Debug.LogError("[BDArmory.BulletInfo]: Using default value of " + defaultValue.ToString() + " for " + field + " | " + e.ToString());
+                        string name = "unknown";
+                        try { name = (string)ParseField(node, "name", typeof(string)); } catch { }
+                        Debug.LogError($"[BDArmory.BulletInfo]: Using default value of {defaultValue} for {field} of {name} | {e.Message}");
                     }
                     return defaultValue;
                 }

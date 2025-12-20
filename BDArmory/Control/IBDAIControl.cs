@@ -1,23 +1,26 @@
-﻿using BDArmory.Modules;
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace BDArmory.Control
 {
+    public enum AIType { None, GenericAI, PilotAI, SurfaceAI, VTOLAI, OrbitalAI };
     public interface IBDAIControl
     {
         #region PartModule
 
         Vessel vessel { get; }
         Transform transform { get; }
+        Part part { get; }
 
         #endregion PartModule
+
+        AIType aiType { get; }
 
         /// <summary>
         /// The weapon manager the AI connects to.
         /// </summary>
-        MissileFire weaponManager { get; }
+        MissileFire WeaponManager { get; }
 
-        void ActivatePilot();
+        bool ActivatePilot();
 
         void DeactivatePilot();
 
@@ -63,6 +66,7 @@ namespace BDArmory.Control
         Vector3d commandGPS { get; }
         PilotCommands currentCommand { get; }
         ModuleWingCommander commandLeader { get; }
+        int commandFollowIndex { get; }
 
         #endregion WingCommander
     }

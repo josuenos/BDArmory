@@ -1,7 +1,5 @@
 ﻿using System.Collections.Generic;
-using System;
 using UnityEngine;
-
 using BDArmory.Competition;
 using BDArmory.Settings;
 using BDArmory.Utils;
@@ -30,29 +28,43 @@ namespace BDArmory.UI
         GUIStyle DropshadowStyle;
         GUIStyle mIStyle;
         Color Teamcolor;
+        Color Missilecolor;
+        float Opacity;
+        int textScale = 10;
+        float oldIconScale;
 
         private void Start()
         {
+            textScale = Mathf.Max(10, Mathf.CeilToInt(10 * BDTISettings.ICONSCALE));
             IconUIStyle = new GUIStyle();
             IconUIStyle.fontStyle = FontStyle.Bold;
-            IconUIStyle.fontSize = 10;
+            IconUIStyle.fontSize = textScale;
             IconUIStyle.normal.textColor = XKCDColors.Red;//replace with BDATISetup defined value varable.
 
             DropshadowStyle = new GUIStyle();
             DropshadowStyle.fontStyle = FontStyle.Bold;
-            DropshadowStyle.fontSize = 10;
+            DropshadowStyle.fontSize = textScale;
             DropshadowStyle.normal.textColor = Color.black;
 
             mIStyle = new GUIStyle();
             mIStyle.fontStyle = FontStyle.Normal;
-            mIStyle.fontSize = 10;
-            mIStyle.normal.textColor = XKCDColors.Yellow;
+            mIStyle.fontSize = textScale;
+            Missilecolor = XKCDColors.Yellow;
 
             IconMat = new Material(Shader.Find("KSP/Particles/Alpha Blended"));
+
+            UpdateStyles(true);
+            TimingManager.LateUpdateAdd(TimingManager.TimingStage.BetterLateThanNever, UpdateUI);
+        }
+
+        void OnDestroy()
+        {
+            TimingManager.LateUpdateRemove(TimingManager.TimingStage.BetterLateThanNever, UpdateUI);
         }
 
         private void DrawOnScreenIcon(Vector3 worldPos, Texture texture, Vector2 size, Color Teamcolor, bool ShowPointer)
         {
+            Teamcolor.a *= BDTISetup.iconOpacity;
             if (Event.current.type.Equals(EventType.Repaint))
             {
                 bool offscreen = false;
@@ -110,6 +122,7 @@ namespace BDArmory.UI
         }
         private void DrawThreatIndicator(Vector3 vesselPos, Vector3 targetPos, Color Teamcolor)
         {
+            Teamcolor.a *= BDTISetup.iconOpacity;
             if (Event.current.type.Equals(EventType.Repaint))
             {
                 Vector3 screenPos = GUIUtils.GetMainCamera().WorldToViewportPoint(vesselPos);
@@ -180,283 +193,277 @@ namespace BDArmory.UI
 
             if (cam == null) return;
 
+            var guiMatrix = GUI.matrix;
             GUI.matrix = Matrix4x4.identity;
             float length = 60;
 
             Rect upRect = new Rect(Pointer.x - (width / 2), Pointer.y - length, width, length);
             GUIUtility.RotateAroundPivot(-angle + 180, Pointer);
             GUIUtils.DrawRectangle(upRect, color);
-            GUI.matrix = Matrix4x4.identity;
+            GUI.matrix = guiMatrix;
         }
+
+        readonly List<(Vector3, Texture2D, Vector2, Color, bool)> onScreenIcons = []; // (position, texture, size, color, showPointer)
+        readonly List<(Rect, string, Color, GUIStyle)> onScreenLabels = []; // (position, content, style, shadow style) (shadow is the rect offset by Vector2.one if not null)
+        readonly List<(Vector3, Texture2D, Vector2, float)> texturesToDraw = []; // (position, texture, size, wobble)
+        readonly List<(Vector3, Vector3, Color)> threatIndicators = []; // (vessel, target, color)
+        readonly List<(Rect, Color)> healthBars = []; // (position, color)
+        void UpdateUI()
+        {
+            onScreenIcons.Clear();
+            onScreenLabels.Clear();
+            texturesToDraw.Clear();
+            threatIndicators.Clear();
+            healthBars.Clear();
+            if ((HighLogic.LoadedSceneIsFlight && BDArmorySetup.GAME_UI_ENABLED && !MapView.MapIsEnabled && BDTISettings.TEAMICONS) || HighLogic.LoadedSceneIsFlight && !BDArmorySetup.GAME_UI_ENABLED && !MapView.MapIsEnabled && BDTISettings.TEAMICONS && BDTISettings.PERSISTANT)
+            {
+                float size = 40;
+                UpdateStyles();
+                float minDistanceSqr = BDTISettings.DISTANCE_THRESHOLD * BDTISettings.DISTANCE_THRESHOLD;
+                float maxDistanceSqr = BDTISettings.MAX_DISTANCE_THRESHOLD * BDTISettings.MAX_DISTANCE_THRESHOLD;
+                using var vessel = FlightGlobals.Vessels.GetEnumerator();
+                while (vessel.MoveNext())
+                {
+                    if (vessel.Current == null || vessel.Current.packed || !vessel.Current.loaded) continue;
+                    if (BDTISettings.MISSILES)
+                    {
+                        using var ml = VesselModuleRegistry.GetModules<MissileBase>(vessel.Current).GetEnumerator();
+                        while (ml.MoveNext())
+                        {
+                            if (ml.Current == null) continue;
+                            MissileLauncher launcher = ml.Current as MissileLauncher;
+                            //if (ml.Current.MissileState != MissileBase.MissileStates.Idle && ml.Current.MissileState != MissileBase.MissileStates.Drop)
+
+                            bool multilauncher = false;
+                            if (launcher != null)
+                            {
+                                if (launcher.multiLauncher && !launcher.multiLauncher.isClusterMissile) multilauncher = true;
+                            }
+                            if (ml.Current.HasFired && !multilauncher && !ml.Current.HasMissed && !ml.Current.HasExploded) //culling post-thrust missiles makes AGMs get cleared almost immediately after launch
+                            {
+                                Vector3 sPos = FlightGlobals.ActiveVessel.vesselTransform.position;
+                                Vector3 tPos = vessel.Current.vesselTransform.position;
+                                float distSqr = (tPos - sPos).sqrMagnitude;
+                                if (distSqr >= minDistanceSqr && distSqr <= maxDistanceSqr)
+                                {
+                                    onScreenIcons.Add((vessel.Current.CoM, BDTISetup.Instance.TextureIconMissile, new Vector2(20, 20), Missilecolor, true));
+                                    if (GUIUtils.WorldToGUIPos(ml.Current.vessel.CoM, out Vector2 guiPos))
+                                    {
+                                        var dist = BDAMath.Sqrt(distSqr);
+                                        onScreenLabels.Add((new(guiPos.x - 12, guiPos.y + 10, 100, 32), dist > 1e3f ? $"{1e-3f * dist:0.00}km" : $"{dist:0.0}m", Missilecolor, null));
+                                        if (BDTISettings.MISSILE_TEXT)
+                                        {
+                                            Color iconUI = BDTISetup.Instance.ColorAssignments.ContainsKey(ml.Current.Team.Name) ? BDTISetup.Instance.ColorAssignments[ml.Current.Team.Name] : Color.gray;
+                                            iconUI.a = Opacity * BDTISetup.textOpacity;
+                                            onScreenLabels.Add((new(guiPos.x + 24 * BDTISettings.ICONSCALE, guiPos.y - 4, 100, 32), ml.Current.vessel.vesselName, iconUI, DropshadowStyle));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!vessel.Current.loaded || vessel.Current.packed || vessel.Current.isActiveVessel) continue;
+                    if (BDTISettings.DEBRIS)
+                    {
+                        if (vessel.Current == null) continue;
+                        if (vessel.Current.vesselType != VesselType.Debris) continue;
+                        if (vessel.Current.LandedOrSplashed) continue;
+
+                        Vector3 sPos = FlightGlobals.ActiveVessel.vesselTransform.position;
+                        Vector3 tPos = vessel.Current.vesselTransform.position;
+                        float distSqr = (tPos - sPos).sqrMagnitude;
+                        if (distSqr >= minDistanceSqr && distSqr <= maxDistanceSqr)
+                        {
+                            texturesToDraw.Add((vessel.Current.CoM, BDTISetup.Instance.TextureIconDebris, new Vector2(20, 20), 0));
+                        }
+                    }
+                }
+                using var teamManagers = BDTISetup.Instance.weaponManagers.GetEnumerator();
+                while (teamManagers.MoveNext())
+                {
+                    using var wm = teamManagers.Current.Value.GetEnumerator();
+                    while (wm.MoveNext())
+                    {
+                        if (wm.Current == null) continue;
+                        if (!BDTISetup.Instance.ColorAssignments.ContainsKey(wm.Current.Team.Name)) continue; // Ignore entries that haven't been updated yet.
+                        Color teamcolor = BDTISetup.Instance.ColorAssignments[wm.Current.Team.Name];
+                        teamcolor.a = Opacity;
+                        Teamcolor = teamcolor;
+                        teamcolor.a *= BDTISetup.textOpacity;
+                        size = wm.Current.vessel.vesselType == VesselType.Debris ? 20 : 40;
+                        if (wm.Current.vessel.isActiveVessel)
+                        {
+                            if (BDTISettings.THREATICON)
+                            {
+                                if (wm.Current.currentTarget == null) continue;
+                                Vector3 sPos = FlightGlobals.ActiveVessel.CoM;
+                                Vector3 tPos = wm.Current.currentTarget.Vessel.CoM;
+                                float relPosSqr = (tPos - sPos).sqrMagnitude;
+                                if (relPosSqr >= minDistanceSqr && relPosSqr <= maxDistanceSqr)
+                                {
+                                    threatIndicators.Add((wm.Current.vessel.CoM, wm.Current.currentTarget.Vessel.CoM, Teamcolor));
+                                }
+                            }
+                            if (BDTISettings.SHOW_SELF)
+                            {
+                                onScreenIcons.Add((
+                                    wm.Current.vessel.CoM,
+                                    GetIconForVessel(wm.Current.vessel),
+                                    new Vector2(size * BDTISettings.ICONSCALE, size * BDTISettings.ICONSCALE),
+                                    Teamcolor,
+                                    true
+                                ));
+                                if (BDTISettings.VESSELNAMES)
+                                {
+                                    if (GUIUtils.WorldToGUIPos(wm.Current.vessel.CoM, out Vector2 guiPos))
+                                    {
+                                        onScreenLabels.Add((new(guiPos.x + 24 * BDTISettings.ICONSCALE, guiPos.y - 4, 100, 32), wm.Current.vessel.vesselName, teamcolor, DropshadowStyle));
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Vector3 selfPos = FlightGlobals.ActiveVessel.CoM;
+                            Vector3 targetPos = wm.Current.vessel.CoM;
+                            Vector3 targetRelPos = targetPos - selfPos;
+                            float distSqr = targetRelPos.sqrMagnitude;
+                            if (distSqr >= minDistanceSqr && distSqr <= maxDistanceSqr) //TODO - look into having vessel icons be based on vesel visibility? (So don't draw icon for undetected stealth plane, etc?)
+                            {
+                                onScreenIcons.Add((
+                                    wm.Current.vessel.CoM,
+                                    GetIconForVessel(wm.Current.vessel),
+                                    new Vector2(size * BDTISettings.ICONSCALE, size * BDTISettings.ICONSCALE),
+                                    Teamcolor,
+                                    true
+                                ));
+                                if (BDTISettings.THREATICON)
+                                {
+                                    if (wm.Current.currentTarget != null)
+                                    {
+                                        if (!wm.Current.currentTarget.Vessel.isActiveVessel)
+                                        {
+                                            threatIndicators.Add((wm.Current.vessel.CoM, wm.Current.currentTarget.Vessel.CoM, Teamcolor));
+                                        }
+                                    }
+                                }
+                                if (GUIUtils.WorldToGUIPos(wm.Current.vessel.CoM, out Vector2 guiPos))
+                                {
+                                    if (BDTISettings.VESSELNAMES)
+                                    {
+                                        string vName = wm.Current.vessel.vesselName;
+                                        onScreenLabels.Add((new(guiPos.x + 24 * BDTISettings.ICONSCALE, guiPos.y - 4, 100, 32), vName, teamcolor, DropshadowStyle));
+                                    }
+                                    if (BDTISettings.TEAMNAMES)
+                                    {
+                                        onScreenLabels.Add((new(guiPos.x + 16 * BDTISettings.ICONSCALE, guiPos.y - 19 * BDTISettings.ICONSCALE, 100, 32), $"Team: {wm.Current.Team.Name}", teamcolor, DropshadowStyle));
+                                    }
+
+                                    if (BDTISettings.SCORE)
+                                    {
+                                        int Score = 0;
+
+                                        if (BDACompetitionMode.Instance.Scores.ScoreData.TryGetValue(wm.Current.vessel.vesselName, out var scoreData))
+                                            Score = scoreData.hits;
+                                        if (ContinuousSpawning.Instance.vesselsSpawningContinuously)
+                                        {
+                                            if (ContinuousSpawning.Instance.continuousSpawningScores.TryGetValue(wm.Current.vessel.vesselName, out var ctsScoreData))
+                                                Score += ctsScoreData.cumulativeHits;
+                                        }
+
+                                        onScreenLabels.Add((new(guiPos.x + 16 * BDTISettings.ICONSCALE, guiPos.y + 14 * BDTISettings.ICONSCALE, 100, 32), "Score: " + Score, teamcolor, DropshadowStyle));
+                                    }
+                                    float dist = BDAMath.Sqrt(distSqr);
+                                    string UIdistStr = dist > 1000f ? $"{1e-3f * dist:0.00}km" : $"{dist:0.0}m";
+                                    if (BDTISettings.HEALTHBAR)
+                                    {
+                                        float hpPercent = Mathf.Clamp01(wm.Current.currentHP / wm.Current.totalHP);
+                                        if (hpPercent > 0)
+                                        {
+                                            Rect barRect = new(guiPos.x - 32 * BDTISettings.ICONSCALE, guiPos.y + 30 * BDTISettings.ICONSCALE, 64 * BDTISettings.ICONSCALE, 12);
+                                            Rect healthRect = new(guiPos.x - 30 * BDTISettings.ICONSCALE, guiPos.y + 32 * BDTISettings.ICONSCALE, 60 * hpPercent * BDTISettings.ICONSCALE, 8);
+                                            Color temp = XKCDColors.Grey;
+                                            temp.a = Opacity * BDTISetup.iconOpacity;
+                                            healthBars.Add((barRect, temp));
+                                            temp = Color.HSVToRGB(85f * hpPercent / 255, 1f, 1f);
+                                            temp.a = Opacity * BDTISetup.iconOpacity;
+                                            healthBars.Add((healthRect, temp));
+
+                                        }
+                                        onScreenLabels.Add((new(guiPos.x - 12, guiPos.y + 45 * BDTISettings.ICONSCALE, 100, 32), UIdistStr, teamcolor, DropshadowStyle));
+                                    }
+                                    else
+                                    {
+                                        onScreenLabels.Add((new(guiPos.x - 12, guiPos.y + 20 * BDTISettings.ICONSCALE, 100, 32), UIdistStr, teamcolor, DropshadowStyle));
+                                    }
+                                    if (BDTISettings.TELEMETRY)
+                                    {
+                                        string selectedWeapon = "Using: " + wm.Current.selectedWeaponString;
+                                        string AIstate = wm.Current.AI != null ? $"Pilot {wm.Current.AI.currentStatus}" : "No AI";
+
+                                        onScreenLabels.Add((new(guiPos.x + 32 * BDTISettings.ICONSCALE, guiPos.y + 32, 200, 32), selectedWeapon, teamcolor, DropshadowStyle));
+                                        onScreenLabels.Add((new(guiPos.x + 32 * BDTISettings.ICONSCALE, guiPos.y + 48, 200, 32), AIstate, teamcolor, DropshadowStyle));
+                                        if (wm.Current.isFlaring || wm.Current.isChaffing || wm.Current.isECMJamming)
+                                        {
+                                            onScreenLabels.Add((new(guiPos.x + 32 * BDTISettings.ICONSCALE, guiPos.y + 64, 200, 32), "Deploying Counter-Measures", teamcolor, DropshadowStyle));
+                                        }
+                                        onScreenLabels.Add((new(guiPos.x - 96 * BDTISettings.ICONSCALE, guiPos.y + 64, 100, 32), $"Speed: {wm.Current.vessel.speed:0.0}m/s", teamcolor, DropshadowStyle));
+                                        onScreenLabels.Add((new(guiPos.x - 96 * BDTISettings.ICONSCALE, guiPos.y + 80, 100, 32), $"Alt: {wm.Current.vessel.altitude:0.0}m", teamcolor, DropshadowStyle));
+                                        onScreenLabels.Add((new(guiPos.x - 96 * BDTISettings.ICONSCALE, guiPos.y + 96, 100, 32), $"Throttle: {Mathf.CeilToInt(wm.Current.vessel.ctrlState.mainThrottle * 100)}%", teamcolor, DropshadowStyle));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         void OnGUI()
         {
             if ((HighLogic.LoadedSceneIsFlight && BDArmorySetup.GAME_UI_ENABLED && !MapView.MapIsEnabled && BDTISettings.TEAMICONS) || HighLogic.LoadedSceneIsFlight && !BDArmorySetup.GAME_UI_ENABLED && !MapView.MapIsEnabled && BDTISettings.TEAMICONS && BDTISettings.PERSISTANT)
             {
-                Texture icon;
-                float size = 40;
+                // Ordering: textures (debris), icons, health bars, threat indicators, text.
+                foreach (var (position, texture, size, wobble) in texturesToDraw) GUIUtils.DrawTextureOnWorldPos(position, texture, size, wobble);
+                foreach (var (position, icon, size, color, showPointer) in onScreenIcons) DrawOnScreenIcon(position, icon, size, color, showPointer);
+                foreach (var (rect, color) in healthBars) GUIUtils.DrawRectangle(rect, color);
+                foreach (var (from, to, color) in threatIndicators) DrawThreatIndicator(from, to, color);
+                foreach (var (rect, content, color, shadowStyle) in onScreenLabels)
+                {
+                    if (shadowStyle != null) GUI.Label(new(rect.position + Vector2.one, rect.size), content, shadowStyle);
+                    IconUIStyle.normal.textColor = color;
+                    GUI.Label(rect, content, IconUIStyle);
+                }
+            }
+        }
 
-                using (List<Vessel>.Enumerator v = FlightGlobals.Vessels.GetEnumerator())
-                    while (v.MoveNext())
-                    {
-                        if (v.Current == null || v.Current.packed || !v.Current.loaded) continue;
-                        if (BDTISettings.MISSILES)
-                        {
-                            using (var ml = VesselModuleRegistry.GetModules<MissileBase>(v.Current).GetEnumerator())
-                                while (ml.MoveNext())
-                                {
-                                    if (ml.Current == null) continue;
-                                    MissileLauncher launcher = ml.Current as MissileLauncher;
-                                    //if (ml.Current.MissileState != MissileBase.MissileStates.Idle && ml.Current.MissileState != MissileBase.MissileStates.Drop)
+        void UpdateStyles(bool forceUpdate = false)
+        {
+            // Update opacity for DropshadowStyle, mIStyle, Missilecolor. IconUIStyle opacity
+            // is updated in OnGUI().
+            if (forceUpdate || Opacity != BDTISettings.OPACITY)
+            {
+                Opacity = BDTISettings.OPACITY;
 
-                                    bool multilauncher = false;
-                                    if (launcher != null)
-                                    {
-                                        if (launcher.multiLauncher && !launcher.multiLauncher.isClusterMissile) multilauncher = true;
-                                    }
-                                    if (ml.Current.HasFired && !multilauncher && !ml.Current.HasMissed && !ml.Current.HasExploded) //culling post-thrust missiles makes AGMs get cleared almost immediately after launch
-                                    {
-                                        Vector3 sPos = FlightGlobals.ActiveVessel.vesselTransform.position;
-                                        Vector3 tPos = v.Current.vesselTransform.position;
-                                        float Dist = (tPos - sPos).magnitude;
-                                        Vector2 guiPos;
-                                        string UIdist;
-                                        string UoM;
-                                        if (Dist >= BDTISettings.DISTANCE_THRESHOLD && Dist <= BDTISettings.MAX_DISTANCE_THRESHOLD)
-                                        {
-                                            if (Dist / 1000 >= 1)
-                                            {
-                                                UoM = "km";
-                                                UIdist = (Dist / 1000).ToString("0.00");
-                                            }
-                                            else
-                                            {
-                                                UoM = "m";
-                                                UIdist = Dist.ToString("0.0");
-                                            }
-                                            GUIUtils.DrawTextureOnWorldPos(v.Current.CoM, BDTISetup.Instance.TextureIconMissile, new Vector2(20, 20), 0);
-                                            if (GUIUtils.WorldToGUIPos(ml.Current.vessel.CoM, out guiPos))
-                                            {
-                                                Rect distRect = new Rect((guiPos.x - 12), (guiPos.y + 10), 100, 32);
-                                                GUI.Label(distRect, UIdist + UoM, mIStyle);
-                                            }
-                                            if (BDTISettings.VESSELNAMES)
-                                            {
-                                                if (GUIUtils.WorldToGUIPos(ml.Current.vessel.CoM, out guiPos))
-                                                {
-                                                    IconUIStyle.normal.textColor = BDTISetup.Instance.ColorAssignments.ContainsKey(ml.Current.Team.Name) ? BDTISetup.Instance.ColorAssignments[ml.Current.Team.Name] : Color.gray;
-                                                    Rect nameRect = new Rect((guiPos.x + (24 * BDTISettings.ICONSCALE)), guiPos.y - 4, 100, 32);
-                                                    Rect shadowRect = new Rect((nameRect.x + 1), nameRect.y + 1, 100, 32);
-                                                    GUI.Label(shadowRect, ml.Current.vessel.vesselName, DropshadowStyle);
-                                                    GUI.Label(nameRect, ml.Current.vessel.vesselName, IconUIStyle);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                        }
+                Teamcolor.a = Opacity;
+                Color temp;
+                temp = DropshadowStyle.normal.textColor;
+                temp.a = Opacity * BDTISetup.textOpacity;
+                DropshadowStyle.normal.textColor = temp;
+                temp = mIStyle.normal.textColor;
+                temp.a = Opacity * BDTISetup.textOpacity;
+                mIStyle.normal.textColor = temp;
+                Missilecolor.a = Opacity;
+            }
+            if (forceUpdate || BDTISettings.ICONSCALE != oldIconScale)
+            {
+                textScale = Mathf.Max(10, Mathf.CeilToInt(10 * BDTISettings.ICONSCALE)); //Would BD_UI_SCALE make more sense here?
+                oldIconScale = BDTISettings.ICONSCALE;
 
-                        if (!v.Current.loaded || v.Current.packed || v.Current.isActiveVessel) continue;
-                        if (BDTISettings.DEBRIS)
-                        {
-                            if (v.Current == null) continue;
-                            if (v.Current.vesselType != VesselType.Debris) continue;
-                            if (v.Current.LandedOrSplashed) continue;
-
-                            Vector3 sPos = FlightGlobals.ActiveVessel.vesselTransform.position;
-                            Vector3 tPos = v.Current.vesselTransform.position;
-                            float Dist = (tPos - sPos).magnitude;
-                            if (Dist >= BDTISettings.DISTANCE_THRESHOLD && Dist <= BDTISettings.MAX_DISTANCE_THRESHOLD)
-                            {
-                                GUIUtils.DrawTextureOnWorldPos(v.Current.CoM, BDTISetup.Instance.TextureIconDebris, new Vector2(20, 20), 0);
-                            }
-                        }
-                    }
-                using (var teamManagers = BDTISetup.Instance.weaponManagers.GetEnumerator())
-                    while (teamManagers.MoveNext())
-                    {
-                        using (var wm = teamManagers.Current.Value.GetEnumerator())
-                            while (wm.MoveNext())
-                            {
-                                if (wm.Current == null) continue;
-                                if (!BDTISetup.Instance.ColorAssignments.ContainsKey(wm.Current.Team.Name)) continue; // Ignore entries that haven't been updated yet.
-                                Teamcolor = BDTISetup.Instance.ColorAssignments[wm.Current.Team.Name];
-                                IconUIStyle.normal.textColor = Teamcolor;
-                                size = wm.Current.vessel.vesselType == VesselType.Debris ? 20 : 40;
-                                if (wm.Current.vessel.isActiveVessel)
-                                {
-                                    if (BDTISettings.THREATICON)
-                                    {
-                                        if (wm.Current.currentTarget == null) continue;
-                                        Vector3 sPos = FlightGlobals.ActiveVessel.CoM;
-                                        Vector3 tPos = (wm.Current.currentTarget.Vessel.CoM);
-                                        float RelPos = (tPos - sPos).magnitude;
-                                        if (RelPos >= BDTISettings.DISTANCE_THRESHOLD && RelPos <= BDTISettings.MAX_DISTANCE_THRESHOLD)
-                                        {
-                                            DrawThreatIndicator(wm.Current.vessel.CoM, wm.Current.currentTarget.Vessel.CoM, Teamcolor);
-                                        }
-                                    }
-                                    if (BDTISettings.SHOW_SELF)
-                                    {
-                                        icon = GetIconForVessel(wm.Current.vessel);
-                                        DrawOnScreenIcon(wm.Current.vessel.CoM, icon, new Vector2((size * BDTISettings.ICONSCALE), (size * BDTISettings.ICONSCALE)), Teamcolor, true);
-                                        if (BDTISettings.VESSELNAMES)
-                                        {
-                                            Vector2 guiPos;
-                                            if (GUIUtils.WorldToGUIPos(wm.Current.vessel.CoM, out guiPos))
-                                            {
-                                                Rect nameRect = new Rect((guiPos.x + (24 * BDTISettings.ICONSCALE)), guiPos.y - 4, 100, 32);
-                                                Rect shadowRect = new Rect((nameRect.x + 1), nameRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect, wm.Current.vessel.vesselName, DropshadowStyle);
-                                                GUI.Label(nameRect, wm.Current.vessel.vesselName, IconUIStyle);
-                                            }
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    Vector3 selfPos = FlightGlobals.ActiveVessel.CoM;
-                                    Vector3 targetPos = (wm.Current.vessel.CoM);
-                                    Vector3 targetRelPos = (targetPos - selfPos);
-                                    Vector2 guiPos;
-                                    float distance;
-                                    string UIdist;
-                                    string UoM;
-                                    string vName;
-                                    string selectedWeapon = string.Empty;
-                                    string AIstate = string.Empty;
-                                    distance = targetRelPos.magnitude;
-                                    if (distance >= BDTISettings.DISTANCE_THRESHOLD && distance <= BDTISettings.MAX_DISTANCE_THRESHOLD) //TODO - look into having vessel icons be based on vesel visibility? (So don't draw icon for undetected stealth plane, etc?)
-                                    {
-                                        if ((distance / 1000) >= 1)
-                                        {
-                                            UoM = "km";
-                                            UIdist = (distance / 1000).ToString("0.00");
-                                        }
-                                        else
-                                        {
-                                            UoM = "m";
-                                            UIdist = distance.ToString("0.0");
-                                        }
-                                        icon = GetIconForVessel(wm.Current.vessel);
-                                        DrawOnScreenIcon(wm.Current.vessel.CoM, icon, new Vector2((size * BDTISettings.ICONSCALE), (size * BDTISettings.ICONSCALE)), Teamcolor, true);
-                                        if (BDTISettings.THREATICON)
-                                        {
-                                            if (wm.Current.currentTarget != null)
-                                            {
-                                                if (!wm.Current.currentTarget.Vessel.isActiveVessel)
-                                                {
-                                                    DrawThreatIndicator(wm.Current.vessel.CoM, wm.Current.currentTarget.Vessel.CoM, Teamcolor);
-                                                }
-                                            }
-                                        }
-                                        if (GUIUtils.WorldToGUIPos(wm.Current.vessel.CoM, out guiPos))
-                                        {
-                                            if (BDTISettings.VESSELNAMES)
-                                            {
-                                                vName = wm.Current.vessel.vesselName;
-                                                Rect nameRect = new Rect((guiPos.x + (24 * BDTISettings.ICONSCALE)), guiPos.y - 4, 100, 32);
-                                                Rect shadowRect = new Rect((nameRect.x + 1), nameRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect, vName, DropshadowStyle);
-                                                GUI.Label(nameRect, vName, IconUIStyle);
-                                            }
-                                            if (BDTISettings.TEAMNAMES)
-                                            {
-                                                Rect teamRect = new Rect((guiPos.x + (16 * BDTISettings.ICONSCALE)), (guiPos.y - (19 * BDTISettings.ICONSCALE)), 100, 32);
-                                                Rect shadowRect = new Rect((teamRect.x + 1), teamRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect, "Team: " + $"{wm.Current.Team.Name}", DropshadowStyle);
-                                                GUI.Label(teamRect, "Team: " + $"{wm.Current.Team.Name}", IconUIStyle);
-                                            }
-
-                                            if (BDTISettings.SCORE)
-                                            {
-                                                ScoringData scoreData = null;
-                                                int Score = 0;
-
-                                                if (BDACompetitionMode.Instance.Scores.ScoreData.ContainsKey(wm.Current.vessel.vesselName))
-                                                {
-                                                    scoreData = BDACompetitionMode.Instance.Scores.ScoreData[wm.Current.vessel.vesselName];
-                                                    Score = scoreData.hits;
-                                                }
-                                                if (ContinuousSpawning.Instance.vesselsSpawningContinuously)
-                                                {
-                                                    if (ContinuousSpawning.Instance.continuousSpawningScores.ContainsKey(wm.Current.vessel.vesselName))
-                                                    {
-                                                        Score += ContinuousSpawning.Instance.continuousSpawningScores[wm.Current.vessel.vesselName].cumulativeHits;
-                                                    }
-                                                }
-
-                                                Rect scoreRect = new Rect((guiPos.x + (16 * BDTISettings.ICONSCALE)), (guiPos.y + (14 * BDTISettings.ICONSCALE)), 100, 32);
-                                                Rect shadowRect = new Rect((scoreRect.x + 1), scoreRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect, "Score: " + Score, DropshadowStyle);
-                                                GUI.Label(scoreRect, "Score: " + Score, IconUIStyle);
-                                            }
-                                            if (BDTISettings.HEALTHBAR)
-                                            {
-
-                                                double hpPercent = 1;
-                                                hpPercent = Mathf.Clamp(wm.Current.currentHP / wm.Current.totalHP, 0, 1);
-                                                if (hpPercent > 0)
-                                                {
-                                                    Rect barRect = new Rect((guiPos.x - (32 * BDTISettings.ICONSCALE)), (guiPos.y + (30 * BDTISettings.ICONSCALE)), (64 * BDTISettings.ICONSCALE), 12);
-                                                    Rect healthRect = new Rect((guiPos.x - (30 * BDTISettings.ICONSCALE)), (guiPos.y + (32 * BDTISettings.ICONSCALE)), (60 * (float)hpPercent * BDTISettings.ICONSCALE), 8);
-                                                    //GUI.Label(healthRect, "Team: " + $"{wm.Current.Team.Name}", IconUIStyle);
-                                                    GUIUtils.DrawRectangle(barRect, XKCDColors.Grey);
-                                                    GUIUtils.DrawRectangle(healthRect, Color.HSVToRGB((85f * (float)hpPercent) / 255, 1f, 1f));
-
-                                                }
-                                                Rect distRect = new Rect((guiPos.x - 12), (guiPos.y + (45 * BDTISettings.ICONSCALE)), 100, 32);
-                                                Rect shadowRect = new Rect((distRect.x + 1), distRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect, UIdist + UoM, DropshadowStyle);
-                                                GUI.Label(distRect, UIdist + UoM, IconUIStyle);
-                                            }
-                                            else
-                                            {
-                                                Rect distRect = new Rect((guiPos.x - 12), (guiPos.y + (20 * BDTISettings.ICONSCALE)), 100, 32);
-                                                Rect shadowRect = new Rect((distRect.x + 1), distRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect, UIdist + UoM, DropshadowStyle);
-                                                GUI.Label(distRect, UIdist + UoM, IconUIStyle);
-                                            }
-                                            if (BDTISettings.TELEMETRY)
-                                            {
-                                                selectedWeapon = "Using: " + wm.Current.selectedWeaponString;
-                                                AIstate = "No AI";
-                                                if (wm.Current.AI != null)
-                                                {
-                                                    AIstate = "Pilot " + wm.Current.AI.currentStatus;
-                                                }
-                                                Rect telemetryRect = new Rect((guiPos.x + (32 * BDTISettings.ICONSCALE)), guiPos.y + 32, 200, 32);
-                                                Rect shadowRect = new Rect((telemetryRect.x + 1), telemetryRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect, selectedWeapon, DropshadowStyle);
-                                                GUI.Label(telemetryRect, selectedWeapon, IconUIStyle);
-                                                Rect telemetryRect2 = new Rect((guiPos.x + (32 * BDTISettings.ICONSCALE)), guiPos.y + 48, 200, 32);
-                                                Rect shadowRect2 = new Rect((telemetryRect2.x + 1), telemetryRect2.y + 1, 100, 32);
-                                                GUI.Label(telemetryRect2, AIstate, DropshadowStyle);
-                                                GUI.Label(telemetryRect2, AIstate, IconUIStyle);
-                                                if (wm.Current.isFlaring || wm.Current.isChaffing || wm.Current.isECMJamming)
-                                                {
-                                                    Rect telemetryRect3 = new Rect((guiPos.x + (32 * BDTISettings.ICONSCALE)), guiPos.y + 64, 200, 32);
-                                                    Rect shadowRect3 = new Rect((telemetryRect3.x + 1), telemetryRect3.y + 1, 100, 32);
-                                                    GUI.Label(shadowRect3, "Deploying Counter-Measures", DropshadowStyle);
-                                                    GUI.Label(telemetryRect3, "Deploying Counter-Measures", IconUIStyle);
-                                                }
-                                                Rect SpeedRect = new Rect((guiPos.x - (96 * BDTISettings.ICONSCALE)), guiPos.y + 64, 100, 32);
-                                                Rect shadowRect4 = new Rect((SpeedRect.x + 1), SpeedRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect4, "Speed: " + wm.Current.vessel.speed.ToString("0.0") + "m/s", DropshadowStyle);
-                                                GUI.Label(SpeedRect, "Speed: " + wm.Current.vessel.speed.ToString("0.0") + "m/s", IconUIStyle);
-                                                Rect RAltRect = new Rect((guiPos.x - (96 * BDTISettings.ICONSCALE)), guiPos.y + 80, 100, 32);
-                                                Rect shadowRect5 = new Rect((RAltRect.x + 1), RAltRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect5, "Alt: " + wm.Current.vessel.altitude.ToString("0.0") + "m", DropshadowStyle);
-                                                GUI.Label(RAltRect, "Alt: " + wm.Current.vessel.altitude.ToString("0.0") + "m", IconUIStyle);
-                                                Rect ThrottleRect = new Rect((guiPos.x - (96 * BDTISettings.ICONSCALE)), guiPos.y + 96, 100, 32);
-                                                Rect shadowRect6 = new Rect((ThrottleRect.x + 1), ThrottleRect.y + 1, 100, 32);
-                                                GUI.Label(shadowRect6, "Throttle: " + Mathf.CeilToInt(wm.Current.vessel.ctrlState.mainThrottle * 100) + "%", DropshadowStyle);
-                                                GUI.Label(ThrottleRect, "Throttle: " + Mathf.CeilToInt(wm.Current.vessel.ctrlState.mainThrottle * 100) + "%", IconUIStyle);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                    }
+                IconUIStyle.fontSize = textScale;
+                DropshadowStyle.fontSize = textScale;
+                mIStyle.fontSize = textScale;
             }
         }
 
@@ -490,8 +497,11 @@ namespace BDArmory.UI
             else if (v.vesselType == VesselType.Debris)
             {
                 icon = BDTISetup.Instance.TextureIconDebris;
-                IconUIStyle.normal.textColor = XKCDColors.Grey;
-                Teamcolor = XKCDColors.Grey;
+                Color temp = XKCDColors.Grey;
+                temp.a = Opacity;
+                Teamcolor = temp;
+                temp.a *= BDTISetup.textOpacity;
+                IconUIStyle.normal.textColor = temp;
             }
             else
             {

@@ -89,7 +89,7 @@ namespace BDArmory.Extensions
             var normalisationFactor = BDAMath.Sqrt(v1.sqrMagnitude * v2.sqrMagnitude);
             return normalisationFactor > 0 ? Vector3.Dot(v1, v2) / normalisationFactor : 0;
         }
-    
+
         /// <summary>
         /// Efficient replacement for Vector3.Distance(from, to) < distance.
         /// Intel and AMD appear to support sqrt in hardware, but M1 Macs don't.
@@ -116,5 +116,77 @@ namespace BDArmory.Extensions
         {
             return (v - from).sqrMagnitude > distance * distance;
         }
+
+        /// <summary>
+        /// Decompose a vector into a magnitude and normalized direction.
+        /// This performs the same operations as v.normalized but also returns the magnitude, which is often needed.
+        /// </summary>
+        /// <param name="v">The vector to decompose.</param>
+        /// <returns>The magnitude and normalized unit vector.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static (float, Vector3) MagNorm(this Vector3 v)
+        {
+            float mag = v.magnitude;
+            if (mag > Vector3.kEpsilon)
+                return (mag, v / mag);
+            else
+                return (mag, Vector3.zero);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static (double, Vector3d) MagNorm(this Vector3d v)
+        {
+            double mag = v.magnitude;
+            if (mag > Vector3.kEpsilon)
+                return (mag, v / mag);
+            else
+                return (mag, Vector3.zero);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static (float, Vector2) MagNorm(this Vector2 v)
+        {
+            float mag = v.magnitude;
+            if (mag > Vector2.kEpsilon)
+                return (mag, v / mag);
+            else
+                return (mag, Vector2.zero);
+        }
+
+        /// <summary>
+        /// Check if any of the vector elements are NaN.
+        /// </summary>
+        /// <param name="v">A Vector3.</param>
+        /// <returns>True if any of the elements are NaN.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsNaN(this Vector3 v)
+        { return float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z); }
+        /// <summary>
+        /// Check if any of the quaternion elements are NaN.
+        /// </summary>
+        /// <param name="q">A Quaternion</param>
+        /// <returns>True if any of the elements are NaN.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsNaN(this Quaternion q) // Techinically not a Vector3 extension, but it fits here.
+        { return float.IsNaN(q.w) || float.IsNaN(q.x) || float.IsNaN(q.y) || float.IsNaN(q.z); }
+
+        /// <summary>
+        /// Check if any of the vector elements are Inf.
+        /// </summary>
+        /// <param name="v">A Vector3.</param>
+        /// <returns>True if any of the elements are Inf.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsInf(this Vector3 v)
+        { return float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z); }
+        /// <summary>
+        /// Check if any of the quaternion elements are Inf.
+        /// </summary>
+        /// <param name="q">A Quaternion</param>
+        /// <returns>True if any of the elements are Inf.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsInf(this Quaternion q) // Techinically not a Vector3 extension, but it fits here.
+        { return float.IsInfinity(q.w) || float.IsInfinity(q.x) || float.IsInfinity(q.y) || float.IsInfinity(q.z); }
+
+        // Combined methods for convenience.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool IsInfOrNaN(this Vector3 v) => v.IsNaN() || v.IsInf();
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] public static bool IsInfOrNaN(this Quaternion q) => q.IsNaN() || q.IsInf();
     }
 }

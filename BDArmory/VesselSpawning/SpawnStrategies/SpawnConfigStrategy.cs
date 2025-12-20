@@ -8,7 +8,7 @@ namespace BDArmory.VesselSpawning.SpawnStrategies
     /// </summary>
     public class SpawnConfigStrategy : SpawnStrategy
     {
-        private SpawnConfig spawnConfig;
+        public SpawnConfig spawnConfig;
         private bool success = false;
 
         public SpawnConfigStrategy(SpawnConfig spawnConfig) { this.spawnConfig = spawnConfig; }

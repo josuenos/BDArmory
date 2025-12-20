@@ -1,8 +1,8 @@
 using System.Collections;
 using UnityEngine;
-using KSP.Localization;
 
 using BDArmory.Control;
+using BDArmory.Settings;
 using BDArmory.Utils;
 
 namespace BDArmory.UI
@@ -186,6 +186,7 @@ namespace BDArmory.UI
                     width,
                     height);
                 BDArmorySetup.SetGUIOpacity();
+                if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, clientRect.position);
                 window = GUI.Window(10591029, clientRect, TargetingSelectorWindow, "", BDArmorySetup.BDGuiSkin.window);
                 BDArmorySetup.SetGUIOpacity(false);
                 GUIUtils.UpdateGUIRect(window, guiCheckIndex);

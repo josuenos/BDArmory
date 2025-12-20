@@ -1,12 +1,12 @@
 using System.Collections.Generic;
-using System.Text;
 using KSP.Localization;
+using UnityEngine;
 
 namespace BDArmory.Utils
 {
     public static class StringUtils
     {
-        static Dictionary<string, string> localizedStrings = new Dictionary<string, string>(); // Cache localized strings so that they don't need to be repeatedly localized.
+        static readonly Dictionary<string, string> localizedStrings = []; // Cache localized strings so that they don't need to be repeatedly localized.
 
         public static string Localize(string template)
         {

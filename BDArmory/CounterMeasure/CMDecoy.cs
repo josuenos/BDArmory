@@ -34,13 +34,13 @@ namespace BDArmory.CounterMeasure
         public void SetAcoustics(Vessel sourceVessel)
         {
             // generate decoy sound prodile within spectrum of emitting vessel's acoustic signature, but narrow range for low heats
-            acousticSig = BDATargetManager.GetVesselAcousticSignature(sourceVessel, Vector3.zero);
+            acousticSig = BDATargetManager.GetVesselAcousticSignature(sourceVessel, Vector3.zero).Item1;
             audio = acousticSig;
             float audioMinMult = Mathf.Clamp(((0.00093f * acousticSig * acousticSig - 1.4457f * acousticSig + 1141.95f) / 1000f), 0.65f, 0.8f); // Equivalent to above, but uses polynomial for speed
             audio *= UnityEngine.Random.Range(audioMinMult, Mathf.Max(BDArmorySettings.FLARE_FACTOR, 0f) - audioMinMult + 0.8f);
 
             if (BDArmorySettings.DEBUG_OTHER)
-                Debug.Log("[BDArmory.CMFlare]: New decoy generated from " + sourceVessel.GetName() + ":" + acousticSig.ToString("0.0") + ", decoy sig: " + audio.ToString("0.0"));
+                Debug.Log("[BDArmory.CMDecoy]: New decoy generated from " + sourceVessel.GetName() + ":" + acousticSig.ToString("0.0") + ", decoy sig: " + audio.ToString("0.0"));
         }
 
         void OnEnable()
@@ -112,7 +112,7 @@ namespace BDArmory.CounterMeasure
                     }
                     catch (NullReferenceException e)
                     {
-                        Debug.LogWarning("[BDArmory.CMFlare]: NRE setting worldVelocity: " + e.Message);
+                        Debug.LogWarning("[BDArmory.CMDecoy]: NRE setting worldVelocity: " + e.Message);
                     }
 
                     try
@@ -124,7 +124,7 @@ namespace BDArmory.CounterMeasure
                     }
                     catch (NullReferenceException e)
                     {
-                        Debug.LogWarning("[BDArmory.CMFlare]: NRE checking density: " + e.Message);
+                        Debug.LogWarning("[BDArmory.CMDecoy]: NRE checking density: " + e.Message);
                     }
                 }
             //
@@ -155,6 +155,10 @@ namespace BDArmory.CounterMeasure
                 return;
             }
             transform.localPosition += velocity * Time.fixedDeltaTime;
+            if (FlightGlobals.getAltitudeAtPos(transform.position) > 0)
+                velocity += FlightGlobals.getGeeForceAtPosition(transform.position) * Time.fixedDeltaTime;
+
+            transform.position += velocity * Time.fixedDeltaTime;
         }
 
         public void EnableEmitters()

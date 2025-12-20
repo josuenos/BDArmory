@@ -20,7 +20,7 @@ namespace BDArmory.Utils
                 {
                     if (module.name == "MODULE" && module.HasValue("name") && module.GetValue("name") == moduleName)
                         if (module.HasValue(fieldName))
-                            if (string.IsNullOrEmpty(moduleID) || (!string.IsNullOrEmpty(moduleID) && module.GetValue(moduleID) == moduleIDValue))
+                            if (string.IsNullOrEmpty(moduleID) || module.GetValue(moduleID) == moduleIDValue)
                                 return module.GetValue(fieldName);
                 }
             }

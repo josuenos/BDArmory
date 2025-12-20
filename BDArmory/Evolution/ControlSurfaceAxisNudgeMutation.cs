@@ -27,14 +27,16 @@ namespace BDArmory.Evolution
             this.direction = direction;
         }
 
-        public void Apply(ConfigNode craft, VariantEngine engine)
+        public ConfigNode Apply(ConfigNode craft, VariantEngine engine)
         {
+            ConfigNode mutatedCraft = craft.CreateCopy();
             Debug.Log("[BDArmory.ControlSurfaceAxisNudgeMutation]: Evolution ControlSurfaceNudgeMutation applying");
-            List<ConfigNode> matchingNodes = engine.FindModuleNodes(craft, moduleName);
+            List<ConfigNode> matchingNodes = engine.FindModuleNodes(mutatedCraft, moduleName);
             foreach (var node in matchingNodes)
             {
-                MutateIfNeeded(node, craft, engine);
+                MutateIfNeeded(node, mutatedCraft, engine);
             }
+            return mutatedCraft;
         }
 
         public Variant GetVariant(string id, string name)
@@ -62,7 +64,7 @@ namespace BDArmory.Evolution
             }
             if ((axisMask & MASK_YAW) == MASK_YAW)
             {
-                if (node.HasValue("ignoreRoll") && node.GetValue("ignoreRoll") == "False")
+                if (node.HasValue("ignoreYaw") && node.GetValue("ignoreYaw") == "False")
                 {
                     shouldMutate = true;
                 }

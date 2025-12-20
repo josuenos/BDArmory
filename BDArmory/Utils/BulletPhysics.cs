@@ -21,7 +21,7 @@ namespace BDArmory.Utils
             //float aDrag = (k * vSqr) / m;
 
             //Has to be in a direction opposite of the bullet's velocity vector
-            //Vector3 dragVec = aDrag * velocityVec.normalized * -1f;
+            //Vector3 dragVec = -aDrag * velocityVec.normalized;
 
             ///////////////////////////////////////////////////////
             float bulletDragArea = Mathf.PI * caliber * caliber / 4f;
@@ -29,9 +29,9 @@ namespace BDArmory.Utils
 
             float k = 0.5f * bulletBallisticCoefficient * rho * bulletDragArea;
             float vSqr = velocity.sqrMagnitude;
-            float aDrag = (k * vSqr) / bulletMass;
+            float aDrag = k * vSqr / bulletMass;
 
-            Vector3 dragVec = aDrag * velocity.normalized * -1f;
+            Vector3 dragVec = -aDrag * velocity.normalized;
 
             return dragVec;
         }

@@ -115,7 +115,8 @@ namespace BDArmory.Competition
                         activeVesselModels.Select(m => vesselSource.GetLocalPath(m.id)).ToList()
                     ),
                     spawnRadius,
-                    BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE
+                    BDArmorySettings.VESSEL_SPAWN_DISTANCE_TOGGLE,
+                    BDArmorySettings.VESSEL_SPAWN_REF_HEADING
                 )
             );
             var waypoints = WaypointCourses.CourseLocations[BDArmorySettings.WAYPOINT_COURSE_INDEX].waypoints;

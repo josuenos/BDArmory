@@ -20,10 +20,11 @@ namespace BDArmory.Evolution
             this.direction = direction;
         }
 
-        public void Apply(ConfigNode craft, VariantEngine engine)
+        public ConfigNode Apply(ConfigNode craft, VariantEngine engine)
         {
+            ConfigNode mutatedCraft = craft.CreateCopy();
             Debug.Log("[BDArmory.PilotAINudgeMutation]: Evolution PilotAINudgeMutation applying");
-            List<ConfigNode> matchingNodes = engine.FindModuleNodes(craft, "BDModulePilotAI");
+            List<ConfigNode> matchingNodes = engine.FindModuleNodes(mutatedCraft, "BDModulePilotAI");
             if (matchingNodes.Count == 1)
             {
                 Debug.Log("[BDArmory.PilotAINudgeMutation]: Evolution PilotAINudgeMutation found module");
@@ -33,11 +34,11 @@ namespace BDArmory.Evolution
                 Debug.Log(string.Format("Evolution PilotAINudgeMutation found existing value {0}", existingValue));
                 if (engine.NudgeNode(node, paramName, modifier) )
                 {
-                    ConfigNode partNode = engine.FindParentPart(craft, node);
+                    ConfigNode partNode = engine.FindParentPart(mutatedCraft, node);
                     if( partNode == null )
                     {
                         Debug.Log("[BDArmory.PilotAINudgeMutation]: Evolution PilotAINudgeMutation failed to find parent part for module");
-                        return;
+                        return mutatedCraft;
                     }
                     string partName = partNode.GetValue("part");
                     var value = existingValue * (1 + modifier);
@@ -53,6 +54,7 @@ namespace BDArmory.Evolution
             {
                 Debug.Log("[BDArmory.PilotAINudgeMutation]: Evolution PilotAINudgeMutation wrong number of pilot modules");
             }
+            return mutatedCraft;
         }
 
         public Variant GetVariant(string id, string name)

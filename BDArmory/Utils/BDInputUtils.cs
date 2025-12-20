@@ -179,15 +179,19 @@ namespace BDArmory.Utils
         public static GUIStyle InputFieldBadStyle;
         static void ConfigureStyles()
         {
-            InputFieldStyle = new GUIStyle(GUI.skin.textField);
-            InputFieldStyle.alignment = TextAnchor.MiddleRight;
+            InputFieldStyle = new GUIStyle(GUI.skin.textField)
+            { alignment = TextAnchor.MiddleRight };
             InputFieldBadStyle = new GUIStyle(InputFieldStyle);
             InputFieldBadStyle.normal.textColor = Color.red;
             InputFieldBadStyle.focused.textColor = Color.red;
         }
 
-        public NumericInputField Initialise(double l, double v, double minV = double.MinValue, double maxV = double.MaxValue)
-        { lastUpdated = l; currentValue = v; minValue = minV; maxValue = maxV; return this; }
+        public NumericInputField Initialise(double lastUpdated, double currentValue, double minValue = double.MinValue, double maxValue = double.MaxValue, (float, float, bool, bool) meta = default)
+        {
+            this.lastUpdated = lastUpdated; this.currentValue = currentValue; this.minValue = minValue; this.maxValue = maxValue;
+            (rounding, sigFig, withZero, reducedPrecisionAtMin) = meta;
+            return this;
+        }
         public double lastUpdated;
         public string possibleValue = string.Empty;
         private double _value;
@@ -209,6 +213,13 @@ namespace BDArmory.Utils
         private bool coroutineRunning = false;
         private Coroutine coroutine;
         public bool valid = true;
+
+        #region Metadata (not used internally, but provided for reference for automation)
+        public float rounding;
+        public float sigFig;
+        public bool withZero;
+        public bool reducedPrecisionAtMin;
+        #endregion
 
         // Set the current value and force the display to update.
         public void SetCurrentValue(double value)

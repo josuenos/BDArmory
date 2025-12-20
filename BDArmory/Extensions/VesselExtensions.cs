@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Runtime.CompilerServices;
 
 using BDArmory.Settings;
 using BDArmory.Utils;
@@ -86,16 +87,31 @@ namespace BDArmory.Extensions
             return radarAlt;
         }
 
-        // Get a vessel's "radius".
-        public static float GetRadius(this Vessel vessel, Vector3 fireTransform = default(Vector3), Vector3 bounds = default(Vector3))
+        /// <summary>
+        /// Get a vessel's "radius".
+        /// Note:
+        ///   - Use bounds whenever you want a more precise radius from a given perspective. It is more computationally expensive though.
+        ///   - Use average:true for situations such as targeting/proximity checks when not using bounds to better handle non-spherical vessels.
+        ///   - Use average:false (the default) for situations where the maximum radius is important, e.g., collision avoidance.
+        /// </summary>
+        /// <param name="vessel"></param>
+        /// <param name="fireTransform"></param>
+        /// <param name="bounds"></param>
+        /// <param name="average">If not using bounds, return the average of the dimensions instead of the max.</param>
+        /// <returns></returns>
+        public static float GetRadius(this Vessel vessel, Vector3 fireTransform = default, Vector3 bounds = default, bool average = false)
         {
             if (fireTransform == Vector3.zero || bounds == Vector3.zero)
             {
                 // Get vessel size.
                 Vector3 size = vessel.vesselSize;
 
-                // Get largest dimension as this is mostly used for terrain/vessel avoidance. More precise "radii" should probably pass the fireTransform and bounds parameters.
-                return Mathf.Max(Mathf.Max(size.x, size.y), size.z) / 2f;
+                if (average)
+                    // Get the average dimension (without using bounds) for a more appropriate estimate of the vessel's radius for targeting/proximity checks.
+                    return (size.x + size.y + size.z) / 6f;
+                else
+                    // Get largest dimension as this is mostly used for terrain/vessel avoidance. More precise "radii" should probably pass the fireTransform and bounds parameters.
+                    return Mathf.Max(Mathf.Max(size.x, size.y), size.z) / 2f;
             }
             else
             {
@@ -109,7 +125,7 @@ namespace BDArmory.Extensions
 #if DEBUG
                 if (radius < bounds.x / 2f && radius < bounds.y / 2f && radius < bounds.z / 2f) Debug.LogWarning($"DEBUG Radius {radius} of {vessel.vesselName} is less than half its minimum bounds {bounds}");
 #endif
-                return Mathf.Min(radius, (Mathf.Max(Mathf.Max(vessel.vesselSize.x, vessel.vesselSize.y), vessel.vesselSize.z) / 2f) * 1.732f); // clamp bounds to vesselsize in case of Bounds erroneously reporting vessel sizes that are impossibly large
+                return Mathf.Min(radius, (Mathf.Max(Mathf.Max(vessel.vesselSize.x, vessel.vesselSize.y), vessel.vesselSize.z) / 2f) * 1.7321f); // clamp bounds to vesselsize in case of Bounds erroneously reporting vessel sizes that are impossibly large
             }
         }
 
@@ -153,13 +169,17 @@ namespace BDArmory.Extensions
             }
             else
             {
-                var rootBound = GetRendererPartBounds(vessel.rootPart);
-                min = rootBound.min; max = rootBound.max;
+                var partBound = GetRendererPartBounds(vessel.rootPart);
+                if (partBound.min.sqrMagnitude > 1e6 || partBound.max.sqrMagnitude > 1e6) // Fall back to the first collider bounds if renderer bounds are nonsensical. This is usually temporary.
+                    partBound = vessel.rootPart.GetColliderBounds().FirstOrDefault();
+                min = partBound.min; max = partBound.max;
                 using (var part = vessel.Parts.GetEnumerator())
                     while (part.MoveNext())
                     {
                         if (badBoundsParts.Contains(part.Current.name)) continue; // Skip parts that are known to give bad bounds (e.g., lasers when firing).
-                        var partBound = GetRendererPartBounds(part.Current);
+                        partBound = GetRendererPartBounds(part.Current);
+                        if (partBound.min.sqrMagnitude > 1e6 || partBound.max.sqrMagnitude > 1e6)
+                            partBound = part.Current.GetColliderBounds().FirstOrDefault(); // Fall back to the first collider bounds if renderer bounds are nonsensical. This is usually temporary.
                         min.x = Mathf.Min(min.x, partBound.min.x);
                         min.y = Mathf.Min(min.y, partBound.min.y);
                         min.z = Mathf.Min(min.z, partBound.min.z);
@@ -220,6 +240,23 @@ namespace BDArmory.Extensions
         static T FindVesselModuleImplementing_1_11<T>(this Vessel vessel) where T : class
         {
             return vessel.FindVesselModuleImplementing<T>();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ActiveController ActiveController(this Vessel vessel) => Utils.ActiveController.GetActiveController(vessel);
+
+        /// <summary>
+        /// Strip the vessel type from the end of a vessel's name (as long as it's not an ignored type).
+        /// KSP automatically adds this whenever a new vessel is made.
+        /// </summary>
+        /// <param name="vessel"></param>
+        public static void StripTypeFromName(this Vessel vessel)
+        {
+            if (vessel == null || string.IsNullOrEmpty(vessel.vesselName)) return;
+            if (!VesselModuleRegistry.IgnoredVesselTypes.Contains(vessel.vesselType) && vessel.vesselName.EndsWith($" {vessel.vesselType}"))
+            {
+                vessel.vesselName = vessel.vesselName.Remove(vessel.vesselName.Length - $" {vessel.vesselType}".Length);
+            }
         }
     }
 }

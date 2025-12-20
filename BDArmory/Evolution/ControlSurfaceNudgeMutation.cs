@@ -25,15 +25,23 @@ namespace BDArmory.Evolution
             this.direction = direction;
         }
 
-        public void Apply(ConfigNode craft, VariantEngine engine)
+        public ConfigNode Apply(ConfigNode craft, VariantEngine engine)
         {
+            ConfigNode mutatedCraft = craft.CreateCopy();
+
+            // Build node map of copy
+            Dictionary<string, ConfigNode> mutationNodeMap = engine.BuildNodeMap(mutatedCraft);
+
+            // Apply mutation to all symmetric parts
             Debug.Log("[BDArmory.ControlSurfaceNudgeMutation]: Evolution ControlSurfaceNudgeMutation applying");
             Dictionary<string, ConfigNode> matchingNodeMap = new Dictionary<string, ConfigNode>();
             foreach (var partName in partNames)
             {
-                matchingNodeMap[partName] = engine.GetNode(partName);
+                matchingNodeMap[partName] = engine.GetNode(partName, mutationNodeMap);
             }
-            MutateMap(matchingNodeMap, craft, engine);
+            MutateMap(matchingNodeMap, mutatedCraft, engine);
+
+            return mutatedCraft;
         }
 
         public Variant GetVariant(string id, string name)

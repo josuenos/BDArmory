@@ -52,7 +52,7 @@ namespace BDArmory.FX
 
         private void FixedUpdate()
         {
-            if (!BDArmorySettings.GAPLESS_PARTICLE_EMITTERS) return;
+            if (!BDArmorySettings.GaplessParticleEmitters) return;
 
             if (!part && !rb)
             {
@@ -90,7 +90,7 @@ namespace BDArmory.FX
 
         public void EmitParticles()
         {
-            if (!BDArmorySettings.GAPLESS_PARTICLE_EMITTERS) return;
+            if (!BDArmorySettings.GaplessParticleEmitters) return;
 
             var partRB = part != null ? part.GetComponent<Rigidbody>() : null;
             var velocity = partRB != null ? partRB.velocity : rb.velocity;

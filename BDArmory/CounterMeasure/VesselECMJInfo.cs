@@ -102,12 +102,18 @@ namespace BDArmory.CounterMeasure
 
         public void RemoveJammer(ModuleECMJammer jammer)
         {
+            if (jammers is null && !Setup())
+            {
+                Destroy(this);
+                return;
+            }
+
             jammers.Remove(jammer);
 
             UpdateJammerStrength();
         }
 
-        public void UpdateJammerStrength()
+        public void UpdateJammerStrength(TargetInfo tInfoIn = null)
         {
             if (jammers is null && !Setup())
             {
@@ -163,28 +169,32 @@ namespace BDArmory.CounterMeasure
             }
             else
             {
-                rcsr = 1;
+                rcsr = 1f;
             }
 
-            ti = RadarUtils.GetVesselRadarSignature(vessel);
+            if (tInfoIn == null)
+                ti = RadarUtils.GetVesselRadarSignature(vessel, false);
+            else
+                ti = tInfoIn;
+
             if (rcsOverride > 0) ti.radarBaseSignature = rcsOverride;
             ti.radarRCSReducedSignature = ti.radarBaseSignature;
             ti.radarModifiedSignature = ti.radarBaseSignature;
-            ti.radarLockbreakFactor = 1;
+            ti.radarLockbreakFactor = 1f;
             //1) read vessel ecminfo for jammers with RCS reduction effect and multiply factor
             ti.radarRCSReducedSignature *= rcsr;
             ti.radarModifiedSignature *= rcsr;
             //2) increase in detectability relative to jammerstrength and vessel rcs signature:
             // rcs_factor = jammerStrength / modifiedSig / 100 + 1.0f
-            ti.radarModifiedSignature *= (((totaljStrength / ti.radarRCSReducedSignature) / 100) + 1.0f);
+            ti.radarModifiedSignature *= (((totaljStrength / ti.radarRCSReducedSignature) / 100f) + 1.0f);
             //3) garbling due to overly strong jamming signals relative to jammer's strength in relation to vessel rcs signature:
             // jammingDistance =  (jammerstrength / baseSig / 100 + 1.0) x js
-            ti.radarJammingDistance = ((totaljStrength / ti.radarBaseSignature / 100) + 1.0f) * totaljStrength;
+            ti.radarJammingDistance = ((totaljStrength / ti.radarBaseSignature / 100f) + 1.0f) * totaljStrength;
             //4) lockbreaking strength relative to jammer's lockbreak strength in relation to vessel rcs signature:
-            // lockbreak_factor = baseSig/modifiedSig x (1 � lopckBreakStrength/baseSig/100)
+            // lockbreak_factor = baseSig/modifiedSig x (1 - lockBreakStrength/baseSig/100)
             // Use clamp to prevent RCS reduction resulting in increased lockbreak factor, which negates value of RCS reduction)
-            ti.radarLockbreakFactor = (ti.radarRCSReducedSignature == 0) ? 0f :
-                Mathf.Max(Mathf.Clamp01(ti.radarRCSReducedSignature / ti.radarModifiedSignature) * (1 - (totalLBstrength / ti.radarRCSReducedSignature / 100)), 0); // 0 is minimum lockbreak factor
+            ti.radarLockbreakFactor = (ti.radarRCSReducedSignature == 0f) ? 0f :
+                Mathf.Max(Mathf.Clamp01(ti.radarRCSReducedSignature / ti.radarModifiedSignature) * (1f - (totalLBstrength / ti.radarRCSReducedSignature / 100f)), 0f); // 0 is minimum lockbreak factor
         }
         void OnFixedUpdate()
         {

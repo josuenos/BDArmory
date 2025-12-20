@@ -35,6 +35,11 @@ namespace BDArmory.WeaponMounts
          UI_FloatRange(minValue = 1f, maxValue = 60f, stepIncrement = 1f, scene = UI_Scene.All)]
         public float yawRange;
 
+        [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_YawStandbyAngle"),
+         UI_FloatRange(minValue = -90f, maxValue = 90f, stepIncrement = 0.5f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.None)]
+        public float yawStandbyAngle = 0;
+        Quaternion standbyLocalRotation;// = Quaternion.identity;
+
         [KSPField(isPersistant = true)] public float minPitchLimit = 400;
         [KSPField(isPersistant = true)] public float maxPitchLimit = 400;
         [KSPField(isPersistant = true)] public float yawRangeLimit = 400;
@@ -61,8 +66,6 @@ namespace BDArmory.WeaponMounts
         {
             base.OnStart(state);
 
-            SetupTweakables();
-
             pitchTransform = part.FindModelTransform(pitchTransformName);
             yawTransform = part.FindModelTransform(yawTransformName);
 
@@ -78,8 +81,13 @@ namespace BDArmory.WeaponMounts
 
             if (!referenceTransform)
             {
-                SetReferenceTransform(pitchTransform);
+                if (pitchTransform)
+                    SetReferenceTransform(pitchTransform);
+                else
+                    SetReferenceTransform(yawTransform);
             }
+
+            SetupTweakables();
 
             if (!string.IsNullOrEmpty(audioPath) && (yawSpeedDPS != 0 || pitchSpeedDPS != 0))
             {
@@ -127,7 +135,7 @@ namespace BDArmory.WeaponMounts
                     }
 
                     Vector3 tDir = yawTransform.parent.InverseTransformDirection(pitchTransform.forward);
-                    float angle = Vector3.Angle(tDir, lastTurretDirection);
+                    float angle = VectorUtils.Angle(tDir, lastTurretDirection);
                     float rate = Mathf.Clamp01((angle / Time.fixedDeltaTime) / maxAudioRotRate);
                     lastTurretDirection = tDir;
 
@@ -157,6 +165,11 @@ namespace BDArmory.WeaponMounts
             }
         }
 
+        void OnDestroy()
+        {
+            GameEvents.onEditorPartPlaced.Remove(OnEditorPartPlaced);
+        }
+
         public void AimToTarget(Vector3 targetPosition, bool pitch = true, bool yaw = true)
         {
             AimInDirection(targetPosition - referenceTransform.position, pitch, yaw);
@@ -168,6 +181,9 @@ namespace BDArmory.WeaponMounts
             {
                 return;
             }
+
+            if (!(pitch || yaw))
+                return;
 
             float deltaTime = Time.fixedDeltaTime;
 
@@ -185,10 +201,9 @@ namespace BDArmory.WeaponMounts
             // clamp target yaw in a non-wobbly way
             if (Mathf.Abs(targetYawAngle) > yawRange / 2)
             {
-                var nonWooblyWay = Vector3.Dot(yawTransform.parent.right, targetDirection + referenceTransform.position - yawTransform.position);
-                if (float.IsNaN(nonWooblyWay)) return;
-
-                targetYawAngle = yawRange / 2 * Math.Sign(nonWooblyWay);
+                var nonWobblyWay = Vector3.Dot(yawTransform.parent.right, targetDirection + referenceTransform.position - yawTransform.position);
+                //if (float.IsNaN(nonWobblyWay)) return;
+                targetYawAngle = yawRange / 2 * Math.Sign(nonWobblyWay);
             }
 
 
@@ -198,9 +213,6 @@ namespace BDArmory.WeaponMounts
             float pitchOffset = Mathf.Abs(targetPitchAngle - currentPitch);
             targetPitchAngle = Mathf.Clamp(targetPitchAngle, minPitch, maxPitch); // clamp pitch
 
-            float linPitchMult = yawOffset > 0 ? Mathf.Clamp01((pitchOffset / yawOffset) * (yawSpeedDPS / pitchSpeedDPS)) : 1;
-            float linYawMult = pitchOffset > 0 ? Mathf.Clamp01((yawOffset / pitchOffset) * (pitchSpeedDPS / yawSpeedDPS)) : 1;
-
             float yawSpeed;
             float pitchSpeed;
             if (smoothRotation)
@@ -214,41 +226,42 @@ namespace BDArmory.WeaponMounts
                 pitchSpeed = pitchSpeedDPS * deltaTime;
             }
 
-            yawSpeed *= linYawMult;
-            pitchSpeed *= linPitchMult;
-
             if (yawRange < 360 && Mathf.Abs(currentYaw - targetYawAngle) >= 180)
             {
-                if (float.IsNaN(currentYaw))
-                {
-                    return;
-                }
-
+                //if (float.IsNaN(currentYaw)) return;
                 targetYawAngle = currentYaw - (Math.Sign(currentYaw) * 179);
             }
 
+
             if (yaw)
-                yawTransform.localRotation = Quaternion.RotateTowards(yawTransform.localRotation,
-                    Quaternion.Euler(0, targetYawAngle, 0), yawSpeed);
+            {
+                float linYawMult = pitch && pitchOffset > 0 ? Mathf.Clamp01((yawOffset / pitchOffset) * (pitchSpeedDPS / yawSpeedDPS)) : 1;
+                yawTransform.localRotation = Quaternion.RotateTowards(yawTransform.localRotation, Quaternion.Euler(0, targetYawAngle, 0), yawSpeed * linYawMult);
+            }
             if (pitch)
-                pitchTransform.localRotation = Quaternion.RotateTowards(pitchTransform.localRotation,
-                    Quaternion.Euler(-targetPitchAngle, 0, 0), pitchSpeed);
+            {
+                float linPitchMult = yaw && yawOffset > 0 ? Mathf.Clamp01((pitchOffset / yawOffset) * (yawSpeedDPS / pitchSpeedDPS)) : 1;
+                pitchTransform.localRotation = Quaternion.RotateTowards(pitchTransform.localRotation, Quaternion.Euler(-targetPitchAngle, 0, 0), pitchSpeed * linPitchMult);
+            }
         }
 
         public float Pitch => -pitchTransform.localEulerAngles.x.ToAngle();
         public float Yaw => yawTransform.localEulerAngles.y.ToAngle();
 
-        public bool ReturnTurret()
+        public bool ReturnTurret(bool pitch = true, bool yaw = true)
         {
             if (!yawTransform)
             {
                 return false;
             }
 
+            if (!(pitch || yaw))
+                return true;
+
             float deltaTime = Time.fixedDeltaTime;
 
-            float yawOffset = Vector3.Angle(yawTransform.forward, yawTransform.parent.forward);
-            float pitchOffset = Vector3.Angle(pitchTransform.forward, yawTransform.forward);
+            float yawOffset = Quaternion.Angle(yawTransform.localRotation, standbyLocalRotation);
+            float pitchOffset = VectorUtils.Angle(pitchTransform.forward, yawTransform.forward);
 
             float yawSpeed;
             float pitchSpeed;
@@ -264,33 +277,30 @@ namespace BDArmory.WeaponMounts
                 pitchSpeed = pitchSpeedDPS * deltaTime;
             }
 
-            float linPitchMult = yawOffset > 0 ? Mathf.Clamp01((pitchOffset / yawOffset) * (yawSpeedDPS / pitchSpeedDPS)) : 1;
-            float linYawMult = pitchOffset > 0 ? Mathf.Clamp01((yawOffset / pitchOffset) * (pitchSpeedDPS / yawSpeedDPS)) : 1;
-
-            yawSpeed *= linYawMult;
-            pitchSpeed *= linPitchMult;
-
-            yawTransform.localRotation = Quaternion.RotateTowards(yawTransform.localRotation, Quaternion.identity,
-                yawSpeed);
-            pitchTransform.localRotation = Quaternion.RotateTowards(pitchTransform.localRotation, Quaternion.identity,
-                pitchSpeed);
-
-            if (yawTransform.localRotation == Quaternion.identity && pitchTransform.localRotation == Quaternion.identity)
+            if (yaw)
             {
-                return true;
+                float linYawMult = pitch && pitchOffset > 0 ? Mathf.Clamp01((yawOffset / pitchOffset) * (pitchSpeedDPS / yawSpeedDPS)) : 1;
+                yawTransform.localRotation = Quaternion.RotateTowards(yawTransform.localRotation, standbyLocalRotation, yawSpeed * linYawMult);
             }
-            return false;
+            if (pitch)
+            {
+                float linPitchMult = yaw && yawOffset > 0 ? Mathf.Clamp01((pitchOffset / yawOffset) * (yawSpeedDPS / pitchSpeedDPS)) : 1;
+                pitchTransform.localRotation = Quaternion.RotateTowards(pitchTransform.localRotation, Quaternion.identity, pitchSpeed * linPitchMult);
+            }
+
+            return (yawTransform.localRotation == standbyLocalRotation || !yaw) && (pitchTransform.localRotation == Quaternion.identity || !pitch);
         }
 
-        public bool TargetInRange(Vector3 targetPosition, float thresholdDegrees, float maxDistance)
+        public bool TargetInRange(Vector3 targetPosition, float maxDistance, float thresholdDegrees = 0)
         {
-            if (!pitchTransform)
-            {
-                return false;
-            }
-            bool withinView = Vector3.Angle(targetPosition - pitchTransform.position, pitchTransform.forward) < thresholdDegrees;
-            bool withinDistance = (targetPosition - pitchTransform.position).sqrMagnitude < maxDistance * maxDistance;
-            return (withinView && withinDistance);
+            if (!referenceTransform) return false;
+            Vector3 vectorToTarget = targetPosition - referenceTransform.position;
+            if (vectorToTarget.sqrMagnitude > maxDistance * maxDistance) return false;
+
+            float angleYaw = VectorUtils.Angle(vectorToTarget.ProjectOnPlanePreNormalized(referenceTransform.up), referenceTransform.forward);
+            float signedAnglePitch = 90 - VectorUtils.Angle(referenceTransform.up, vectorToTarget);
+            bool withinView = thresholdDegrees > 0 ? VectorUtils.Angle(vectorToTarget, referenceTransform.forward) < thresholdDegrees : (signedAnglePitch > minPitch && signedAnglePitch < maxPitch && angleYaw < yawRange / 2);
+            return withinView;
         }
 
         public void SetReferenceTransform(Transform t)
@@ -352,6 +362,46 @@ namespace BDArmory.WeaponMounts
             }
             if (yawRange != 0)
                 yawRangeEd.stepIncrement = Mathf.Pow(10, Math.Min(1f, Mathf.Floor(Mathf.Log10(Mathf.Abs(yawRange)) + (1 - Mathf.Log10(20f) - 1e-4f)))) / 10f; // Use between 20 and 200 divisions
+
+            yawRangeEd.onFieldChanged = SetupStandbyLocalRotation;
+            SetupStandbyLocalRotation();
+        }
+        void SetupStandbyLocalRotation(BaseField field = null, object obj = null)
+        {
+            UI_FloatRange yawStandbyAngleEd = (UI_FloatRange)Fields["yawStandbyAngle"].uiControlEditor;
+            yawStandbyAngleEd.minValue = -yawRange / 2f;
+            yawStandbyAngleEd.maxValue = yawRange / 2f;
+            yawStandbyAngle = Mathf.Clamp(yawStandbyAngle, yawStandbyAngleEd.minValue, yawStandbyAngleEd.maxValue);
+            yawStandbyAngleEd.onFieldChanged = OnStandbyAngleChanged;
+            GameEvents.onEditorPartPlaced.Add(OnEditorPartPlaced);
+            SetStandbyAngle();
+        }
+
+        void OnEditorPartPlaced(Part p = null) { if (p == part) OnStandbyAngleChanged(); }
+
+        void OnStandbyAngleChanged(BaseField field = null, object obj = null)
+        {
+            SetStandbyAngle();
+            foreach (Part symmetryPart in part.symmetryCounterparts)
+            {
+                ModuleTurret symmetryTurret = symmetryPart.FindModuleImplementing<ModuleTurret>();
+                if (part.symMethod == SymmetryMethod.Mirror)
+                {
+                    symmetryTurret.yawStandbyAngle = -yawStandbyAngle;
+                }
+                else
+                {
+                    symmetryTurret.yawStandbyAngle = yawStandbyAngle;
+                }
+
+                symmetryTurret.SetStandbyAngle();
+            }
+        }
+
+        void SetStandbyAngle()
+        {
+            standbyLocalRotation = Quaternion.AngleAxis(yawStandbyAngle, Vector3.up);
+            if (yawTransform != null) yawTransform.localRotation = standbyLocalRotation;
         }
     }
     public class BDAScaleByDistance : PartModule

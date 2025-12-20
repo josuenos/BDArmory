@@ -33,29 +33,37 @@ namespace BDArmory.Settings
             using (IEnumerator<FieldInfo> field = typeof(BDArmorySettings).GetFields().AsEnumerable().GetEnumerator())
                 while (field.MoveNext())
                 {
-                    if (field.Current == null) continue;
-                    if (!field.Current.IsDefined(typeof(BDAPersistentSettingsField), false)) continue;
+                    try
+                    {
+                        if (field.Current == null) continue;
+                        if (!field.Current.IsDefined(typeof(BDAPersistentSettingsField), false)) continue;
 
-                    var fieldValue = field.Current.GetValue(null);
-                    if (fieldValue.GetType() == typeof(Vector3d))
-                    {
-                        settings.SetValue(field.Current.Name, ((Vector3d)fieldValue).ToString("G"), true);
+                        var fieldValue = field.Current.GetValue(null);
+                        if (fieldValue.GetType() == typeof(Vector3d))
+                        {
+                            settings.SetValue(field.Current.Name, ((Vector3d)fieldValue).ToString("G"), true);
+                        }
+                        else if (fieldValue.GetType() == typeof(Vector2d))
+                        {
+                            settings.SetValue(field.Current.Name, ((Vector2d)fieldValue).ToString("G"), true);
+                        }
+                        else if (fieldValue.GetType() == typeof(Vector2))
+                        {
+                            settings.SetValue(field.Current.Name, ((Vector2)fieldValue).ToString("G"), true);
+                        }
+                        else if (fieldValue.GetType() == typeof(List<string>))
+                        {
+                            settings.SetValue(field.Current.Name, string.Join("; ", (List<string>)fieldValue), true);
+                        }
+                        else
+                        {
+                            settings.SetValue(field.Current.Name, fieldValue.ToString(), true);
+                        }
                     }
-                    else if (fieldValue.GetType() == typeof(Vector2d))
+                    catch
                     {
-                        settings.SetValue(field.Current.Name, ((Vector2d)fieldValue).ToString("G"), true);
-                    }
-                    else if (fieldValue.GetType() == typeof(Vector2))
-                    {
-                        settings.SetValue(field.Current.Name, ((Vector2)fieldValue).ToString("G"), true);
-                    }
-                    else if (fieldValue.GetType() == typeof(List<string>))
-                    {
-                        settings.SetValue(field.Current.Name, string.Join("; ", (List<string>)fieldValue), true);
-                    }
-                    else
-                    {
-                        settings.SetValue(field.Current.Name, fieldValue.ToString(), true);
+                        Debug.LogError($"[BDArmory.BDAPersistentSettingsField]: Exception triggered while trying to save field {field.Current.Name} with value {field.Current.GetValue(null)}");
+                        throw;
                     }
                 }
             fileNode.Save(path);
@@ -78,7 +86,7 @@ namespace BDArmory.Settings
                     if (!field.Current.IsDefined(typeof(BDAPersistentSettingsField), false)) continue;
 
                     if (!settings.HasValue(field.Current.Name)) continue;
-                    object parsedValue = ParseValue(field.Current.FieldType, settings.GetValue(field.Current.Name));
+                    object parsedValue = ParseValue(field.Current.FieldType, settings.GetValue(field.Current.Name), field.Current.Name);
                     if (parsedValue != null)
                     {
                         field.Current.SetValue(null, parsedValue);
@@ -115,6 +123,14 @@ namespace BDArmory.Settings
                 return;
             }
 
+            // Score weights have been moved to their own file.
+            if (fileNode.HasNode("ScoreWeights") || fileNode.HasNode("CtsScoreWeights"))
+            {
+                fileNode.RemoveNode("ScoreWeights");
+                fileNode.RemoveNode("CtsScoreWeights");
+                fileNode.Save(BDArmorySettings.settingsConfigURL);
+            }
+
             var excludedFields = new HashSet<string> { "LAST_USED_SAVEGAME", }; // A bunch of other stuff is also excluded below.
             ConfigNode settings = fileNode.GetNode("BDASettings");
             using (var field = typeof(BDArmorySettings).GetFields().AsEnumerable().GetEnumerator())
@@ -132,14 +148,14 @@ namespace BDArmory.Settings
                     if (field.Current.Name.EndsWith("_SETTINGS_TOGGLE")) skip = true; // Skip various section toggles.
 
                     if (!settings.HasValue(field.Current.Name)) continue;
-                    object currentValue = ParseValue(field.Current.FieldType, settings.GetValue(field.Current.Name));
+                    object currentValue = ParseValue(field.Current.FieldType, settings.GetValue(field.Current.Name), field.Current.Name);
                     if (currentValue == null) continue;
                     var defaultValue = field.Current.GetValue(null);
                     if (!skip && currentValue is IComparable && ((IComparable)defaultValue).CompareTo((IComparable)currentValue) != 0) // The current value doesn't match the default. Note: Vector2d, Vector3d and List are not IComparable.
                     {
                         if (oldSettings.HasValue(field.Current.Name))
                         {
-                            object oldDefaultValue = ParseValue(field.Current.FieldType, oldSettings.GetValue(field.Current.Name));
+                            object oldDefaultValue = ParseValue(field.Current.FieldType, oldSettings.GetValue(field.Current.Name), field.Current.Name);
                             if (((IComparable)oldDefaultValue).CompareTo((IComparable)currentValue) == 0) // The current value matches the old default => upgrade it.
                             {
                                 Debug.Log($"[BDArmory.Settings]: Upgrading {field.Current.Name} to the default {defaultValue}, from {currentValue}.");
@@ -152,10 +168,11 @@ namespace BDArmory.Settings
                     }
                     field.Current.SetValue(null, currentValue); // Use the current value.
                 }
+
             Save(BDArmorySettings.settingsConfigURL); // Overwrite the settings with the modified ones.
         }
 
-        public static object ParseValue(Type type, string value)
+        public static object ParseValue(Type type, string value, string what)
         {
             try
             {
@@ -186,12 +203,12 @@ namespace BDArmory.Settings
                 }
                 else if (type == typeof(Rect))
                 {
-                    string[] strings = value.Split(',');
-                    int xVal = int.Parse(strings[0].Split(':')[1].Split('.')[0]);
-                    int yVal = int.Parse(strings[1].Split(':')[1].Split('.')[0]);
-                    int wVal = int.Parse(strings[2].Split(':')[1].Split('.')[0]);
-                    int hVal = int.Parse(strings[3].Split(':')[1].Split('.')[0]);
-                    Rect rectVal = new Rect
+                    string[] strings = value.Trim(['(', ')', ' ']).Split(',');
+                    float xVal = float.Parse(strings[0].Split(':')[1]);
+                    float yVal = float.Parse(strings[1].Split(':')[1]);
+                    float wVal = float.Parse(strings[2].Split(':')[1]);
+                    float hVal = float.Parse(strings[3].Split(':')[1]);
+                    Rect rectVal = new()
                     {
                         x = xVal,
                         y = yVal,
@@ -202,7 +219,7 @@ namespace BDArmory.Settings
                 }
                 else if (type == typeof(Vector2))
                 {
-                    char[] charsToTrim = { '(', ')', ' ' };
+                    char[] charsToTrim = ['(', ')', ' '];
                     string[] strings = value.Trim(charsToTrim).Split(',');
                     float x = float.Parse(strings[0]);
                     float y = float.Parse(strings[1]);
@@ -210,7 +227,7 @@ namespace BDArmory.Settings
                 }
                 else if (type == typeof(Vector2d))
                 {
-                    char[] charsToTrim = { '(', ')', ' ' };
+                    char[] charsToTrim = ['(', ')', ' '];
                     string[] strings = value.Trim(charsToTrim).Split(',');
                     double x = double.Parse(strings[0]);
                     double y = double.Parse(strings[1]);
@@ -218,7 +235,7 @@ namespace BDArmory.Settings
                 }
                 else if (type == typeof(Vector3d))
                 {
-                    char[] charsToTrim = { '[', ']', ' ' };
+                    char[] charsToTrim = ['[', ']', ' '];
                     string[] strings = value.Trim(charsToTrim).Split(',');
                     double x = double.Parse(strings[0]);
                     double y = double.Parse(strings[1]);
@@ -227,7 +244,7 @@ namespace BDArmory.Settings
                 }
                 else if (type == typeof(Vector2Int))
                 {
-                    char[] charsToTrim = { '(', ')', ' ' };
+                    char[] charsToTrim = ['(', ')', ' '];
                     string[] strings = value.Trim(charsToTrim).Split(',');
                     int x = int.Parse(strings[0]);
                     int y = int.Parse(strings[1]);
@@ -235,12 +252,12 @@ namespace BDArmory.Settings
                 }
                 else if (type == typeof(List<string>))
                 {
-                    return value.Split(new string[] { "; " }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                    return value.Split(["; "], StringSplitOptions.RemoveEmptyEntries).ToList();
                 }
             }
             catch (Exception e)
             {
-                Debug.LogError("[BDArmory.BDAPersistantSettingsField]: Failed to parse '" + value + "' as a " + type.ToString() + ": " + e.Message);
+                Debug.LogError($"[BDArmory.BDAPersistantSettingsField]: Failed to parse '{value}' as a {type} for {what}: {e.Message}");
                 return null;
             }
             Debug.LogError("[BDArmory.BDAPersistantSettingsField]: BDAPersistantSettingsField to parse settings field of type " + type + " and value " + value);

@@ -6,6 +6,7 @@ using UnityEngine;
 
 using BDArmory.CounterMeasure;
 using BDArmory.Radar;
+using BDArmory.Settings;
 using BDArmory.Utils;
 
 namespace BDArmory.UI
@@ -37,11 +38,12 @@ namespace BDArmory.UI
 
         void Awake()
         {
+            if (Instance != null) Destroy(Instance);
+            Instance = this;
         }
 
         void Start()
         {
-            Instance = this;
             AddToolbarButton();
 
             RadarUtils.SetupResources();
@@ -107,6 +109,7 @@ namespace BDArmory.UI
         {
             GameEvents.onEditorShipModified.Remove(OnEditorShipModifiedEvent);
             RadarUtils.CleanupResources();
+            HideToolbarGUINow();
 
             if (toolbarButton)
             {
@@ -115,24 +118,22 @@ namespace BDArmory.UI
             }
         }
 
-        IEnumerator ToolbarButtonRoutine()
-        {
-            if (toolbarButton || (!HighLogic.LoadedSceneIsEditor)) yield break;
-            yield return new WaitUntil(() => ApplicationLauncher.Ready && BDArmorySetup.toolbarButtonAdded); // Wait until after the main BDA toolbar button.
-
-            AddToolbarButton();
-        }
-
         void AddToolbarButton()
         {
-            if (HighLogic.LoadedSceneIsEditor)
+            if (!HighLogic.LoadedSceneIsEditor) return;
+            StartCoroutine(ToolbarButtonRoutine());
+        }
+        IEnumerator ToolbarButtonRoutine()
+        {
+            if (toolbarButton) // Update the callbacks for the current instance.
             {
-                if (toolbarButton == null)
-                {
-                    Texture buttonTexture = GameDatabase.Instance.GetTexture(BDArmorySetup.textureDir + "icon_rcs", false);
-                    toolbarButton = ApplicationLauncher.Instance.AddModApplication(ShowToolbarGUI, HideToolbarGUI, Dummy, Dummy, Dummy, Dummy, ApplicationLauncher.AppScenes.SPH | ApplicationLauncher.AppScenes.VAB, buttonTexture);
-                }
+                toolbarButton.onTrue = ShowToolbarGUI;
+                toolbarButton.onFalse = HideToolbarGUI;
+                yield break;
             }
+            yield return new WaitUntil(() => ApplicationLauncher.Ready && BDArmorySetup.toolbarButtonAdded); // Wait until after the main BDA toolbar button.
+            Texture buttonTexture = GameDatabase.Instance.GetTexture(BDArmorySetup.textureDir + "icon_rcs", false);
+            toolbarButton = ApplicationLauncher.Instance.AddModApplication(ShowToolbarGUI, HideToolbarGUI, Dummy, Dummy, Dummy, Dummy, ApplicationLauncher.AppScenes.SPH | ApplicationLauncher.AppScenes.VAB, buttonTexture);
         }
 
         public void ShowToolbarGUI()
@@ -141,10 +142,22 @@ namespace BDArmory.UI
             takeSnapshot = true;
         }
 
-        public void HideToolbarGUI()
+        // Doing it this way prevents OnGUI events from below the window from being triggered by the window disappearing.
+        public void HideToolbarGUI() => StartCoroutine(HideToolbarGUIAtEndOfFrame());
+        bool waitingForEndOfFrame = false;
+        IEnumerator HideToolbarGUIAtEndOfFrame()
+        {
+            if (waitingForEndOfFrame) yield break;
+            waitingForEndOfFrame = true;
+            yield return new WaitForEndOfFrame();
+            waitingForEndOfFrame = false;
+            HideToolbarGUINow();
+        }
+        void HideToolbarGUINow()
         {
             showRcsWindow = false;
             takeSnapshot = false;
+            GUIUtils.PreventClickThrough(windowRect, "BDARCSLOCK", true);
         }
 
         void Dummy()
@@ -154,17 +167,17 @@ namespace BDArmory.UI
         {
             if (showRcsWindow)
             {
+                if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, windowRect.position);
                 windowRect = GUI.Window(GUIUtility.GetControlID(FocusType.Passive), windowRect, WindowRcs, windowTitle, BDArmorySetup.BDGuiSkin.window);
             }
-
-            PreventClickThrough();
         }
 
         void WindowRcs(int windowID)
         {
+            GUIUtils.PreventClickThrough(windowRect, "BDARCSLOCK");
             if (GUI.Button(new Rect(windowRect.width - 18, 2, 16, 16), "X"))
             {
-                HideToolbarGUI();
+                toolbarButton.SetFalse();
             }
 
             GUI.Label(new Rect(10, 40, 200, 20), $"Az {RadarUtils.editorRCSAspects[0, 0].ToString("0")}, El {RadarUtils.editorRCSAspects[0, 1].ToString("0")}", BDArmorySetup.BDGuiSkin.box);
@@ -179,19 +192,19 @@ namespace BDArmory.UI
             GUI.DrawTexture(new Rect(220, 70, 200, 200), RadarUtils.GetTexture2, ScaleMode.StretchToFill);
             GUI.DrawTexture(new Rect(430, 70, 200, 200), RadarUtils.GetTexture3, ScaleMode.StretchToFill);
 
-            float editorUIRCS0 = (!Settings.BDArmorySettings.ASPECTED_RCS) ? RadarUtils.editorRCSAspects[0, 2] : (RadarUtils.editorRCSAspects[0, 2] * (1 - Settings.BDArmorySettings.ASPECTED_RCS_OVERALL_RCS_WEIGHT) + RadarUtils.rcsTotal *  Settings.BDArmorySettings.ASPECTED_RCS_OVERALL_RCS_WEIGHT);
+            float editorUIRCS0 = (!Settings.BDArmorySettings.ASPECTED_RCS) ? RadarUtils.editorRCSAspects[0, 2] : (RadarUtils.editorRCSAspects[0, 2] * (1 - Settings.BDArmorySettings.ASPECTED_RCS_OVERALL_RCS_WEIGHT) + RadarUtils.rcsTotal * Settings.BDArmorySettings.ASPECTED_RCS_OVERALL_RCS_WEIGHT);
             float editorUIRCS1 = (!Settings.BDArmorySettings.ASPECTED_RCS) ? RadarUtils.editorRCSAspects[1, 2] : (RadarUtils.editorRCSAspects[1, 2] * (1 - Settings.BDArmorySettings.ASPECTED_RCS_OVERALL_RCS_WEIGHT) + RadarUtils.rcsTotal * Settings.BDArmorySettings.ASPECTED_RCS_OVERALL_RCS_WEIGHT);
             float editorUIRCS2 = (!Settings.BDArmorySettings.ASPECTED_RCS) ? RadarUtils.editorRCSAspects[2, 2] : (RadarUtils.editorRCSAspects[2, 2] * (1 - Settings.BDArmorySettings.ASPECTED_RCS_OVERALL_RCS_WEIGHT) + RadarUtils.rcsTotal * Settings.BDArmorySettings.ASPECTED_RCS_OVERALL_RCS_WEIGHT);
 
-            GUI.Label(new Rect(10, 275, 200, 20), string.Format("{0:0.00}", editorUIRCS0) + " m^2", BDArmorySetup.BDGuiSkin.label);
-            GUI.Label(new Rect(220, 275, 200, 20), string.Format("{0:0.00}", editorUIRCS1) + " m^2", BDArmorySetup.BDGuiSkin.label);
-            GUI.Label(new Rect(430, 275, 200, 20), string.Format("{0:0.00}", editorUIRCS2) + " m^2", BDArmorySetup.BDGuiSkin.label);
-            
+            GUI.Label(new Rect(10, 275, 200, 20), RadarUtils.RCSString(editorUIRCS0), BDArmorySetup.BDGuiSkin.label);
+            GUI.Label(new Rect(220, 275, 200, 20), RadarUtils.RCSString(editorUIRCS1), BDArmorySetup.BDGuiSkin.label);
+            GUI.Label(new Rect(430, 275, 200, 20), RadarUtils.RCSString(editorUIRCS2), BDArmorySetup.BDGuiSkin.label);
+
 
             GUIStyle style = BDArmorySetup.BDGuiSkin.label;
             style.fontStyle = FontStyle.Bold;
-            GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + string.Format("{0:0.00} m^2 (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
-            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
+            GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + RadarUtils.RCSString(RadarUtils.rcsTotal) + " (without ECM/countermeasures)", style);
+            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + RadarUtils.RCSString(rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF) + " (with RCS reduction/stealth/ground clutter)", style);
 
             style.fontStyle = FontStyle.Normal;
             GUI.Label(new Rect(10, 380, 600, 20), "** (Range evaluation not accounting for ECM/countermeasures)", style);
@@ -275,7 +288,7 @@ namespace BDArmory.UI
         {
             if (GUI.Button(new Rect(windowRect.width - 18, 2, 16, 16), "X"))
             {
-                HideToolbarGUI();
+                toolbarButton.SetFalse();
             }
 
             GUI.Label(new Rect(10, 40, 200, 20), "Frontal", BDArmorySetup.BDGuiSkin.box);
@@ -301,14 +314,14 @@ namespace BDArmory.UI
             else
                 GUI.DrawTexture(new Rect(430, 70, 200, 200), RadarUtils.GetTextureVentral45, ScaleMode.StretchToFill);
 
-            GUI.Label(new Rect(10, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsFrontal, RadarUtils.rcsFrontal45)) + " m^2", BDArmorySetup.BDGuiSkin.label);
-            GUI.Label(new Rect(220, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsLateral, RadarUtils.rcsLateral45)) + " m^2", BDArmorySetup.BDGuiSkin.label);
-            GUI.Label(new Rect(430, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsVentral, RadarUtils.rcsVentral45)) + " m^2", BDArmorySetup.BDGuiSkin.label);
+            GUI.Label(new Rect(10, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsFrontal, RadarUtils.rcsFrontal45)) + " m²", BDArmorySetup.BDGuiSkin.label);
+            GUI.Label(new Rect(220, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsLateral, RadarUtils.rcsLateral45)) + " m²", BDArmorySetup.BDGuiSkin.label);
+            GUI.Label(new Rect(430, 275, 200, 20), string.Format("{0:0.00}", Mathf.Max(RadarUtils.rcsVentral, RadarUtils.rcsVentral45)) + " m²", BDArmorySetup.BDGuiSkin.label);
 
             GUIStyle style = BDArmorySetup.BDGuiSkin.label;
             style.fontStyle = FontStyle.Bold;
-            GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + string.Format("{0:0.00} m^2 (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
-            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m^2 (with RCS reduction/stealth/ground clutter)", rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
+            GUI.Label(new Rect(10, 300, 600, 20), "Base radar cross section for vessel: " + string.Format("{0:0.00} m² (without ECM/countermeasures)", RadarUtils.rcsTotal), style);
+            GUI.Label(new Rect(10, 320, 600, 20), "Total radar cross section for vessel: " + string.Format("{0:0.00} m² (with RCS reduction/stealth/ground clutter)", rcsOverride > 0 ? rcsOverride * rcsGCF : RadarUtils.rcsTotal * rcsReductionFactor * rcsGCF), style);
 
             style.fontStyle = FontStyle.Normal;
             GUI.Label(new Rect(10, 380, 600, 20), "** (Range evaluation not accounting for ECM/countermeasures)", style);
@@ -423,42 +436,6 @@ namespace BDArmory.UI
 
             if (rcsCount > 0)
                 rcsReductionFactor = Mathf.Max((rcsReductionFactor * rcsCount), 0.0f);    //same formula as in VesselECMJInfo must be used here!
-        }
-
-        /// <summary>
-        /// Lock the model if our own window is shown and has cursor focus to prevent click-through.
-        /// Code adapted from FAR Editor GUI
-        /// </summary>
-        private void PreventClickThrough()
-        {
-            bool cursorInGUI = false;
-            EditorLogic EdLogInstance = EditorLogic.fetch;
-            if (!EdLogInstance)
-            {
-                return;
-            }
-            if (showRcsWindow)
-            {
-                cursorInGUI = windowRect.Contains(GetMousePos());
-            }
-            if (cursorInGUI)
-            {
-                if (!CameraMouseLook.GetMouseLook())
-                    EdLogInstance.Lock(false, false, false, "BDARCSLOCK");
-                else
-                    EdLogInstance.Unlock("BDARCSLOCK");
-            }
-            else if (!cursorInGUI)
-            {
-                EdLogInstance.Unlock("BDARCSLOCK");
-            }
-        }
-
-        private Vector3 GetMousePos()
-        {
-            Vector3 mousePos = Input.mousePosition;
-            mousePos.y = Screen.height - mousePos.y;
-            return mousePos;
         }
     } //EditorRCsWindow
 }

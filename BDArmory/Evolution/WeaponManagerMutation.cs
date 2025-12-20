@@ -21,9 +21,10 @@ namespace BDArmory.Evolution
             this.direction = direction;
         }
 
-        public void Apply(ConfigNode craft, VariantEngine engine)
+        public ConfigNode Apply(ConfigNode craft, VariantEngine engine)
         {
-            List<ConfigNode> matchingNodes = engine.FindModuleNodes(craft, moduleName);
+            ConfigNode mutatedCraft = craft.CreateCopy();
+            List<ConfigNode> matchingNodes = engine.FindModuleNodes(mutatedCraft, moduleName);
             if( matchingNodes.Count == 1 )
             {
                 var node = matchingNodes[0];
@@ -31,7 +32,7 @@ namespace BDArmory.Evolution
                 float.TryParse(node.GetValue(paramName), out existingValue);
                 if( engine.MutateNode(node, paramName, value) )
                 {
-                    ConfigNode partNode = engine.FindParentPart(craft, node);
+                    ConfigNode partNode = engine.FindParentPart(mutatedCraft, node);
                     string partName = partNode.GetValue("part");
                     mutatedParts.Add(new MutatedPart(partName, moduleName, paramName, existingValue, value));
                 }
@@ -40,6 +41,7 @@ namespace BDArmory.Evolution
             {
                 Debug.Log("[BDArmory.WeaponManagerMutation]: Evolution WeaponManagerMutation wrong number of weapon managers");
             }
+            return mutatedCraft;
         }
 
         public Variant GetVariant(string id, string name)

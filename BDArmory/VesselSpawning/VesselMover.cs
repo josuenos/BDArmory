@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using KSP.UI.Screens;
 
+using BDArmory.Competition;
 using BDArmory.Extensions;
 using BDArmory.Settings;
 using BDArmory.UI;
@@ -28,10 +29,10 @@ namespace BDArmory.VesselSpawning
             set { _state = value; ResetWindowHeight(); }
         }
         State _state;
-        internal WaitForFixedUpdate wait = new WaitForFixedUpdate();
-        HashSet<Vessel> movingVessels = new HashSet<Vessel>();
-        HashSet<Vessel> loweringVessels = new HashSet<Vessel>();
-        List<float> jumpToAltitudes = new List<float> { 10, 100, 1000, 10000, 50000 };
+        internal WaitForFixedUpdate wait = new();
+        HashSet<Vessel> movingVessels = [];
+        HashSet<Vessel> loweringVessels = [];
+        readonly List<float> jumpToAltitudes = [10, 100, 1000, 10000, 50000];
         RaycastHit[] hits = new RaycastHit[10];
 
         #region Monobehaviour routines
@@ -47,6 +48,14 @@ namespace BDArmory.VesselSpawning
             ready = false;
             StartCoroutine(WaitForBdaSettings());
             ConfigureStyles();
+            SetupMoveIndicator();
+            GameEvents.onVesselChange.Add(OnVesselChanged);
+
+            if (BDArmorySettings.VM_TOOLBAR_BUTTON) AddToolbarButton();
+        }
+
+        void SetupMoveIndicator()
+        {
             moveIndicator = new GameObject().AddComponent<LineRenderer>();
             moveIndicator.material = new Material(Shader.Find("KSP/Emissive/Diffuse"));
             moveIndicator.material.SetColor("_EmissiveColor", Color.green);
@@ -54,9 +63,6 @@ namespace BDArmory.VesselSpawning
             moveIndicator.endWidth = 0.15f;
             moveIndicator.enabled = false;
             moveIndicator.positionCount = circleRes + 3;
-            GameEvents.onVesselChange.Add(OnVesselChanged);
-
-            if (BDArmorySettings.VM_TOOLBAR_BUTTON) AddToolbarButton();
         }
 
         private IEnumerator WaitForBdaSettings()
@@ -324,9 +330,9 @@ namespace BDArmory.VesselSpawning
                         var previousLowerBound = lowerBound;
                         vessel.SetRotation(rotation);
                         lowerBound = GetLowerBound(vessel);
+                        position += (lowerBound - previousLowerBound) * up;
                         vessel.SetPosition(position);
                         vessel.SetWorldVelocity(Vector3d.zero);
-                        position += (lowerBound - previousLowerBound) * up;
                     }
 
                     // Translations/Altitude changes
@@ -552,8 +558,8 @@ namespace BDArmory.VesselSpawning
         float GetLowerBound(Vessel vessel)
         {
             var up = (vessel.transform.position - FlightGlobals.currentMainBody.transform.position).normalized;
-            var maxDim = 2f * vessel.GetRadius();
-            var radius = vessel.GetRadius(up, vessel.GetBounds());
+            var radius = vessel.GetRadius();
+            var maxDim = 2f * radius;
             var hitCount = Physics.BoxCastNonAlloc(vessel.transform.position - (maxDim + 0.1f) * up, new Vector3(radius, 0.1f, radius), up, hits, Quaternion.FromToRotation(Vector3.up, up), maxDim, (int)(LayerMasks.Parts | LayerMasks.EVA | LayerMasks.Wheels));
             if (hitCount == hits.Length)
             {
@@ -578,7 +584,7 @@ namespace BDArmory.VesselSpawning
             if (BDArmorySettings.VESSEL_MOVER_DONT_WORRY_ABOUT_COLLISIONS && state == State.Moving) return altitude;
             var position = vessel.transform.position + offset;
             var up = (position - FlightGlobals.currentMainBody.transform.position).normalized;
-            var radius = vessel.GetRadius(up, vessel.GetBounds());
+            var radius = vessel.GetRadius();
             if (lowerBound < 0) lowerBound = GetLowerBound(vessel);
 
             // Detect collisions from moving in the direction of the offset. 100m is generally sufficient.
@@ -599,7 +605,7 @@ namespace BDArmory.VesselSpawning
 
         #region Spawning
         Vessel spawnedVessel;
-        HashSet<string> KerbalNames = new HashSet<string>();
+        HashSet<string> KerbalNames = [];
         int crewCapacity = -1;
         string vesselNameToSpawn = "";
         CustomCraftBrowserDialog craftBrowser;
@@ -649,7 +655,12 @@ namespace BDArmory.VesselSpawning
             messageState = Messages.None;
             if (spawnFailureReason != SpawnFailureReason.None) { state = State.None; yield break; }
             if (BDArmorySettings.DEBUG_SPAWNING) Debug.Log($"[BDArmory.VesselMover]: Spawned {spawnedVessel.vesselName} at {geoCoords:G6}");
+
+            // Wait for the vessel to be usable.
+            // Note: Smart parts that are pre-enabled can trigger events that break craft while they spawn (particularly altitude and speed based ones). Those should be set active on AG10 instead.
             while (spawnedVessel != null && (!spawnedVessel.loaded || spawnedVessel.packed)) yield return wait;
+
+            // Reposition the vessel to where it should be.
             if (spawnedVessel != null)
             {
                 var up = (spawnedVessel.transform.position - FlightGlobals.currentMainBody.transform.position).normalized;
@@ -746,23 +757,10 @@ namespace BDArmory.VesselSpawning
         IEnumerator GetSpawnPoint()
         {
             messageState = Messages.ChoosingSpawnPoint;
-            // Use the same indicator as the original VesselMover for familiarity.
-            GameObject indicatorObject = new GameObject();
-            LineRenderer lr = indicatorObject.AddComponent<LineRenderer>();
-            lr.material = new Material(Shader.Find("KSP/Particles/Alpha Blended"));
-            lr.material.SetColor("_TintColor", Color.green);
-            lr.material.mainTexture = Texture2D.whiteTexture;
-            lr.useWorldSpace = false;
-
-            Vector3[] positions = new Vector3[] { Vector3.zero, 10 * Vector3.forward };
-            lr.SetPositions(positions);
-            lr.positionCount = positions.Length;
-            lr.startWidth = 0.1f;
-            lr.endWidth = 1f;
+            GameObject indicatorObject = SetupSpawnPointIndicator();
 
             Vector3 mouseAim, point;
             Ray ray;
-            bool altitudeCorrection = false;
             var currentMainBody = FlightGlobals.currentMainBody;
             while (BDArmorySetup.showVesselMoverGUI)
             {
@@ -774,6 +772,7 @@ namespace BDArmory.VesselSpawning
 
                 mouseAim = new Vector3(Input.mousePosition.x / Screen.width, Input.mousePosition.y / Screen.height, 0);
                 ray = FlightCamera.fetch.mainCamera.ViewportPointToRay(mouseAim);
+                bool altitudeCorrection;
                 if (Physics.Raycast(ray, out RaycastHit hit, (ray.origin - currentMainBody.transform.position).magnitude, (int)(LayerMasks.Scenery | LayerMasks.Parts | LayerMasks.Wheels | LayerMasks.EVA)))
                 {
                     point = hit.point;
@@ -802,6 +801,25 @@ namespace BDArmory.VesselSpawning
                 yield return null;
             }
             Destroy(indicatorObject);
+        }
+
+        GameObject SetupSpawnPointIndicator()
+        {
+            // Use the same indicator as the original VesselMover for familiarity.
+            GameObject indicatorObject = new();
+            LineRenderer lr = indicatorObject.AddComponent<LineRenderer>();
+            lr.material = new Material(Shader.Find("KSP/Particles/Alpha Blended"));
+            lr.material.SetColor("_TintColor", Color.green);
+            lr.material.mainTexture = Texture2D.whiteTexture;
+            lr.useWorldSpace = false;
+
+            Vector3[] positions = [Vector3.zero, 10 * Vector3.forward];
+            lr.SetPositions(positions);
+            lr.positionCount = positions.Length;
+            lr.startWidth = 0.1f;
+            lr.endWidth = 1f;
+
+            return indicatorObject;
         }
 
         bool SphereRayIntersect(Ray ray, Vector3 sphereCenter, float sphereRadius, out float distance)
@@ -833,7 +851,18 @@ namespace BDArmory.VesselSpawning
                 VesselSpawner.ReservedCrew = crew.Select(crew => crew.name).ToHashSet(); // Reserve the crew so they don't get swapped out.
                 foreach (var c in crew) c.rosterStatus = ProtoCrewMember.RosterStatus.Available; // Set all the requested crew as available.
             }
-            VesselSpawnConfig vesselSpawnConfig = new VesselSpawnConfig(craftUrl, spawnPoint, direction, (float)altitude, initialPitch, false, false, crew: crew);
+            VesselSpawnConfig vesselSpawnConfig = new(
+                craftUrl,
+                spawnPoint,
+                direction,
+                (float)altitude,
+                initialPitch,
+                airborne: false,
+                inOrbit: false,
+                deconflictVesselName: BDACompetitionMode.Instance.competitionIsActive || BDACompetitionMode.Instance.competitionStarting, // Deconflict name only if spawning into an active competition.
+                crew: crew
+            );
+            ResetInternals(); // Reset spawner internals.
 
             // Spawn vessel.
             yield return SpawnSingleVessel(vesselSpawnConfig);
@@ -862,6 +891,7 @@ namespace BDArmory.VesselSpawning
         Messages _messageState = Messages.None;
         string customMessage = "";
         float messageDisplayTime = 0;
+        float previousVesselMoverWindowHeight = 0;
 
         private void OnGUI()
         {
@@ -872,6 +902,8 @@ namespace BDArmory.VesselSpawning
             if (BDArmorySetup.showVesselMoverGUI)
             {
                 BDArmorySetup.SetGUIOpacity();
+                var guiMatrix = GUI.matrix; // Store and restore the GUI.matrix so we can apply a different scaling for the WM window.
+                if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, BDArmorySetup.WindowRectVesselMover.position);
                 BDArmorySetup.WindowRectVesselMover = GUILayout.Window(
                     GUIUtility.GetControlID(FocusType.Passive),
                     BDArmorySetup.WindowRectVesselMover,
@@ -880,8 +912,11 @@ namespace BDArmory.VesselSpawning
                     BDArmorySetup.BDGuiSkin.window,
                     GUILayout.Width(windowWidth)
                 );
+                GUI.matrix = guiMatrix;
+                previousVesselMoverWindowHeight = BDArmorySetup.WindowRectVesselMover.height;
                 if (showVesselSelection)
                 {
+                    if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, BDArmorySetup.WindowRectVesselMoverVesselSelection.position);
                     BDArmorySetup.WindowRectVesselMoverVesselSelection = GUILayout.Window(
                         GUIUtility.GetControlID(FocusType.Passive),
                         BDArmorySetup.WindowRectVesselMoverVesselSelection,
@@ -889,9 +924,11 @@ namespace BDArmory.VesselSpawning
                         StringUtils.Localize("#LOC_BDArmory_VesselMover_VesselSelection"),
                         BDArmorySetup.BDGuiSkin.window
                     );
+                    GUI.matrix = guiMatrix;
                 }
                 else if (showCrewSelection)
                 {
+                    if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, crewSelectionWindowRect.position);
                     crewSelectionWindowRect = GUILayout.Window(
                         GUIUtility.GetControlID(FocusType.Passive),
                         crewSelectionWindowRect,
@@ -899,6 +936,7 @@ namespace BDArmory.VesselSpawning
                         StringUtils.Localize("#LOC_BDArmory_VesselMover_CrewSelection"),
                         BDArmorySetup.BDGuiSkin.window
                     );
+                    GUI.matrix = guiMatrix;
                 }
                 BDArmorySetup.SetGUIOpacity(false);
                 GUIUtils.UpdateGUIRect(BDArmorySetup.WindowRectVesselMover, guiCheckIndex);
@@ -1068,7 +1106,7 @@ namespace BDArmory.VesselSpawning
                     }
             }
             GUILayout.EndVertical();
-            GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectVesselMover);
+            GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectVesselMover, previousVesselMoverWindowHeight);
             GUIUtils.UpdateGUIRect(BDArmorySetup.WindowRectVesselMover, guiCheckIndex);
             GUIUtils.UseMouseEventInRect(BDArmorySetup.WindowRectVesselMover);
         }
@@ -1078,10 +1116,8 @@ namespace BDArmory.VesselSpawning
         /// </summary>
         void ResetWindowHeight()
         {
-            bool reposition = BDArmorySetup.WindowRectVesselMover.y + BDArmorySetup.WindowRectVesselMover.height == Screen.height;
             BDArmorySetup.WindowRectVesselMover.height = 0;
-            if (reposition) BDArmorySetup.WindowRectVesselMover.y = Screen.height;
-            GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectVesselMover);
+            GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectVesselMover, previousVesselMoverWindowHeight);
         }
 
         public void SetVisible(bool visible)
@@ -1139,6 +1175,22 @@ namespace BDArmory.VesselSpawning
             GUIUtils.SetGUIRectVisible(_vesselGUICheckIndex, false);
         }
 
+        List<string> FilteredCraft
+        {
+            get
+            {
+                if (_filteredCraft.Item1 != selectionFilter || _filteredCraft.Item2 < craftBrowser.craftListUpdateTimestamp)
+                {
+                    // Something changed, update the filtered list.
+                    _filteredCraft.Item1 = selectionFilter;
+                    _filteredCraft.Item2 = craftBrowser.craftListUpdateTimestamp;
+                    _filteredCraft.Item3 = [.. craftBrowser.craftList.Where(kvp => kvp.Key != null && kvp.Value != null && kvp.Value.shipName.ToLower().Contains(selectionFilter.ToLower())).Select(kvp => kvp.Key)];
+                }
+                return _filteredCraft.Item3;
+            }
+        }
+        (string, float, List<string>) _filteredCraft = ("", 0, []);
+
         public void VesselSelectionWindow(int windowID)
         {
             GUI.DragWindow(new Rect(0, 0, BDArmorySetup.WindowRectVesselMoverVesselSelection.width, 20));
@@ -1157,49 +1209,41 @@ namespace BDArmory.VesselSpawning
                 if (GUILayout.Button("VAB", CustomCraftBrowserDialog.ButtonStyle, GUILayout.Height(80))) craftBrowser.ChangeFolder(EditorFacility.VAB);
                 GUILayout.EndHorizontal();
                 GUILayout.BeginHorizontal();
-                GUILayout.Label(CustomCraftBrowserDialog.displayFolder, CustomCraftBrowserDialog.LabelStyle, GUILayout.Height(50), GUILayout.ExpandWidth(true));
+                GUILayout.Label(craftBrowser.DisplayFolder, CustomCraftBrowserDialog.LabelStyle, GUILayout.Height(50), GUILayout.ExpandWidth(true));
                 if (GUILayout.Button(StringUtils.Localize("#LOC_BDArmory_Generic_Select"), CustomCraftBrowserDialog.ButtonStyle, GUILayout.Height(50), GUILayout.MaxWidth(BDArmorySetup.WindowRectVesselMoverVesselSelection.width / 3))) folderSelectionMode = false;
                 GUILayout.EndHorizontal();
-                using (var folder = craftBrowser.subfolders.GetEnumerator())
-                    while (folder.MoveNext())
+                foreach (var folder in craftBrowser.subfolders)
+                {
+                    if (GUILayout.Button($"{folder}", CustomCraftBrowserDialog.ButtonStyle, GUILayout.MaxHeight(60)))
                     {
-                        if (GUILayout.Button($"{folder.Current}", CustomCraftBrowserDialog.ButtonStyle, GUILayout.MaxHeight(60)))
-                        {
-                            craftBrowser.ChangeFolder(CustomCraftBrowserDialog.facility, folder.Current);
-                            break; // The enumerator can't continue since subfolders has changed.
-                        }
+                        craftBrowser.ChangeFolder(craftBrowser.Facility, folder);
+                        break; // The iteration can't continue since subfolders has changed.
                     }
+                }
             }
             else
             {
-                using (var vessels = craftBrowser.craftList.GetEnumerator())
-                    while (vessels.MoveNext())
+                foreach (var vesselURL in FilteredCraft)
+                {
+                    if (!craftBrowser.craftList.TryGetValue(vesselURL, out var vesselInfo)) continue; // This shouldn't happen.
+                    GUILayout.BeginHorizontal(); // Vessel buttons
+                    if (GUILayout.Button($"{vesselInfo.shipName}", selectedVesselURL == vesselURL ? CustomCraftBrowserDialog.SelectedButtonStyle : CustomCraftBrowserDialog.ButtonStyle, GUILayout.MaxHeight(64), GUILayout.MaxWidth(BDArmorySetup.WindowRectVesselMoverVesselSelection.width - 230)))
                     {
-                        var vesselURL = vessels.Current.Key;
-                        var vesselInfo = vessels.Current.Value;
-                        if (vesselURL == null || vesselInfo == null) continue;
-                        if (!string.IsNullOrEmpty(selectionFilter)) // Filter selection, case insensitive.
+                        if (Time.realtimeSinceStartup - selectionTimer < 0.5f)
                         {
-                            if (!vesselInfo.shipName.ToLower().Contains(selectionFilter.ToLower())) continue;
+                            craftBrowser.selectFileCallback?.Invoke(vesselURL);
+                            HideVesselSelection();
                         }
-                        GUILayout.BeginHorizontal(); // Vessel buttons
-                        if (GUILayout.Button($"{vesselInfo.shipName}", selectedVesselURL == vesselURL ? CustomCraftBrowserDialog.SelectedButtonStyle : CustomCraftBrowserDialog.ButtonStyle, GUILayout.MaxHeight(60), GUILayout.MaxWidth(BDArmorySetup.WindowRectVesselMoverVesselSelection.width - 190)))
-                        {
-                            if (Time.realtimeSinceStartup - selectionTimer < 0.5f)
-                            {
-                                if (craftBrowser.selectFileCallback != null) craftBrowser.selectFileCallback(vesselURL);
-                                HideVesselSelection();
-                            }
-                            else if (selectedVesselURL == vesselURL) { selectedVesselURL = ""; }
-                            else { selectedVesselURL = vesselURL; }
-                            selectionTimer = Time.realtimeSinceStartup;
-                        }
-                        GUILayout.Label(VesselInfoEntry(vesselURL, vesselInfo, true), CustomCraftBrowserDialog.InfoStyle);
-                        GUILayout.EndHorizontal();
+                        else if (selectedVesselURL == vesselURL) { selectedVesselURL = ""; }
+                        else { selectedVesselURL = vesselURL; }
+                        selectionTimer = Time.realtimeSinceStartup;
                     }
+                    GUILayout.Label(VesselInfoEntry(vesselURL, vesselInfo, true), CustomCraftBrowserDialog.InfoStyle, GUILayout.Width(166));
+                    GUILayout.Label(craftBrowser.craftThumbnails.GetValueOrDefault(vesselURL), CustomCraftBrowserDialog.InfoStyle, GUILayout.Height(64), GUILayout.Width(64));
+                    GUILayout.EndHorizontal();
+                }
             }
             GUILayout.EndScrollView();
-            GUILayout.Space(10);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(StringUtils.Localize("#LOC_BDArmory_Generic_Select"), selectedVesselURL != "" ? BDArmorySetup.ButtonStyle : BDArmorySetup.SelectedButtonStyle) && selectedVesselURL != "")
             {
@@ -1219,6 +1263,8 @@ namespace BDArmory.VesselSpawning
             {
                 craftBrowser.UpdateList();
             }
+            GUILayout.EndHorizontal();
+            GUILayout.EndVertical();
 
             #region Resizing
             var resizeRect = new Rect(BDArmorySetup.WindowRectVesselMoverVesselSelection.width - 16, BDArmorySetup.WindowRectVesselMoverVesselSelection.height - 16, 16, 16);
@@ -1228,10 +1274,8 @@ namespace BDArmory.VesselSpawning
                 resizingSelectionWindow = true;
             }
             if (resizingSelectionWindow && Event.current.type == EventType.Repaint)
-            { BDArmorySetup.WindowRectVesselMoverVesselSelection.size += Mouse.delta; }
+            { BDArmorySetup.WindowRectVesselMoverVesselSelection.size += Mouse.delta / BDArmorySettings.UI_SCALE_ACTUAL; }
             #endregion
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
             GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectVesselMoverVesselSelection);
             GUIUtils.UpdateGUIRect(BDArmorySetup.WindowRectVesselMoverVesselSelection, _vesselGUICheckIndex);
             GUIUtils.UseMouseEventInRect(BDArmorySetup.WindowRectVesselMoverVesselSelection);
@@ -1401,6 +1445,7 @@ namespace BDArmory.VesselSpawning
                                 KerbalRoster.SetExperienceTrait(crewMember, KerbalRoster.pilotTrait); // Make the kerbal a pilot (so they can use SAS properly).
                                 KerbalRoster.SetExperienceLevel(crewMember, KerbalRoster.GetExperienceMaxLevel()); // Make them experienced.
                                 crewMember.isBadass = true; // Make them bad-ass (likes nearby explosions).
+                                crewMember.courage = 0.5f;
                             }
                             else
                             {
@@ -1489,17 +1534,17 @@ namespace BDArmory.VesselSpawning
 
         IEnumerator ToolbarButtonRoutine()
         {
-            if (buttonSetup) yield break;
-            if (!HighLogic.LoadedSceneIsFlight && !HighLogic.LoadedSceneIsEditor) yield break;
-            yield return new WaitUntil(() => ApplicationLauncher.Ready && BDArmorySetup.toolbarButtonAdded); // Wait until after the main BDA toolbar button.
-
-            if (!buttonSetup)
+            if (buttonSetup) // Just update the callbacks for the current instance.
             {
-                Texture buttonTexture = GameDatabase.Instance.GetTexture(BDArmorySetup.textureDir + "icon_vm", false);
-                button = ApplicationLauncher.Instance.AddModApplication(ShowVMGUI, HideVMGUI, Dummy, Dummy, Dummy, Dummy, ApplicationLauncher.AppScenes.FLIGHT, buttonTexture);
-                buttonSetup = true;
-                if (BDArmorySetup.showVesselMoverGUI) button.SetTrue(false);
+                button.onTrue = ShowVMGUI;
+                button.onFalse = HideVMGUI;
+                yield break;
             }
+            yield return new WaitUntil(() => ApplicationLauncher.Ready && BDArmorySetup.toolbarButtonAdded); // Wait until after the main BDA toolbar button.
+            Texture buttonTexture = GameDatabase.Instance.GetTexture(BDArmorySetup.textureDir + "icon_vm", false);
+            button = ApplicationLauncher.Instance.AddModApplication(ShowVMGUI, HideVMGUI, Dummy, Dummy, Dummy, Dummy, ApplicationLauncher.AppScenes.FLIGHT, buttonTexture);
+            buttonSetup = true;
+            if (BDArmorySetup.showVesselMoverGUI) button.SetTrue(false);
         }
         void Dummy() { }
         #endregion
@@ -1508,32 +1553,42 @@ namespace BDArmory.VesselSpawning
     internal class CustomCraftBrowserDialog
     {
         // Keep some of these as static so that they're remembered between instances of showing the dialog.
-        public static EditorFacility facility = EditorFacility.None;
+        static EditorFacility facility = EditorFacility.None;
         static string profile = HighLogic.SaveFolder;
         static string baseFolder;
-        public static string displayFolder;
+        static string displayFolder;
         static string currentFolder;
 
+        // Public getters
+        public string CurrentFolder => currentFolder;
+        public string BaseFolder => baseFolder;
+        public string DisplayFolder => displayFolder;
+        public string GameName => profile;
+        public EditorFacility Facility => facility;
+
         string _currentFolder; // For checking if the current folder has changed between instances and thus the craftList needs refreshing.
-        public Dictionary<string, CraftProfileInfo> craftList = new();
-        public Dictionary<string, int> crewCounts = new();
-        public List<string> subfolders = new();
+        public float craftListUpdateTimestamp = 0; // Timestamp for when the craftList was last updated.
+        public Dictionary<string, CraftProfileInfo> craftList = [];
+        public Dictionary<string, int> crewCounts = [];
+        public Dictionary<string, Texture2D> craftThumbnails = [];
+        public List<string> subfolders = [];
         public Action<string> selectFileCallback = null;
         public Action cancelledCallback = null;
-        public static Dictionary<string, string> shipNames = new(); // craftURLs to ship names.
+        public static Dictionary<string, string> shipNames = []; // craftURLs to ship names.
         public static GUIStyle ButtonStyle = new(BDArmorySetup.ButtonStyle);
         public static GUIStyle SelectedButtonStyle = new(BDArmorySetup.SelectedButtonStyle);
         public static GUIStyle InfoStyle = new(BDArmorySetup.BDGuiSkin.label);
         public static GUIStyle LabelStyle = new(BDArmorySetup.BDGuiSkin.label);
         public void UpdateList()
         {
-            CheckCurrent();
+            if (CheckCurrent()) return; // If CheckCurrent changes the folder, then UpdateList gets called internally.
             if (string.IsNullOrEmpty(currentFolder) || !Directory.Exists(currentFolder)) ChangeFolder(facility); // Default to the current base folder if something is wrong.
             craftList = Directory.GetFiles(currentFolder, "*.craft").ToDictionary(craft => craft, craft => new CraftProfileInfo());
             if (craftList.ContainsKey(Path.Combine(currentFolder, "Auto-Saved Ship.craft"))) craftList.Remove(Path.Combine(currentFolder, "Auto-Saved Ship.craft")); // Ignore the Auto-Saved Ship.
-            subfolders = Directory.GetDirectories(currentFolder).Select(folder => Path.GetFileName(folder)).ToList();
+            subfolders = Directory.GetDirectories(currentFolder).Select(Path.GetFileName).ToList();
             if (currentFolder != baseFolder) subfolders.Insert(0, "..");
             CraftProfileInfo.PrepareCraftMetaFileLoad();
+            var thumbURLSubDir = $"/{Path.Combine(facility.ToString(), currentFolder.Substring(baseFolder.Length).Trim('/'))}";
             foreach (var craft in craftList.Keys.ToList())
             {
                 var craftMeta = Path.Combine(currentFolder, $"{Path.GetFileNameWithoutExtension(craft)}.loadmeta");
@@ -1547,25 +1602,28 @@ namespace BDArmory.VesselSpawning
                     craftList[craft].LoadDetailsFromCraftFile(craftNode, craft);
                     craftList[craft].SaveToMetaFile(craftMeta);
                 }
+                var thumbURL = $"/thumbs/{GetPlayerCraftThumbnailName(profile, thumbURLSubDir, Path.GetFileNameWithoutExtension(craft))}";
+                craftThumbnails[craft] = ShipConstruction.GetThumbnail(thumbURL);
             }
             var failedToParse = craftList.Where(kvp => kvp.Value is null || kvp.Value.partNames is null).ToList();
             if (failedToParse.Count > 0) Debug.LogError($"[BDArmory.VesselMover]: Failed to properly parse some loadmeta files:\n{string.Join("\n  ", failedToParse)}");
             crewCounts = craftList.ToDictionary(kvp => kvp.Key, kvp => (kvp.Value is null || kvp.Value.partNames is null) ? 0 : kvp.Value.partNames.Where(p => SpawnUtils.PartCrewCounts.ContainsKey(p)).Sum(p => SpawnUtils.PartCrewCounts[p]));
             ButtonStyle.stretchHeight = true;
-            ButtonStyle.fontSize = 20;
+            ButtonStyle.fontSize = 24;
             SelectedButtonStyle.stretchHeight = true;
-            SelectedButtonStyle.fontSize = 20;
-            InfoStyle.fontSize = 12;
+            SelectedButtonStyle.fontSize = 24;
+            InfoStyle.fontSize = 14;
             InfoStyle.richText = true;
-            LabelStyle.fontSize = 20;
+            LabelStyle.fontSize = 24;
             LabelStyle.alignment = TextAnchor.MiddleCenter;
             LabelStyle.normal.textColor = Color.green;
             shipNames.Where(kvp => File.Exists(kvp.Key)).ToDictionary(kvp => kvp.Key, kvp => kvp.Value); // Remove any no longer valid ship names.
             foreach (var craft in craftList.Keys)
                 shipNames[craft] = craftList[craft].shipName;
+            craftListUpdateTimestamp = Time.realtimeSinceStartup;
         }
 
-        public void ChangeFolder(EditorFacility facility, string subfolder = null)
+        public void ChangeFolder(EditorFacility facility, string subfolder = null, bool relative = true)
         {
             if (facility == EditorFacility.None) // Very first time used, default to the VAB if the current vessel was launched from there or fall back to the SPH.
             {
@@ -1576,22 +1634,22 @@ namespace BDArmory.VesselSpawning
                 subfolder = null; // Revert to the base folder when changing facilities.
                 CustomCraftBrowserDialog.facility = facility;
             }
-            baseFolder = Path.GetFullPath(Path.Combine(KSPUtil.ApplicationRootPath, "saves", profile, "Ships", facility.ToString()));
+            baseFolder = Path.GetFullPath(GetShipsPathFor(profile, facility).TrimEnd(['/']));
             if (!Directory.Exists(baseFolder))
             {
                 var message = $"The base folder for the {facility} doesn't exist! Your KSP install is broken!";
                 Debug.LogError($"[BDArmory.VesselMover]: {message}");
-                Competition.BDACompetitionMode.Instance.competitionStatus.Add(message);
+                BDACompetitionMode.Instance.competitionStatus.Add(message);
                 return;
             }
-            if (string.IsNullOrEmpty(currentFolder)) currentFolder = baseFolder;
-            if (subfolder == null)
+            if (!relative || string.IsNullOrEmpty(currentFolder)) currentFolder = baseFolder;
+            if (string.IsNullOrEmpty(subfolder))
             {
                 currentFolder = baseFolder;
             }
             else
             {
-                var newFolder = Path.GetFullPath(Path.Combine(currentFolder, subfolder));
+                var newFolder = Path.GetFullPath(Path.Combine(currentFolder, subfolder.TrimStart(['/'])));
                 if (Directory.Exists(newFolder)) currentFolder = newFolder;
                 else currentFolder = baseFolder;
             }
@@ -1600,9 +1658,107 @@ namespace BDArmory.VesselSpawning
             UpdateList();
         }
 
-        public void CheckCurrent()
+        public bool CheckCurrent()
         {
-            if (_currentFolder != currentFolder) ChangeFolder(facility, currentFolder); // Another instance changed the current folder, so switch to match it.
+            if (profile != HighLogic.SaveFolder) // The user changed saves after having opened the craft browser. Reset to the default.
+            {
+                profile = HighLogic.SaveFolder;
+                baseFolder = null;
+                displayFolder = null;
+                currentFolder = null;
+                ChangeFolder(EditorFacility.None);
+                return true;
+            }
+            if (_currentFolder != currentFolder)
+            {
+                ChangeFolder(facility, currentFolder.Substring(baseFolder.Length), false); // Another instance changed the current folder, so switch to match it.
+                return true;
+            }
+            return false;
+        }
+
+        public static string GetPlayerCraftThumbnailName(string profile, string thumbURLSubDir, string shipName)
+        {
+            if ((Versioning.version_major == 1 && Versioning.version_minor > 11) || Versioning.version_major > 1) // Introduced in 1.12
+                return GetPlayerCraftThumbnailName_1_12(profile, thumbURLSubDir, shipName);
+            return $"{profile}{thumbURLSubDir.Replace('/', '_')}_{shipName}";
+        }
+        public static string GetPlayerCraftThumbnailName_1_12(string profile, string thumbURLSubDir, string shipName) => ShipConstruction.GetPlayerCraftThumbnailName(profile, thumbURLSubDir, shipName);
+        public static string GetShipsPathFor(string profile, EditorFacility facility)
+        {
+            if ((Versioning.version_major == 1 && Versioning.version_minor > 11) || Versioning.version_major > 1) // Introduced in 1.12
+                return GetShipsPathFor_1_12(profile, facility);
+            return Path.Combine(KSPUtil.ApplicationRootPath, "saves", profile, "Ships", ShipConstruction.GetShipsSubfolderFor(facility));
+        }
+        public static string GetShipsPathFor_1_12(string profile, EditorFacility facility) => ShipConstruction.GetShipsPathFor(profile, facility);
+    }
+
+    internal class CraftBrowserMissingThumbnailGenerator : MonoBehaviour
+    {
+        static CraftBrowserMissingThumbnailGenerator instance;
+        public static CraftBrowserMissingThumbnailGenerator Instance
+        {
+            get
+            {
+                if (instance == null)
+                {
+                    GameObject gameObject = new() { name = "CraftBrowserMissingThumbnailGenerator" };
+                    instance = gameObject.AddComponent<CraftBrowserMissingThumbnailGenerator>();
+                }
+                return instance;
+            }
+        }
+        public static bool recurse = false;
+
+        public void GenerateMissingThumbnails(EditorFacility facility) => StartCoroutine(GenerateMissingThumbnailsWorker(facility));
+        IEnumerator GenerateMissingThumbnailsWorker(EditorFacility facility)
+        {
+            var craftBrowser = new CustomCraftBrowserDialog();
+            craftBrowser.ChangeFolder(facility);
+            var thumbURLRoot = Path.GetFullPath(Path.Combine(KSPUtil.ApplicationRootPath, "thumbs"));
+
+            List<string> folders = [craftBrowser.BaseFolder];
+            if (recurse) folders.AddRange(Directory.GetDirectories(craftBrowser.BaseFolder, "*", SearchOption.AllDirectories));
+            foreach (var folder in folders)
+            {
+                craftBrowser.ChangeFolder(facility, folder, true);
+                var thumbURLSubDir = $"/{Path.Combine(facility.ToString(), craftBrowser.CurrentFolder.Substring(craftBrowser.BaseFolder.Length).Trim('/'))}";
+                bool hasShownMessage = false;
+                foreach (var craft in craftBrowser.craftList.Keys)
+                {
+                    var craftInfo = craftBrowser.craftList[craft];
+                    if (craftInfo.UnavailableShipParts.Count > 0)
+                    {
+                        Debug.Log($"[BDArmory.VesselMover]: Craft {craftInfo.shipName} has missing parts, unable to generate thumbnail.");
+                        continue;
+                    }
+                    var thumbURL = Path.Combine(thumbURLRoot, $"{ShipConstruction.GetPlayerCraftThumbnailName(craftBrowser.GameName, thumbURLSubDir, Path.GetFileNameWithoutExtension(craft))}.png"); // Actual URL.
+                    if (!File.Exists(thumbURL))
+                    {
+                        if (!hasShownMessage)
+                        {
+                            ScreenMessages.PostScreenMessage($"{StringUtils.Localize("#LOC_BDArmory_CraftBrowser_GenerateMissingThumbnailsGeneratingForCraftIn")} {craftBrowser.DisplayFolder}", 5);
+                            hasShownMessage = true;
+                        }
+                        // Load the ship and take a thumbnail of it.
+                        Debug.Log($"[BDArmory.VesselMover]: Generating thumbnail for {craftInfo.shipName} at KSP{thumbURL.Substring(KSPUtil.ApplicationRootPath.Length)}");
+                        ScreenMessages.PostScreenMessage($"{StringUtils.Localize("#LOC_BDArmory_CraftBrowser_GenerateMissingThumbnailsGeneratingFor")} {craftInfo.shipName}.", 3);
+                        yield return null;
+                        try
+                        {
+                            EditorLogic.LoadShipFromFile(craft);
+                            ShipConstruction.CaptureThumbnail(EditorLogic.fetch.ship, $"/thumbs", ShipConstruction.GetPlayerCraftThumbnailName(craftBrowser.GameName, thumbURLSubDir, Path.GetFileNameWithoutExtension(craft)));
+                        }
+                        catch (Exception e)
+                        {
+                            Debug.LogError($"[BDArmory.VesselMover]: Error capturing thumbnail of {craftInfo.shipName} {e.Message}\n{e.StackTrace}");
+                            ScreenMessages.PostScreenMessage($"{StringUtils.Localize("#LOC_BDArmory_CraftBrowser_GenerateMissingThumbnailsFailure")} {craftInfo.shipName}", 5);
+                        }
+                    }
+                }
+            }
+            ScreenMessages.PostScreenMessage(StringUtils.Localize("#LOC_BDArmory_CraftBrowser_GenerateMissingThumbnailsFinished"), 5);
+            EditorLogic.LoadShipFromFile(null);
         }
     }
 }

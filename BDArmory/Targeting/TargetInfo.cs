@@ -20,10 +20,21 @@ namespace BDArmory.Targeting
         public BDTeam Team;
         public bool isMissile;
         public MissileBase MissileBaseModule;
-        public MissileFire weaponManager;
-        Dictionary<BDTeam, List<MissileFire>> friendliesEngaging = new Dictionary<BDTeam, List<MissileFire>>();
-        public Dictionary<BDTeam, bool> detected = new Dictionary<BDTeam, bool>();
-        public Dictionary<BDTeam, float> detectedTime = new Dictionary<BDTeam, float>();
+        public MissileFire WeaponManager // Using a non-static target WM avoids continuing to target debris that has separated from the WM.
+        {
+            get
+            {
+                if (_weaponManager == null || !_weaponManager.IsPrimaryWM || _weaponManager.vessel != vessel)
+                    _weaponManager = (vessel != null && vessel.loaded) ? vessel.ActiveController().WM : null;
+                if (_weaponManager != null && _weaponManager.vessel != vessel) _weaponManager = null;
+                return _weaponManager;
+            }
+        }
+        public MissileFire _weaponManager;
+
+        Dictionary<BDTeam, List<MissileFire>> friendliesEngaging = [];
+        public Dictionary<BDTeam, bool> detected = [];
+        public Dictionary<BDTeam, float> detectedTime = [];
 
         public float radarBaseSignature = -1;
         public bool radarBaseSignatureNeedsUpdate = true;
@@ -98,8 +109,7 @@ namespace BDArmory.Targeting
             {
                 if (!vessel) return false;
                 if (vessel.situation == Vessel.Situations.SPLASHED) return true;
-                else
-                    return false;
+                return false;
             }
         }
 
@@ -116,7 +126,7 @@ namespace BDArmory.Targeting
         {
             get
             {
-                return vessel.vesselTransform.position;
+                return vessel.CoM;
             }
         }
 
@@ -147,11 +157,13 @@ namespace BDArmory.Targeting
                 {
                     return true;
                 }
-                else if (weaponManager && weaponManager.vessel.isCommandable) //Fix for GLOC'd pilots. IsControllable merely checks if plane has pilot; Iscommandable checks if they're conscious
+                else if (WeaponManager)
                 {
-                    return true;
+                    return WeaponManager.vessel.isCommandable; //isn't debris / has command part
+                    //return weaponManager.vessel.IsControllable; //vessel has probecore & EC/pilot && pilot is conscious
+                    //enable this if you want exceedingly honorable pilots who hold fire if their target has GLOC'ed themselves
+                    // GLOC'ed craft now go neutral stick, so they no longer get locked in a perma-stun deathloop                    
                 }
-
                 return false;
             }
         }
@@ -168,13 +180,15 @@ namespace BDArmory.Targeting
                 {
                     return false;
                 }
-                else if (weaponManager && weaponManager.debilitated)
+                else if (WeaponManager && WeaponManager.debilitated)
                 {
                     return true;
                 }
                 return false;
             }
         }
+
+        public List<(string, float)> debugTargetPriorities = []; // Debug info for target priorities.
 
         void Awake()
         {
@@ -201,13 +215,12 @@ namespace BDArmory.Targeting
             }
 
             Team = null;
-            var mf = VesselModuleRegistry.GetMissileFire(vessel, true);
+            var mf = vessel.ActiveController().WM;
             if (mf != null)
             {
-                Team = mf.Team;
-                weaponManager = mf;
+                Team = mf.Team; // While the primary WM may change, the Team shouldn't.
             }
-            else
+            else if (vessel.IsMissile())
             {
                 var ml = VesselModuleRegistry.GetMissileBase(vessel, true);
                 if (ml != null)
@@ -254,7 +267,8 @@ namespace BDArmory.Targeting
             if (radarMassAtUpdate > 0)
             {
                 float massPercentageDifference = (radarMassAtUpdate - vessel.GetTotalMass()) / radarMassAtUpdate;
-                if ((massPercentageDifference > 0.025f) && (weaponManager) && (weaponManager.missilesAway.Count == 0) && !weaponManager.guardFiringMissile)
+                var weaponManager = WeaponManager;
+                if (massPercentageDifference > 0.025f && weaponManager && weaponManager.missilesAway.Count == 0 && !weaponManager.guardFiringMissile)
                 {
                     alreadyScheduledRCSUpdate = true;
                     yield return new WaitForSeconds(1.0f);    // Wait for any explosions to finish
@@ -273,7 +287,7 @@ namespace BDArmory.Targeting
             }
             else
             {
-                if ((vessel.vesselType == VesselType.Debris) && (weaponManager == null))
+                if (vessel.vesselType == VesselType.Debris && WeaponManager == null)
                 {
                     BDATargetManager.RemoveTarget(this);
                     Team = null;
@@ -383,7 +397,7 @@ namespace BDArmory.Targeting
         public float TargetPriRange(MissileFire myMf) // 1- Target range normalized with max weapon range
         {
             if (myMf == null) return 0;
-            float thisDist = (position - myMf.transform.position).magnitude;
+            float thisDist = (position - myMf.vessel.CoM).magnitude;
             float maxWepRange = 0;
             var weapons = VesselModuleRegistry.GetModules<ModuleWeapon>(myMf.vessel);
             if (weapons == null) return 0;
@@ -400,16 +414,20 @@ namespace BDArmory.Targeting
         public float TargetPriATA(MissileFire myMf) // Square cosine of antenna train angle
         {
             if (myMf == null) return 0;
-            float ataDot = Vector3.Dot(myMf.vessel.srf_vel_direction, (position - myMf.vessel.vesselTransform.position).normalized);
+            float ataDot = Vector3.Dot(myMf.vessel.srf_vel_direction, (position - myMf.vessel.CoM).normalized);
             ataDot = (ataDot + 1) / 2; // Adjust from 0-1 instead of -1 to 1
             return ataDot * ataDot;
         }
-        public float TargetPriEngagement(MissileFire mf) // Differentiate between flying and surface targets
+        public float TargetPriEngagement(MissileFire mf, double engagingAlt) // Differentiate between flying and surface targets
         {
             if (mf == null) return 0; // no WM, so no valid target, no impact on targeting score
             if (mf.vessel.LandedOrSplashed)
             {
                 return -1; //ground target
+            }
+            else if (mf.vessel.horizontalSrfSpeed < 30 && (mf.vessel.radarAltitude < 200 && engagingAlt > 800)) //if craft is flatspinning or similar, and is lower than 200m, while the aircraft targeting it is higher than 800, regard as semi-landed
+            {
+                return -0.5f;
             }
             else
             {
@@ -428,7 +446,7 @@ namespace BDArmory.Targeting
         public float TargetPriClosureTime(MissileFire myMf) // Time to closest point of approach, normalized for one minute
         {
             if (myMf == null) return 0;
-            float targetDistance = Vector3.Distance(vessel.transform.position, myMf.vessel.transform.position);
+            float targetDistance = Vector3.Distance(vessel.CoM, myMf.vessel.CoM);
             Vector3 currVel = (float)myMf.vessel.srfSpeed * myMf.vessel.Velocity().normalized;
             float closureTime = Mathf.Clamp((float)(1 / ((vessel.Velocity() - currVel).magnitude / targetDistance)), 0f, 60f);
             return 1 - closureTime / 60f;
@@ -479,8 +497,8 @@ namespace BDArmory.Targeting
         public float TargetPriAoD(MissileFire myMF)
         {
             if (myMF == null) return 0;
-            var relativePosition = vessel.transform.position - myMF.vessel.transform.position;
-            float theta = Vector3.Angle(myMF.vessel.srf_vel_direction, relativePosition);
+            var relativePosition = vessel.CoM - myMF.vessel.CoM;
+            float theta = VectorUtils.Angle(myMF.vessel.srf_vel_direction, relativePosition);
             float cosTheta2 = Mathf.Cos(theta / 2f);
             return Mathf.Clamp(((cosTheta2 * cosTheta2 + 1f) * 100f / Mathf.Max(10f, relativePosition.magnitude)) / 2, 0, 1); // Ranges from 0 to 1, clamped at 1 for distances closer than 100m
         }
@@ -517,22 +535,18 @@ namespace BDArmory.Targeting
         public float TargetPriProtectTeammate(MissileFire mf, MissileFire myMf) // If target is attacking one of our teammates. 1 if true, 0 if false.
         {
             if (myMf == null) return 0;
-            if (mf == null || mf.currentTarget == null || mf.currentTarget.weaponManager == null) return 0;
-            return (mf.currentTarget.weaponManager != myMf && mf.currentTarget.weaponManager.Team == myMf.Team) ? 1 : 0; // Not us, but on the same team.
+            var targetMf = mf != null && mf.currentTarget != null ? mf.currentTarget.WeaponManager : null;
+            if (targetMf == null) return 0;
+            return (targetMf != myMf && targetMf.Team == myMf.Team) ? 1 : 0; // Not us, but on the same team.
         }
 
         public float TargetPriProtectVIP(MissileFire mf, MissileFire myMf) // If target is attacking our VIP(s)
         {
             if (mf == null || myMf == null) return 0;
-            if ((mf.vessel != null) && (mf.currentTarget != null) && (mf.currentTarget.weaponManager != null))
-            {
-                bool attackingOurVIPs = mf.currentTarget.weaponManager.isVIP && (myMf.Team == mf.currentTarget.weaponManager.Team);
-                return ((attackingOurVIPs == true) ? 1 : -1); // Ranges -1 to 1, 1 if target is attacking our VIP(s), -1 if it is not
-            }
-            else
-            {
-                return 0;
-            }
+            var targetMf = mf != null && mf.currentTarget != null ? mf.currentTarget.WeaponManager : null;
+            if (mf.vessel == null || targetMf == null) return 0;
+            bool attackingOurVIPs = targetMf.isVIP && myMf.Team == targetMf.Team;
+            return attackingOurVIPs ? 1 : 0; // Ranges 0 to 1, 1 if target is attacking our VIP(s), 0 if it is not
         }
 
         public float TargetPriAttackVIP(MissileFire mf) // If target is enemy VIP
@@ -541,7 +555,7 @@ namespace BDArmory.Targeting
             if (mf.vessel != null)
             {
                 bool isVIP = mf.isVIP;
-                return ((isVIP == true) ? 1 : -1); // Ranges -1 to 1, 1 if target is an enemy VIP, -1 if it is not
+                return ((isVIP == true) ? 1 : 0); // Ranges 0 to 1, 1 if target is an enemy VIP, 0 if it is not
             }
             else
             {
@@ -571,7 +585,7 @@ namespace BDArmory.Targeting
                     friendlies.Add(mf);
             }
             else
-                friendliesEngaging.Add(mf.Team, new List<MissileFire> { mf });
+                friendliesEngaging.Add(mf.Team, [mf]);
         }
 
         public void Disengage(MissileFire mf)
@@ -591,9 +605,28 @@ namespace BDArmory.Targeting
 
         public bool IsCloser(TargetInfo otherTarget, MissileFire myMf)
         {
-            float thisSqrDist = (position - myMf.transform.position).sqrMagnitude;
-            float otherSqrDist = (otherTarget.position - myMf.transform.position).sqrMagnitude;
+            float thisSqrDist = (position - myMf.vessel.CoM).sqrMagnitude;
+            float otherSqrDist = (otherTarget.position - myMf.vessel.CoM).sqrMagnitude;
             return thisSqrDist < otherSqrDist;
+        }
+
+        public bool SafeOrbitalIntercept(MissileFire myMf)
+        {
+            // For orbital AI craft, avoid intercepting targets if we are descending and the maneuver will bring our own periapsis to an unsafe altitude
+
+            if (!vessel) return true;
+            var orbitalAI = myMf.vessel.ActiveController().OrbitalAI;
+            if (orbitalAI == null || !orbitalAI.pilotEnabled)
+                return true;
+
+            Orbit o = myMf.vessel.orbit;
+            bool unsafeDescent = o.timeToPe > 0 && o.timeToPe < o.timeToAp && o.PeA < (1.2f * o.referenceBody.MinSafeAltitude());
+            bool inRange = (vessel.CoM - myMf.vessel.CoM).sqrMagnitude < orbitalAI.interceptRanges.y * orbitalAI.interceptRanges.y;
+            Vector3 relVel = vessel.Velocity() - myMf.vessel.Velocity();
+            bool killVelocityNeeded = Vector3.Dot(vessel.CoM - myMf.vessel.CoM, relVel) < 0f &&
+                Vector3.Dot(o.GetPrograde(Planetarium.GetUniversalTime()), relVel) < 0f; // Moving away from each other in prograde direction (kill vel direction is retrograde)
+
+            return (inRange || !(unsafeDescent && killVelocityNeeded));
         }
 
         public void VesselModified(Vessel v)

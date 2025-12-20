@@ -84,6 +84,7 @@ namespace BDArmory.Weapons
 
         public override void OnFixedUpdate()
         {
+            base.OnFixedUpdate();
             if (missileLauncher != null && missileLauncher.HasFired &&
                 missileLauncher.TimeIndex > deployDelay &&
                 !deployed && AltitudeTrigger())

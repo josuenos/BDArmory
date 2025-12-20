@@ -12,6 +12,8 @@ namespace BDArmory.Radar
         public ModuleRadar detectedByRadar;
         public TargetSignatureData targetData;
         public float signalPersistTime;
+        public float velAngle;
+        public int jammedIndex;
     }
     public struct IRSTDisplayData
     {

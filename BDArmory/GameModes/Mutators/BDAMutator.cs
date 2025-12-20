@@ -11,6 +11,7 @@ using BDArmory.Settings;
 using BDArmory.UI;
 using BDArmory.Utils;
 using BDArmory.Weapons;
+using static BDArmory.Weapons.ModuleWeapon;
 
 namespace BDArmory.GameModes
 {
@@ -39,8 +40,8 @@ namespace BDArmory.GameModes
         private Color iconColor;
         private Texture2D icon;
         public Material IconMat;
-
         private int ActiveMutators = 1;
+        public int progressionIndex = 0;
 
         public override void OnStart(StartState state)
         {
@@ -52,14 +53,16 @@ namespace BDArmory.GameModes
         }
 
 
-        public void EnableMutator(string name = "def") //FIXME - when using apply on timer and !apply global, this NREs
+        public void EnableMutator(string name = "def", bool HOS = false)
         {
+            if (string.IsNullOrEmpty(name)) name = "def";
             if (mutatorEnabled) //replace current mutator with new one
             {
                 DisableMutator();
             }
             if (name == "def") //mutator not specified, randomly choose from selected mutators
             {
+                if (BDArmorySettings.MUTATOR_LIST.Count == 0) return;
                 var indices = Enumerable.Range(0, BDArmorySettings.MUTATOR_LIST.Count).ToList();
                 indices.Shuffle();
                 name = string.Join("; ", indices.Take(BDArmorySettings.MUTATOR_APPLY_NUM).Select(i => MutatorInfo.mutators[BDArmorySettings.MUTATOR_LIST[i]].name));
@@ -67,7 +70,8 @@ namespace BDArmory.GameModes
             }
             mutatorName = name;
             mutators = BDAcTools.ParseNames(name);
-            for (int r = 0; r < BDArmorySettings.MUTATOR_APPLY_NUM; r++)
+            var mf = vessel.ActiveController().WM;
+            for (int r = 0; r < (HOS ? mutators.Count : BDArmorySettings.MUTATOR_APPLY_NUM); r++)
             {
                 name = MutatorInfo.mutators[mutators[r]].name;
                 mutatorInfo = MutatorInfo.mutators[name];
@@ -79,6 +83,9 @@ namespace BDArmory.GameModes
                         while (weapon.MoveNext())
                         {
                             if (weapon.Current == null) continue;
+                            weapon.Current.shortName = mutatorInfo.name;
+                            weapon.Current.WeaponDisplayName = weapon.Current.shortName;
+                            if (vessel.isActiveVessel && mf && (IBDWeapon)weapon.Current == mf.selectedWeapon) mf.selectedWeaponString = mutatorInfo.name;
                             if (mutatorInfo.weaponType != "def")
                             {
                                 weapon.Current.ParseWeaponType(mutatorInfo.weaponType);
@@ -94,6 +101,7 @@ namespace BDArmory.GameModes
                             if (mutatorInfo.RoF > 0)
                             {
                                 weapon.Current.roundsPerMinute = mutatorInfo.RoF;
+                                weapon.Current.baseRPM = mutatorInfo.RoF;
                             }
                             if (mutatorInfo.MaxDeviation > 0)
                             {
@@ -116,18 +124,18 @@ namespace BDArmory.GameModes
                             }
                             if (weapon.Current.eWeaponType == ModuleWeapon.WeaponTypes.Laser)
                             {
-                                if (!string.IsNullOrEmpty(mutatorInfo.bulletType) || mutatorInfo.bulletType != "def")
+                                if (!string.IsNullOrEmpty(mutatorInfo.bulletType) && mutatorInfo.bulletType != "def")
                                 {
                                     weapon.Current.projectileColor = BulletInfo.bullets[mutatorInfo.bulletType].projectileColor;
                                 }
                                 else
                                 {
-                                    var WM = VesselModuleRegistry.GetMissileFire(part.vessel, true);
+                                    var WM = part.vessel.ActiveController().WM;
                                     string color = $"{Mathf.RoundToInt(BDTISetup.Instance.ColorAssignments[WM.Team.Name].r * 255)},{Mathf.RoundToInt(BDTISetup.Instance.ColorAssignments[WM.Team.Name].g * 255)},{Mathf.RoundToInt(BDTISetup.Instance.ColorAssignments[WM.Team.Name].b * 255)},{Mathf.RoundToInt(BDTISetup.Instance.ColorAssignments[WM.Team.Name].a * 255)}";
                                     weapon.Current.projectileColor = color;
 
                                 }
-                                Debug.Log($"[MUTATOR BEAM DEBUG] Beam color for {part} on {vessel.GetName()} set to {weapon.Current.projectileColor}");
+                                if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.BDAMutator]: Beam color for {part} on {vessel.GetName()} set to {weapon.Current.projectileColor}");
                                 weapon.Current.laserTexList = BDAcTools.ParseNames(weapon.Current.laserTexturePath);
                                 weapon.Current.SetupLaserSpecifics();
                                 weapon.Current.pulseLaser = true;
@@ -138,7 +146,7 @@ namespace BDArmory.GameModes
                                 weapon.Current.externalAmmo = true;
                             }
                             weapon.Current.resourceSteal = mutatorInfo.resourceSteal;
-                            //Debug.Log("[MUTATOR] current weapon status: " + weapon.Current.WeaponStatusdebug());
+                            //if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.BDAMutator]: current weapon status: " + weapon.Current.WeaponStatusdebug());
                         }
                 }
                 if (mutatorInfo.EngineMult > 0)
@@ -218,19 +226,35 @@ namespace BDArmory.GameModes
             if (!mutatorEnabled) return;
             mutatorEnabled = false;
             if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.BDAMutator]: Disabling " + mutatorInfo.name + "Mutator on " + part.vessel.vesselName);
+            var mf = vessel.ActiveController().WM;
             using (var weapon = VesselModuleRegistry.GetModules<ModuleWeapon>(vessel).GetEnumerator())
                 while (weapon.MoveNext())
                 {
                     if (weapon.Current == null) continue;
+                    weapon.Current.shortName = weapon.Current.OriginalShortName;
+                    weapon.Current.WeaponDisplayName = weapon.Current.shortName;
+                    if (vessel.isActiveVessel && mf && (IBDWeapon)weapon.Current == mf.selectedWeapon) mf.selectedWeaponString = weapon.Current.GetShortName();
                     weapon.Current.ParseWeaponType(weapon.Current.weaponType);
                     if (!string.IsNullOrEmpty(weapon.Current.ammoBelt) && weapon.Current.ammoBelt != "def")
                     {
                         weapon.Current.useCustomBelt = true;
                     }
-                    weapon.Current.roundsPerMinute = weapon.Current.baseRPM;
                     weapon.Current.maxDeviation = weapon.Current.baseDeviation;
                     weapon.Current.laserDamage = weapon.Current.baseLaserdamage;
                     weapon.Current.pulseLaser = weapon.Current.pulseInConfig;
+                    if (weapon.Current.eWeaponType != WeaponTypes.Laser || weapon.Current.pulseLaser)
+                    {
+                        try
+                        {
+                            weapon.Current.baseRPM = float.Parse(ConfigNodeUtils.FindPartModuleConfigNodeValue(part.partInfo.partConfig, "ModuleWeapon", "roundsPerMinute", "fireTransformName", weapon.Current.fireTransformName)); //if multiple moduleWeapons, make sure this grabs the right one unsing fireTransformname as an ID
+                        }
+                        catch
+                        {
+                            weapon.Current.baseRPM = 3000;
+                        }
+                    }
+                    else weapon.Current.baseRPM = 3000;
+                    weapon.Current.roundsPerMinute = weapon.Current.baseRPM;
                     weapon.Current.instagib = false;
                     weapon.Current.strengthMutator = 1;
                     weapon.Current.SetupAmmo(null, null);
@@ -251,9 +275,9 @@ namespace BDArmory.GameModes
                 while (part.MoveNext())
                 {
                     var HPT = part.Current.FindModuleImplementing<HitpointTracker>();
-                    HPT.defenseMutator = 1;
+                    if (HPT != null) HPT.defenseMutator = 1;
                     var MM = part.Current.FindModuleImplementing<ModuleMassAdjust>();
-                    part.Current.RemoveModule(MM);
+                    if (MM != null) part.Current.RemoveModule(MM);
                 }
             if (Vengeance)
             {
@@ -326,7 +350,7 @@ namespace BDArmory.GameModes
                         }
                     }
                 }
-                if (Regen != 0 || TaxRate != 0)
+                if (hasTaxes || Regen != 0)
                 {
                     if (Accumulator > 5)
                     {
@@ -362,6 +386,7 @@ namespace BDArmory.GameModes
                             iconPath = MutatorInfo.mutators[mutators[i]].icon;
                             iconcolor = MutatorInfo.mutators[mutators[i]].iconColor;
                             iconColor = GUIUtils.ParseColor255(iconcolor);
+                            iconColor.a = BDTISettings.OPACITY * BDTISetup.iconOpacity;
                             switch (iconPath)
                             {
                                 case "IconAccuracy":
@@ -423,12 +448,14 @@ namespace BDArmory.GameModes
                 }
             }
         }
+        bool hasDetonated = false;
         void Detonate()
         {
+            if (hasDetonated) return;
             if (!Vengeance) return;
             if (!BDACompetitionMode.Instance.competitionIsActive) return;
             if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.BDAMutator]: triggering vengeance nuke");
-            NukeFX.CreateExplosion(part.transform.position, ExplosionSourceType.Other, this.vessel.GetName(), "Vengeance Explosion", 2.5f, 300, 1.5f, 1.5f, true,
+            NukeFX.CreateExplosion(part.transform.position, ExplosionSourceType.Other, this.vessel.GetName(), "Vengeance Explosion", BDArmorySettings.VENGEANCE_DELAY, 200 * BDArmorySettings.VENGEANCE_YIELD, BDArmorySettings.VENGEANCE_YIELD, BDArmorySettings.VENGEANCE_YIELD, false,
                 "BDArmory/Models/explosion/nuke/nukeBoom",
                 "BDArmory/Models/explosion/nuke/nukeFlash",
                 "BDArmory/Models/explosion/nuke/nukeShock",
@@ -437,6 +464,7 @@ namespace BDArmory.GameModes
                 "BDArmory/Models/explosion/nuke/nukeScatter",
                 "BDArmory/Models/Mutators/Vengence",
                 nukePart: part);
+            hasDetonated = true;
         }
     }
 }

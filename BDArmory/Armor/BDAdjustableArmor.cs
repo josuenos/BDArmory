@@ -75,7 +75,7 @@ namespace BDArmory.Armor
             }
         }
 
-        [KSPEvent(active = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_UnclampTuning_disabledText")]//Toggle scale limit
+        [KSPEvent(active = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_AI_UnclampTuning_disabledText")]//Toggle scale limit
         public void ToggleScaleClamp() => ToggleScaleClampHandler();
         public void ToggleScaleClampHandler(bool applySym = true, Toggle state = Toggle.Toggle)
         {
@@ -103,11 +103,11 @@ namespace BDArmory.Armor
 
             if (!clamped)
             {
-                Events["ToggleScaleClamp"].guiName = StringUtils.Localize("#LOC_BDArmory_UnclampTuning_enabledText");
+                Events["ToggleScaleClamp"].guiName = StringUtils.Localize("#LOC_BDArmory_AI_UnclampTuning_enabledText");
             }
             else
             {
-                Events["ToggleScaleClamp"].guiName = StringUtils.Localize("#LOC_BDArmory_UnclampTuning_disabledText");
+                Events["ToggleScaleClamp"].guiName = StringUtils.Localize("#LOC_BDArmory_AI_UnclampTuning_disabledText");
             }
             GUIUtils.RefreshAssociatedWindows(part);
             if (applySym)
@@ -155,10 +155,15 @@ namespace BDArmory.Armor
 
         HitpointTracker armor;
 
+        float origBreakingForce;
+        float origBreakingTorque;
+
         public override void OnStart(StartState state)
         {
             armorTransforms = part.FindModelTransforms(ArmorTransformName);
             ThicknessTransform = part.FindModelTransform(ThicknessTransformName);
+            origBreakingForce = part.breakingForce;
+            origBreakingTorque = part.breakingTorque;
             if (isTriangularPanel && TriangleType != "Right")
             {
                 Events["ToggleTriTypeOption"].guiActiveEditor = true;
@@ -325,8 +330,8 @@ namespace BDArmory.Armor
                         if (stackNode.Current.id == "top")
                         {
                             stackNode.Current.size = Mathf.CeilToInt(Width / 2);
-                            stackNode.Current.breakingForce = Width * 100;
-                            stackNode.Current.breakingTorque = Width * 100;
+                            stackNode.Current.breakingForce = Width * origBreakingForce;
+                            stackNode.Current.breakingTorque = Width * origBreakingTorque;
                             stackNode.Current.position.x = originalStackNodePosition[stackNode.Current.id].x + (((Width - 1) / (scaleneTri ? 2 : 1)) / offsetScale); //if eqi tri this needs to be /4
                             if (isTriangularPanel) stackNode.Current.orientation = new Vector3(1, 0, -((Width / 2) / Length));
                             if (translateChidren) MoveParts(stackNode.Current, stackNode.Current.position - prevPos, stackNode.Current.orientation - prevAngle);
@@ -334,8 +339,8 @@ namespace BDArmory.Armor
                         else
                         {
                             stackNode.Current.size = Mathf.CeilToInt(scaleneTri ? scaleneWidth / 2 : Width / 2);
-                            stackNode.Current.breakingForce = scaleneTri ? scaleneWidth : Width * 100;
-                            stackNode.Current.breakingTorque = scaleneTri ? scaleneWidth : Width * 100;
+                            stackNode.Current.breakingForce = scaleneTri ? scaleneWidth : Width * origBreakingForce;
+                            stackNode.Current.breakingTorque = scaleneTri ? scaleneWidth : Width * origBreakingTorque;
                             stackNode.Current.position.x = originalStackNodePosition[stackNode.Current.id].x - ((scaleneTri ? ((scaleneWidth - 1) / 2) : Width - 1) / offsetScale);// and a right tri hypotenuse node shouldn't move at all
                             if (isTriangularPanel && TriangleType != "Right")
                             {
@@ -347,8 +352,8 @@ namespace BDArmory.Armor
                     else if (stackNode.Current.id == "left" || stackNode.Current.id == "right")
                     {
                         stackNode.Current.size = Mathf.CeilToInt(Length / 2);
-                        stackNode.Current.breakingForce = Length * 100;
-                        stackNode.Current.breakingTorque = Length * 100;
+                        stackNode.Current.breakingForce = Length * origBreakingForce;
+                        stackNode.Current.breakingTorque = Length * origBreakingTorque;
                         Vector3 prevPos = stackNode.Current.position;
                         if (stackNode.Current.id == "right")
                         {

@@ -1,12 +1,13 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using UnityEngine;
 
 using BDArmory.Competition;
 using BDArmory.Settings;
 using BDArmory.Utils;
+using BDArmory.VesselSpawning;
 
 namespace BDArmory.UI
 {
@@ -16,15 +17,31 @@ namespace BDArmory.UI
         #region Fields
         public static ScoreWindow Instance;
         public bool _ready = false;
+        public static string scoreWeightsURL = Path.GetFullPath(Path.Combine(KSPUtil.ApplicationRootPath, "GameData/BDArmory/PluginData/score_weights.cfg"));
 
         int _buttonSize = 24;
         static int _guiCheckIndexScores = -1;
         Vector2 windowSize = new Vector2(200, 100);
         bool resizingWindow = false;
-        bool autoResizingWindow = true;
+        public bool autoResizingWindow = true;
         Vector2 scoreScrollPos = default;
-        Dictionary<string, NumericInputField> scoreWeights;
         bool showTeamScores = false;
+        public enum Mode { Tournament, ContinuousSpawn }
+        static Mode mode = Mode.Tournament;
+        public static void SetMode(Mode scoreMode, Toggle teamScores = Toggle.NoChange) => Instance.SetMode_(scoreMode, teamScores);
+        void SetMode_(Mode scoreMode, Toggle teamScores)
+        {
+            mode = scoreMode;
+            showTeamScores = teamScores switch
+            {
+                Toggle.Toggle => !showTeamScores,
+                Toggle.On => true,
+                Toggle.Off => false,
+                _ => showTeamScores
+            };
+            LoadWeights();
+            ResetWindowSize(true);
+        }
         #endregion
 
         #region Styles
@@ -44,9 +61,7 @@ namespace BDArmory.UI
         {
             _ready = false;
             StartCoroutine(WaitForBdaSettings());
-
-            // Score weight fields
-            scoreWeights = TournamentScores.weights.ToDictionary(kvp => kvp.Key, kvp => gameObject.AddComponent<NumericInputField>().Initialise(0, kvp.Value));
+            SetMode(Mode.Tournament);
             showTeamScores = BDArmorySettings.VESSEL_SPAWN_NUMBER_OF_TEAMS != 0;
         }
 
@@ -104,6 +119,8 @@ namespace BDArmory.UI
             if (resizingWindow && Event.current.type == EventType.MouseUp) { resizingWindow = false; }
             AdjustWindowRect(windowSize);
             BDArmorySetup.SetGUIOpacity();
+            var guiMatrix = GUI.matrix;
+            if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, BDArmorySetup.WindowRectScores.position);
             BDArmorySetup.WindowRectScores = GUILayout.Window(
                 GUIUtility.GetControlID(FocusType.Passive),
                 BDArmorySetup.WindowRectScores,
@@ -113,6 +130,7 @@ namespace BDArmory.UI
             );
             if (weightsVisible)
             {
+                if (BDArmorySettings.UI_SCALE_ACTUAL != 1) { GUI.matrix = guiMatrix; GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, weightsWindowRect.position); }
                 weightsWindowRect = GUILayout.Window(
                     GUIUtility.GetControlID(FocusType.Passive),
                     weightsWindowRect,
@@ -126,7 +144,7 @@ namespace BDArmory.UI
         }
 
         #region Scores
-        private void AdjustWindowRect(Vector2 size, bool force=false)
+        private void AdjustWindowRect(Vector2 size, bool force = false)
         {
             if (!autoResizingWindow && resizingWindow || force)
             {
@@ -134,7 +152,7 @@ namespace BDArmory.UI
                 size.y = Mathf.Clamp(size.y, 70, Screen.height - BDArmorySetup.WindowRectScores.y); // The ScrollView won't let us go smaller than this.
                 BDArmorySetup.WindowRectScores.size = size;
             }
-            GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectScores);
+            GUIUtils.RepositionWindow(ref BDArmorySetup.WindowRectScores, windowSize.y);
             windowSize = BDArmorySetup.WindowRectScores.size;
         }
 
@@ -149,20 +167,53 @@ namespace BDArmory.UI
             if (GUI.Button(new Rect(windowSize.x - _buttonSize, 0, _buttonSize, _buttonSize), " X", BDArmorySetup.CloseButtonStyle)) SetVisible(false);
 
             GUILayout.BeginVertical(GUI.skin.box, GUILayout.ExpandHeight(autoResizingWindow));
-            var progress = BDATournament.Instance.GetTournamentProgress();
-            GUILayout.Label($"{StringUtils.Localize("#LOC_BDArmory_BDAScores_Round")} {progress.Item1} / {progress.Item2}, {StringUtils.Localize("#LOC_BDArmory_BDAScores_Heat")} {progress.Item3} / {progress.Item4}", leftLabel);
-            if (!autoResizingWindow) scoreScrollPos = GUILayout.BeginScrollView(scoreScrollPos);
-            int rank = 0;
-            using (var scoreField = showTeamScores ? BDATournament.Instance.GetRankedTeamScores.GetEnumerator() : BDATournament.Instance.GetRankedScores.GetEnumerator())
-                while (scoreField.MoveNext())
-                {
-                    GUILayout.BeginHorizontal();
-                    GUILayout.Label($"{++rank,3:D}", leftLabel, GUILayout.Width(BDArmorySettings.SCORES_FONT_SIZE * 2));
-                    GUILayout.Label(scoreField.Current.Key, leftLabel);
-                    GUILayout.Label($"{scoreField.Current.Value,7:F3}", rightLabel);
-                    GUILayout.EndHorizontal();
-                }
-            if (!autoResizingWindow) GUILayout.EndScrollView();
+            switch (mode)
+            {
+                case Mode.Tournament:
+                    {
+                        var progress = BDATournament.Instance.GetTournamentProgress();
+                        GUILayout.Label($"{StringUtils.Localize("#LOC_BDArmory_BDAScores_Round")} {progress.Item1} / {progress.Item2}, {StringUtils.Localize("#LOC_BDArmory_BDAScores_Heat")} {progress.Item3} / {progress.Item4}", leftLabel);
+                        if (!autoResizingWindow) scoreScrollPos = GUILayout.BeginScrollView(scoreScrollPos);
+                        int rank = 0;
+                        using var scoreField = showTeamScores ? BDATournament.Instance.GetRankedTeamScores.GetEnumerator() : BDATournament.Instance.GetRankedScores.GetEnumerator();
+                        while (scoreField.MoveNext())
+                        {
+                            GUILayout.BeginHorizontal();
+                            GUILayout.Label($"{++rank,3:D}", leftLabel, GUILayout.Width(BDArmorySettings.SCORES_FONT_SIZE * 2));
+                            GUILayout.Label(scoreField.Current.Key, leftLabel);
+                            GUILayout.Label($"{scoreField.Current.Value,7:F3}", rightLabel);
+                            GUILayout.EndHorizontal();
+                        }
+                        if (!autoResizingWindow) GUILayout.EndScrollView();
+                    }
+                    break;
+                case Mode.ContinuousSpawn:
+                    {
+                        // Show rank, vessel name, lives, score
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_Settings_ContinuousSpawning"), leftLabel, GUILayout.ExpandWidth(true));
+                        if (BDArmorySettings.VESSEL_SPAWN_LIVES_PER_VESSEL > 0)
+                            GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_BDAScores_Lives"), rightLabel, GUILayout.Width(50));
+                        GUILayout.Label(StringUtils.Localize("#LOC_BDArmory_BDAScores_Score"), rightLabel, GUILayout.Width(70));
+                        GUILayout.EndHorizontal();
+                        if (!autoResizingWindow) scoreScrollPos = GUILayout.BeginScrollView(scoreScrollPos);
+                        int rank = 0;
+                        using var scoreField = ContinuousSpawning.Instance.Scores.GetEnumerator();
+                        while (scoreField.MoveNext())
+                        {
+                            var (name, deaths, score) = scoreField.Current;
+                            GUILayout.BeginHorizontal();
+                            GUILayout.Label($"{++rank,3:D}", leftLabel, GUILayout.Width(BDArmorySettings.SCORES_FONT_SIZE * 2));
+                            GUILayout.Label(name, leftLabel, GUILayout.ExpandWidth(true));
+                            if (BDArmorySettings.VESSEL_SPAWN_LIVES_PER_VESSEL > 0)
+                                GUILayout.Label($"{BDArmorySettings.VESSEL_SPAWN_LIVES_PER_VESSEL - deaths}", rightLabel, GUILayout.Width(50));
+                            GUILayout.Label($"{score,7:F2}", rightLabel, GUILayout.Width(70));
+                            GUILayout.EndHorizontal();
+                        }
+                        if (!autoResizingWindow) GUILayout.EndScrollView();
+                    }
+                    break;
+            }
             GUILayout.EndVertical();
 
             #region Resizing
@@ -172,9 +223,8 @@ namespace BDArmory.UI
             {
                 if (Event.current.button == 1) // Right click - reset to auto-resizing the height.
                 {
-                    autoResizingWindow = true;
                     resizingWindow = false;
-                    ResetWindowSize();
+                    ResetWindowSize(true);
                 }
                 else
                 {
@@ -183,7 +233,7 @@ namespace BDArmory.UI
                 }
             }
             if (resizingWindow && Event.current.type == EventType.Repaint)
-            { windowSize += Mouse.delta; }
+            { windowSize += Mouse.delta / BDArmorySettings.UI_SCALE_ACTUAL; }
             #endregion
             GUIUtils.UseMouseEventInRect(BDArmorySetup.WindowRectScores);
         }
@@ -198,8 +248,9 @@ namespace BDArmory.UI
         /// <summary>
         /// Reset the window size so that the height is tight.
         /// </summary>
-        public void ResetWindowSize()
+        public void ResetWindowSize(bool force = false)
         {
+            if (force) autoResizingWindow = true;
             if (autoResizingWindow)
             {
                 BDArmorySetup.WindowRectScores.height = 50; // Don't reset completely to 0 as that then covers half the title.
@@ -210,44 +261,114 @@ namespace BDArmory.UI
         #region Weights
         internal static int _guiCheckIndexWeights = -1;
         bool weightsVisible = false;
-        Rect weightsWindowRect = new Rect(0, 0, 300, 500);
+        Rect weightsWindowRect = new(0, 0, 300, 600);
         Vector2 weightsScrollPos = default;
+        Dictionary<string, float> weights; // Reference to the set of weights we're using (Tournament or ContinuousSpawning).
+        Dictionary<string, NumericInputField> scoreWeightFields; // The numeric input fields.
+        void LoadWeights()
+        {
+            if (scoreWeightFields != null) foreach (var value in scoreWeightFields.Values) Destroy(value); // Get rid of any old NumericInputField components.
+            switch (mode)
+            {
+                case Mode.Tournament:
+                    TournamentScores.LoadWeights();
+                    weights = TournamentScores.weights;
+                    weightsWindowRect.height = 600;
+                    break;
+                case Mode.ContinuousSpawn:
+                    ContinuousSpawning.LoadWeights();
+                    weights = ContinuousSpawning.weights;
+                    weightsWindowRect.height = 450;
+                    break;
+                default:
+                    weights = null;
+                    scoreWeightFields = null;
+                    return;
+            }
+            scoreWeightFields = weights.ToDictionary(kvp => kvp.Key, kvp => gameObject.AddComponent<NumericInputField>().Initialise(0, kvp.Value));
+        }
+        void SaveWeights()
+        {
+            switch (mode)
+            {
+                case Mode.Tournament:
+                    TournamentScores.SaveWeights();
+                    break;
+                case Mode.ContinuousSpawn:
+                    ContinuousSpawning.SaveWeights();
+                    break;
+            }
+            RecomputeScores();
+        }
+        void ResetDefaultWeights()
+        {
+            switch (mode)
+            {
+                case Mode.Tournament:
+                    TournamentScores.weights = new(TournamentScores.defaultWeights);
+                    weights = TournamentScores.weights;
+                    break;
+                case Mode.ContinuousSpawn:
+                    ContinuousSpawning.weights = new(ContinuousSpawning.defaultWeights);
+                    weights = ContinuousSpawning.weights;
+                    break;
+            }
+            if (scoreWeightFields != null) foreach (var value in scoreWeightFields.Values) Destroy(value); // Get rid of any old NumericInputField components.
+            scoreWeightFields = weights.ToDictionary(kvp => kvp.Key, kvp => gameObject.AddComponent<NumericInputField>().Initialise(0, kvp.Value));
+            SaveWeights();
+        }
+        void RecomputeScores()
+        {
+            switch (mode)
+            {
+                case Mode.Tournament:
+                    BDATournament.Instance.RecomputeScores();
+                    break;
+                case Mode.ContinuousSpawn:
+                    ContinuousSpawning.Instance.RecomputeScores();
+                    break;
+            }
+        }
 
         void SetWeightsVisible(bool visible)
         {
+            if (weights == null) return;
             weightsVisible = visible;
             GUIUtils.SetGUIRectVisible(_guiCheckIndexWeights, visible);
             if (visible)
             {
                 weightsWindowRect.y = BDArmorySetup.WindowRectScores.y;
-                weightsWindowRect.x = BDArmorySetup.WindowRectScores.x + windowSize.x;
+                if (BDArmorySetup.WindowRectScores.x + BDArmorySettings.UI_SCALE_ACTUAL * (windowSize.x + weightsWindowRect.width) <= Screen.width)
+                    weightsWindowRect.x = BDArmorySetup.WindowRectScores.x + BDArmorySettings.UI_SCALE_ACTUAL * windowSize.x;
+                else
+                    weightsWindowRect.x = BDArmorySetup.WindowRectScores.x - BDArmorySettings.UI_SCALE_ACTUAL * weightsWindowRect.width;
             }
             else
             {
-                foreach (var weight in scoreWeights)
+                foreach (var weight in scoreWeightFields)
                 {
                     weight.Value.tryParseValueNow();
-                    TournamentScores.weights[weight.Key] = (float)weight.Value.currentValue;
+                    weights[weight.Key] = (float)weight.Value.currentValue;
                 }
-                BDATournament.Instance.RecomputeScores();
+                SaveWeights();
             }
         }
         void WindowWeights(int id)
         {
-            GUI.DragWindow(new Rect(0, 0, weightsWindowRect.width - _buttonSize, _buttonSize));
+            GUI.DragWindow(new Rect(4 * _buttonSize, 0, weightsWindowRect.width - 5 * _buttonSize, _buttonSize));
+            if (GUI.Button(new Rect(0, 0, 4 * _buttonSize, _buttonSize), "Defaults", BDArmorySetup.ButtonStyle)) ResetDefaultWeights();
             if (GUI.Button(new Rect(weightsWindowRect.width - _buttonSize, 0, _buttonSize, _buttonSize), " X", BDArmorySetup.CloseButtonStyle)) SetWeightsVisible(false);
             GUILayout.BeginVertical(GUILayout.ExpandHeight(true), GUILayout.ExpandWidth(true));
             weightsScrollPos = GUILayout.BeginScrollView(weightsScrollPos, GUI.skin.box);
-            var now = Time.time;
-            foreach (var weight in scoreWeights)
+            foreach (var weight in scoreWeightFields)
             {
                 GUILayout.BeginHorizontal();
                 GUILayout.Label(weight.Key);
                 weight.Value.tryParseValue(GUILayout.TextField(weight.Value.possibleValue, 10, weight.Value.style, GUILayout.Width(80)));
-                if (TournamentScores.weights[weight.Key] != (float)weight.Value.currentValue)
+                if (weights[weight.Key] != (float)weight.Value.currentValue)
                 {
-                    TournamentScores.weights[weight.Key] = (float)weight.Value.currentValue;
-                    BDATournament.Instance.RecomputeScores();
+                    weights[weight.Key] = (float)weight.Value.currentValue;
+                    RecomputeScores();
                 }
                 GUILayout.EndHorizontal();
             }

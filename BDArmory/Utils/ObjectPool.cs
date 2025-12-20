@@ -116,6 +116,7 @@ namespace BDArmory.Utils
             if (forceReUse) // Return an old entry that is already being used.
             {
                 lastIndex = (lastIndex + 1) % pool.Count;
+                if (pool[lastIndex].transform.parent != null) pool[lastIndex].transform.parent = null; // Disassociate the object from any previous parent.
                 pool[lastIndex].SetActive(false);
                 if (disableAfterDelay > 0f) DisableAfterDelay(pool[lastIndex], disableAfterDelay);
                 return pool[lastIndex];

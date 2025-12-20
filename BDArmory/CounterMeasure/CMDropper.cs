@@ -9,6 +9,8 @@ using BDArmory.Settings;
 using BDArmory.UI;
 using BDArmory.Utils;
 using BDArmory.Extensions;
+using BDArmory.Weapons.Missiles;
+using BDArmory.VesselSpawning;
 
 namespace BDArmory.CounterMeasure
 {
@@ -41,7 +43,7 @@ namespace BDArmory.CounterMeasure
         public float priority = 0;
         public int Priority => (int)priority;
 
-        [KSPField] public string ejectTransformName;
+        [KSPField] public string ejectTransformName = "cmTransform";
         Transform ejectTransform;
 
         [KSPField] public string effectsTransformName = string.Empty;
@@ -53,12 +55,22 @@ namespace BDArmory.CounterMeasure
 
         string resourceName;
 
+        public bool isMissileCM = false;
+
         VesselChaffInfo vci;
+
+        public BDStagingAreaGauge gauge;
+        public bool hasGauge = false;
+        public int cmCount = 0;
+        public int maxCMCount = 1;
+        VesselCMDropperInfo vesselCMs;
+
 
         [KSPAction("#LOC_BDArmory_FireCountermeasure")]
         public void AGDropCM(KSPActionParam param)
         {
-            DropCM();
+            if (!isMissileCM)
+                DropCM();
         }
 
         [KSPEvent(guiActive = true, guiName = "#LOC_BDArmory_FireCountermeasure", active = true)]//Fire Countermeasure
@@ -87,11 +99,32 @@ namespace BDArmory.CounterMeasure
 
         public override void OnStart(StartState state)
         {
+            if (part.FindModuleImplementing<MissileLauncher>() != null)
+            {
+                isMissileCM = true;
+                Events["EventDropCM"].guiActive = false;
+                Fields["ejectVelocity"].guiActive = false;
+                Fields["priority"].guiActive = false;
+                Fields["ejectVelocity"].guiActiveEditor = false;
+                Fields["priority"].guiActiveEditor = false;
+            }
+            else if (SpawnUtils.IsModularMissilePart(part))
+            {
+                isMissileCM = true;
+                Events["EventDropCM"].guiActive = false;
+            }
+
             if (HighLogic.LoadedSceneIsFlight)
             {
                 SetupCM();
 
                 ejectTransform = part.FindModelTransform(ejectTransformName);
+                if (ejectTransform == null) // Create an eject transform that has ejectTransform.forward in the part.transform.up direction
+                {
+                    ejectTransform = new GameObject().transform;
+                    ejectTransform.SetParent(part.transform);
+                    ejectTransform.localRotation = Quaternion.AngleAxis(-90, Vector3.right);
+                }
 
                 if (effectsTransformName != string.Empty)
                 {
@@ -100,14 +133,19 @@ namespace BDArmory.CounterMeasure
 
                 part.force_activate();
 
-                audioSource = gameObject.AddComponent<AudioSource>();
-                audioSource.minDistance = 1;
-                audioSource.maxDistance = 1000;
-                audioSource.spatialBlend = 1;
+                if (!isMissileCM)
+                {
+                    SetupAudio();
+                }
+                EnsureVesselCMs();
+                vesselCMs.AddCMDropper(this);
 
-                UpdateVolume();
-                BDArmorySetup.OnVolumeChange += UpdateVolume;
-
+                PartResource cmResource = GetCMResource();
+                if (cmResource != null)
+                {
+                    cmCount = (int)cmResource.amount;
+                    maxCMCount = (int)cmResource.maxAmount;
+                }
                 GameEvents.onVesselsUndocking.Add(OnVesselsUndocking);
             }
             else
@@ -129,6 +167,7 @@ namespace BDArmory.CounterMeasure
         {
             BDArmorySetup.OnVolumeChange -= UpdateVolume;
             GameEvents.onVesselsUndocking.Remove(OnVesselsUndocking);
+            if (vesselCMs != null) vesselCMs.RemoveCMDropper(this);
         }
 
         void OnVesselsUndocking(Vessel v1, Vessel v2)
@@ -141,17 +180,15 @@ namespace BDArmory.CounterMeasure
             }
         }
 
-        public override void OnUpdate()
+        void Update()
         {
             if (audioSource)
+                audioSource.dopplerLevel = vessel.isActiveVessel ? 0 : 1;
+            if (HighLogic.LoadedSceneIsFlight && FlightGlobals.ready && !vessel.packed && vessel.IsControllable)
             {
-                if (vessel.isActiveVessel)
+                if (vessel.isActiveVessel && hasGauge)
                 {
-                    audioSource.dopplerLevel = 0;
-                }
-                else
-                {
-                    audioSource.dopplerLevel = 1;
+                    gauge.UpdateCMMeter((vesselCMs.cmCounts[cmType] >= 1 ? (float)vesselCMs.cmCounts[cmType] : 0) / (float)vesselCMs.cmMaxCounts[cmType], cmType);
                 }
             }
         }
@@ -206,6 +243,25 @@ namespace BDArmory.CounterMeasure
             }
         }
 
+        public void UpdateVCI()
+        {
+            vci = vessel.gameObject.GetComponent<VesselChaffInfo>();
+            if (!vci)
+            {
+                vci = vessel.gameObject.AddComponent<VesselChaffInfo>();
+            }
+        }
+
+        public void SetupAudio()
+        {
+            audioSource = gameObject.AddComponent<AudioSource>();
+            audioSource.minDistance = 1;
+            audioSource.maxDistance = 1000;
+            audioSource.spatialBlend = 1;
+            UpdateVolume();
+            BDArmorySetup.OnVolumeChange += UpdateVolume;
+        }
+
         void SetupCM()
         {
             countermeasureType = countermeasureType.ToLower();
@@ -225,10 +281,13 @@ namespace BDArmory.CounterMeasure
                     cmType = CountermeasureTypes.Chaff;
                     cmSound = SoundUtils.GetAudioClip("BDArmory/Sounds/smokeEject");
                     resourceName = "CMChaff";
-                    vci = vessel.gameObject.GetComponent<VesselChaffInfo>();
-                    if (!vci)
+                    if (!isMissileCM)
                     {
-                        vci = vessel.gameObject.AddComponent<VesselChaffInfo>();
+                        vci = vessel.gameObject.GetComponent<VesselChaffInfo>();
+                        if (!vci)
+                        {
+                            vci = vessel.gameObject.AddComponent<VesselChaffInfo>();
+                        }
                     }
                     if (!chaffPool)
                     {
@@ -271,20 +330,25 @@ namespace BDArmory.CounterMeasure
 
         bool DropFlare()
         {
-            PartResource cmResource = GetCMResource();
-            if (cmResource == null || !(cmResource.amount >= 1)) return false;
-            cmResource.amount--;
+            if (!BDArmorySettings.INFINITE_COUNTERMEASURES)
+            {
+                PartResource cmResource = GetCMResource();
+                if (cmResource == null || !(cmResource.amount >= 1)) return false;
+                cmResource.amount--;
+                vesselCMs.cmCounts[cmType]--;
+                cmCount--;
+            }
             audioSource.pitch = UnityEngine.Random.Range(0.9f, 1.1f);
             audioSource.PlayOneShot(cmSound);
 
             GameObject cm = flarePool.GetPooledObject();
-            cm.transform.position = transform.position;
+            cm.transform.position = ejectTransform.position;
             CMFlare cmf = cm.GetComponent<CMFlare>();
             cmf.velocity = part.rb.velocity
                 + BDKrakensbane.FrameVelocityV3f
-                + (ejectVelocity * transform.up)
-                + (UnityEngine.Random.Range(-3f, 3f) * transform.forward)
-                + (UnityEngine.Random.Range(-3f, 3f) * transform.right);
+                + (ejectVelocity * ejectTransform.forward)
+                + (UnityEngine.Random.Range(-3f, 3f) * ejectTransform.up)
+                + (UnityEngine.Random.Range(-3f, 3f) * ejectTransform.right);
             cmf.SetThermal(vessel);
 
             cm.SetActive(true);
@@ -295,9 +359,14 @@ namespace BDArmory.CounterMeasure
 
         bool DropChaff()
         {
-            PartResource cmResource = GetCMResource();
-            if (cmResource == null || !(cmResource.amount >= 1)) return false;
-            cmResource.amount--;
+            if (!BDArmorySettings.INFINITE_COUNTERMEASURES)
+            {
+                PartResource cmResource = GetCMResource();
+                if (cmResource == null || !(cmResource.amount >= 1)) return false;
+                cmResource.amount--;
+                vesselCMs.cmCounts[cmType]--;
+                cmCount--;
+            }
             audioSource.pitch = UnityEngine.Random.Range(0.9f, 1.1f);
             audioSource.PlayOneShot(cmSound);
 
@@ -317,19 +386,21 @@ namespace BDArmory.CounterMeasure
 
         bool PopSmoke()
         {
-            PartResource smokeResource = GetCMResource();
-            if (smokeResource.amount >= 1)
+            if (!BDArmorySettings.INFINITE_COUNTERMEASURES)
             {
+                PartResource smokeResource = GetCMResource();
+                if (smokeResource == null || !(smokeResource.amount >= 1)) return false;
                 smokeResource.amount--;
-                audioSource.pitch = UnityEngine.Random.Range(0.9f, 1.1f);
-                audioSource.PlayOneShot(cmSound);
-
-                StartCoroutine(SmokeRoutine());
-
-                FireParticleEffects();
-                return true;
+                vesselCMs.cmCounts[cmType]--;
+                cmCount--;
             }
-            return false;
+            audioSource.pitch = UnityEngine.Random.Range(0.9f, 1.1f);
+            audioSource.PlayOneShot(cmSound);
+
+            StartCoroutine(SmokeRoutine());
+
+            FireParticleEffects();
+            return true;
         }
 
         IEnumerator SmokeRoutine()
@@ -337,9 +408,9 @@ namespace BDArmory.CounterMeasure
             yield return new WaitForSecondsFixed(0.2f);
             GameObject smokeCMObject = smokePool.GetPooledObject();
             CMSmoke smoke = smokeCMObject.GetComponent<CMSmoke>();
-            smoke.velocity = part.rb.velocity + (ejectVelocity * transform.up) +
-                             (UnityEngine.Random.Range(-3f, 3f) * transform.forward) +
-                             (UnityEngine.Random.Range(-3f, 3f) * transform.right);
+            smoke.velocity = part.rb.velocity + (ejectVelocity * ejectTransform.forward) +
+                             (UnityEngine.Random.Range(-3f, 3f) * ejectTransform.up) +
+                             (UnityEngine.Random.Range(-3f, 3f) * ejectTransform.right);
             smokeCMObject.SetActive(true);
             smokeCMObject.transform.position = ejectTransform.position + (10 * ejectTransform.forward);
             float longestLife = 0;
@@ -359,20 +430,25 @@ namespace BDArmory.CounterMeasure
 
         bool LaunchDecoy()
         {
-            PartResource cmResource = GetCMResource();
-            if (cmResource == null || !(cmResource.amount >= 1)) return false;
-            cmResource.amount--;
+            if (!BDArmorySettings.INFINITE_COUNTERMEASURES)
+            {
+                PartResource cmResource = GetCMResource();
+                if (cmResource == null || !(cmResource.amount >= 1)) return false;
+                cmResource.amount--;
+                vesselCMs.cmCounts[cmType]--;
+                cmCount--;
+            }
             audioSource.pitch = UnityEngine.Random.Range(0.9f, 1.1f);
             audioSource.PlayOneShot(cmSound);
 
             GameObject cm = decoyPool.GetPooledObject();
-            cm.transform.position = transform.position;
+            cm.transform.position = ejectTransform.position;
             CMDecoy cmd = cm.GetComponent<CMDecoy>();
             cmd.velocity = part.rb.velocity
                 + BDKrakensbane.FrameVelocityV3f
-                + (ejectVelocity * transform.up)
-                + (UnityEngine.Random.Range(-3f, 3f) * transform.forward)
-                + (UnityEngine.Random.Range(-3f, 3f) * transform.right);
+                + (ejectVelocity * ejectTransform.forward)
+                + (UnityEngine.Random.Range(-3f, 3f) * ejectTransform.up)
+                + (UnityEngine.Random.Range(-3f, 3f) * ejectTransform.right);
             cmd.SetAcoustics(vessel);
 
             cm.SetActive(true);
@@ -383,29 +459,31 @@ namespace BDArmory.CounterMeasure
 
         bool DropBubbles()
         {
-            PartResource smokeResource = GetCMResource();
-            if (smokeResource.amount >= 1)
+            if (!BDArmorySettings.INFINITE_COUNTERMEASURES)
             {
-                smokeResource.amount--;
-                audioSource.pitch = UnityEngine.Random.Range(0.9f, 1.1f);
-                audioSource.PlayOneShot(cmSound);
-
-                StartCoroutine(BubbleRoutine());
-
-                FireParticleEffects();
-                return true;
+                PartResource bubbleResource = GetCMResource();
+                if (bubbleResource == null || !(bubbleResource.amount >= 1)) return false;
+                bubbleResource.amount--;
+                vesselCMs.cmCounts[cmType]--;
+                cmCount--;
             }
-            return false;
+            audioSource.pitch = UnityEngine.Random.Range(0.9f, 1.1f);
+            audioSource.PlayOneShot(cmSound);
+
+            StartCoroutine(BubbleRoutine());
+
+            FireParticleEffects();
+            return true;
         }
 
         IEnumerator BubbleRoutine()
         {
             yield return new WaitForSecondsFixed(0.2f);
-            GameObject bubbleCMObject = decoyPool.GetPooledObject();
-            CMBubble smoke = bubbleCMObject.GetComponent<CMBubble>();
-            smoke.velocity = part.rb.velocity + (ejectVelocity * transform.up) +
-                             (UnityEngine.Random.Range(-3f, 3f) * transform.forward) +
-                             (UnityEngine.Random.Range(-3f, 3f) * transform.right);
+            GameObject bubbleCMObject = bubblePool.GetPooledObject();
+            CMBubble bubble = bubbleCMObject.GetComponent<CMBubble>();
+            bubble.velocity = part.rb.velocity + (ejectVelocity * ejectTransform.forward) +
+                             (UnityEngine.Random.Range(-3f, 3f) * ejectTransform.up) +
+                             (UnityEngine.Random.Range(-3f, 3f) * ejectTransform.right);
             bubbleCMObject.SetActive(true);
             bubbleCMObject.transform.position = ejectTransform.position + (10 * ejectTransform.forward);
             float longestLife = 0;
@@ -418,7 +496,6 @@ namespace BDArmory.CounterMeasure
                     if (emitter.Current.maxEnergy > longestLife) longestLife = emitter.Current.maxEnergy;
                 }
 
-            audioSource.PlayOneShot(smokePoofSound);
             yield return new WaitForSecondsFixed(longestLife);
             bubbleCMObject.SetActive(false);
         }
@@ -431,7 +508,19 @@ namespace BDArmory.CounterMeasure
             cm.AddComponent<CMFlare>();
             flarePool = ObjectPool.CreateObjectPool(cm, 10, true, true);
         }
-
+        public static void ResetFlarePool()
+        {
+            if (CMDropper.flarePool != null)
+            {
+                foreach (var flareObj in CMDropper.flarePool.pool)
+                    if (flareObj.activeInHierarchy)
+                    {
+                        var flare = flareObj.GetComponent<CMFlare>();
+                        if (flare == null) continue;
+                        flare.EnableEmitters();
+                    }
+            }
+        }
         void SetupSmokePool()
         {
             GameObject cm = GameDatabase.Instance.GetModel("BDArmory/Models/CMSmoke/cmSmokeModel");
@@ -464,6 +553,67 @@ namespace BDArmory.CounterMeasure
             bubblePool = ObjectPool.CreateObjectPool(cm, 10, true, true);
         }
 
+        public static void DisableAllCMs()
+        {
+            if (flarePool != null && flarePool.pool != null)
+            {
+                if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.CMDropper]: Setting {flarePool.pool.Count(flare => flare != null & flare.activeInHierarchy)} flare CMs inactive.");
+                foreach (var flare in flarePool.pool)
+                {
+                    if (flare == null) continue;
+                    flare.SetActive(false);
+                }
+            }
+            if (smokePool != null && smokePool.pool != null)
+            {
+                if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.CMDropper]: Setting {smokePool.pool.Count(smoke => smoke != null & smoke.activeInHierarchy)} smoke CMs inactive.");
+                foreach (var smoke in smokePool.pool)
+                {
+                    if (smoke == null) continue;
+                    smoke.SetActive(false);
+                }
+            }
+            if (chaffPool != null && chaffPool.pool != null)
+            {
+                if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.CMDropper]: Setting {chaffPool.pool.Count(chaff => chaff != null & chaff.activeInHierarchy)} chaff CMs inactive.");
+                foreach (var chaff in chaffPool.pool)
+                {
+                    if (chaff == null) continue;
+                    chaff.SetActive(false);
+                }
+            }
+            if (decoyPool != null && decoyPool.pool != null)
+            {
+                if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.CMDropper]: Setting {decoyPool.pool.Count(decoy => decoy != null & decoy.activeInHierarchy)} decoy CMs inactive.");
+                foreach (var decoy in decoyPool.pool)
+                {
+                    if (decoy == null) continue;
+                    decoy.SetActive(false);
+                }
+            }
+            if (bubblePool != null && bubblePool.pool != null)
+            {
+                if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.CMDropper]: Setting {bubblePool.pool.Count(bubble => bubble != null & bubble.activeInHierarchy)} bubble CMs inactive.");
+                foreach (var bubble in bubblePool.pool)
+                {
+                    if (bubble == null) continue;
+                    bubble.SetActive(false);
+                }
+            }
+        }
+        void EnsureVesselCMs()
+        {
+            if (!vesselCMs || vesselCMs.vessel != vessel)
+            {
+                vesselCMs = vessel.gameObject.GetComponent<VesselCMDropperInfo>();
+                if (!vesselCMs)
+                {
+                    vesselCMs = vessel.gameObject.AddComponent<VesselCMDropperInfo>();
+                }
+            }
+
+            vesselCMs.DelayedCleanList();
+        }
         // RMB info in editor
         public override string GetInfo()
         {

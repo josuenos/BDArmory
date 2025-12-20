@@ -1,10 +1,11 @@
-﻿using System;
+﻿using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 
 using BDArmory.Utils;
 using BDArmory.Weapons;
 using System.Collections;
+using BDArmory.Settings;
 
 namespace BDArmory.FX
 {
@@ -219,6 +220,23 @@ namespace BDArmory.FX
             }
             newFX.SetActive(true);
             return eFx;
+        }
+
+        public static void DisableAllFX()
+        {
+            if (FXPools != null)
+            {
+                if (BDArmorySettings.DEBUG_OTHER) Debug.Log($"[BDArmory.FXEmitter]: Setting {FXPools.Values.Where(pool => pool != null && pool.pool != null).Sum(pool => pool.pool.Count(fx => fx != null && fx.activeInHierarchy))} FXEmitter FX inactive.");
+                foreach (var pool in FXPools.Values)
+                {
+                    if (pool == null || pool.pool == null) continue;
+                    foreach (var fx in pool.pool)
+                    {
+                        if (fx == null) continue;
+                        fx.SetActive(false);
+                    }
+                }
+            }
         }
     }
 }

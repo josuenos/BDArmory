@@ -3,6 +3,7 @@ using System.Reflection;
 using UnityEngine;
 
 using BDArmory.Settings;
+using System.Collections.Generic;
 
 namespace BDArmory.Utils
 {
@@ -104,6 +105,33 @@ namespace BDArmory.Utils
                 }
             }
             return activeEngines;
+        }
+
+        public static List<PartModule> GetActiveEngines(Vessel vessel)
+        {
+            if (!hasFSEngine) return [];
+            List<PartModule> activeEngines = [];
+            foreach (var part in vessel.Parts)
+            {
+                foreach (var module in part.Modules)
+                {
+                    if (module.GetType() == FSEngineType || module.GetType().IsSubclassOf(FSEngineType))
+                    {
+                        if ((bool)FSEngineType.GetField("EngineIgnited", BindingFlags.Public | BindingFlags.Instance).GetValue(module))
+                            activeEngines.Add(module);
+                    }
+                }
+            }
+            return activeEngines;
+        }
+
+        public static void SetActiveFSEngines(List<PartModule> modules, bool active)
+        {
+            foreach (var module in modules)
+            {
+                if (module.GetType() == FSEngineType || module.GetType().IsSubclassOf(FSEngineType))
+                    FSEngineType.InvokeMember(active ? "Activate" : "Shutdown", BindingFlags.InvokeMethod, null, module, new object[] { });
+            }
         }
 
         public static void CheckStatus(Vessel vessel)

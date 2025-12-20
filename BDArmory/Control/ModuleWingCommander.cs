@@ -3,18 +3,28 @@ using System.Collections;
 using System.Collections.Generic;
 using UniLinq;
 using UnityEngine;
-using KSP.Localization;
 
 using BDArmory.Competition;
+using BDArmory.Settings;
 using BDArmory.Targeting;
 using BDArmory.UI;
 using BDArmory.Utils;
+using BDArmory.Extensions;
 
 namespace BDArmory.Control
 {
     public class ModuleWingCommander : PartModule
     {
-        public MissileFire weaponManager;
+        public MissileFire WeaponManager
+        {
+            get
+            {
+                if (_weaponManager == null || !_weaponManager.IsPrimaryWM || _weaponManager.vessel != vessel)
+                    _weaponManager = vessel && vessel.loaded ? vessel.ActiveController().WM : null;
+                return _weaponManager;
+            }
+        }
+        MissileFire _weaponManager;
 
         public List<IBDAIControl> friendlies;
 
@@ -93,8 +103,6 @@ namespace BDArmory.Control
                 yield return null;
             }
 
-            weaponManager = part.FindModuleImplementing<MissileFire>();
-
             RefreshFriendlies();
             RefreshWingmen();
             LoadWingmen();
@@ -120,29 +128,30 @@ namespace BDArmory.Control
 
         void RefreshFriendlies()
         {
-            if (!weaponManager) return;
+            var wm = WeaponManager;
+            if (!wm) return;
             friendlies = new List<IBDAIControl>();
             using (var vs = BDATargetManager.LoadedVessels.GetEnumerator())
                 while (vs.MoveNext())
                 {
                     if (vs.Current == null) continue;
-                    if (!vs.Current.loaded || vs.Current == vessel || VesselModuleRegistry.ignoredVesselTypes.Contains(vs.Current.vesselType)) continue;
+                    if (!vs.Current.loaded || vs.Current == vessel || VesselModuleRegistry.IgnoredVesselTypes.Contains(vs.Current.vesselType)) continue;
 
-                    IBDAIControl pilot = VesselModuleRegistry.GetIBDAIControl(vs.Current, true);
-                    if (pilot == null) continue;
-                    MissileFire wm = VesselModuleRegistry.GetMissileFire(vs.Current, true);
-                    if (wm == null || wm.Team != weaponManager.Team) continue;
-                    friendlies.Add(pilot);
+                    var ac = vs.Current.ActiveController();
+                    if (ac == null) continue; // Since this is called on vessel destroy, we need to check that the vessel module isn't null.
+                    if (ac.AI == null) continue;
+                    if (ac.WM == null || ac.WM.Team != wm.Team) continue;
+                    friendlies.Add(ac.AI);
                 }
 
             //TEMPORARY
-            wingmen = new List<IBDAIControl>();
-            using (var fs = friendlies.GetEnumerator())
-                while (fs.MoveNext())
-                {
-                    if (fs.Current == null) continue;
-                    wingmen.Add(fs.Current);
-                }
+            wingmen = [];
+            using var fs = friendlies.GetEnumerator();
+            while (fs.MoveNext())
+            {
+                if (fs.Current == null) continue;
+                wingmen.Add(fs.Current);
+            }
         }
 
         void RefreshWingmen()
@@ -154,7 +163,8 @@ namespace BDArmory.Control
                 focusIndexes.Clear();
                 return;
             }
-            wingmen.RemoveAll(w => w == null || (w.weaponManager && w.weaponManager.Team != weaponManager.Team));
+            var wm = WeaponManager;
+            if (wm != null) wingmen.RemoveAll(wingman => wingman == null || (wingman.WeaponManager && wingman.WeaponManager.Team != wm.Team));
 
             List<int> uniqueIndexes = new List<int>();
             List<int>.Enumerator fIndexes = focusIndexes.GetEnumerator();
@@ -167,7 +177,7 @@ namespace BDArmory.Control
                 }
             }
             fIndexes.Dispose();
-            focusIndexes = new List<int>(uniqueIndexes);
+            focusIndexes = [.. uniqueIndexes];
         }
 
         void SaveWingmen(ConfigNode cfg)
@@ -198,10 +208,10 @@ namespace BDArmory.Control
                 using (var vs = BDATargetManager.LoadedVessels.GetEnumerator())
                     while (vs.MoveNext())
                     {
-                        if (vs.Current == null || !vs.Current.loaded || VesselModuleRegistry.ignoredVesselTypes.Contains(vs.Current.vesselType)) continue;
+                        if (vs.Current == null || !vs.Current.loaded || VesselModuleRegistry.IgnoredVesselTypes.Contains(vs.Current.vesselType)) continue;
 
                         if (vs.Current.id.ToString() != wingIDs.Current) continue;
-                        var pilot = VesselModuleRegistry.GetIBDAIControl(vs.Current, true);
+                        var pilot = vs.Current.ActiveController().AI;
                         if (pilot != null) wingmen.Add(pilot);
                     }
             }
@@ -246,6 +256,7 @@ namespace BDArmory.Control
                 // this Rect initialization ensures any save issues with height or width of the window are resolved
                 //BDArmorySetup.WindowRectWingCommander = new Rect(BDArmorySetup.WindowRectWingCommander.x, BDArmorySetup.WindowRectWingCommander.y, windowWidth, windowHeight);
                 BDArmorySetup.SetGUIOpacity();
+                if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, BDArmorySetup.WindowRectWingCommander.position);
                 BDArmorySetup.WindowRectWingCommander = GUI.Window(1293293, BDArmorySetup.WindowRectWingCommander, WingmenWindow, StringUtils.Localize("#LOC_BDArmory_WingCommander_Title"),//"WingCommander"
                     BDArmorySetup.BDGuiSkin.window);
                 BDArmorySetup.SetGUIOpacity(false);
@@ -439,6 +450,14 @@ namespace BDArmory.Control
                     wingman.Current.CommandFollow(this, i);
                     i++;
                 }
+        }
+        public int GetFreeWingIndex()
+        {
+            RefreshFriendlies();
+            int freeIndex = 0;
+            while (friendlies.Select(f => f.commandFollowIndex).Contains(freeIndex))
+                ++freeIndex;
+            return freeIndex;
         }
 
         void CommandAG(IBDAIControl wingman, int index, object ag)

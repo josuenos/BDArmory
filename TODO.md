@@ -1,24 +1,28 @@
-### Bugs
+### Bugs (are these still valid?)
 - RemoveAllVessels can sometimes get stuck if the Kraken breaks the view frustrum due to SoI changes. Add a timeout and warning, possibly also an option to auto-quit if it breaks.
 - Auto-tuning with numeric input fields enabled in the AI GUI won't let the values change
 - Changing the slider resolution sometimes triggers clamping of unclamped values
-- HP of asteroids in the SPH is wrong.
 - Taking off with the global 'P' button for two VTOL craft on the runway disables their engines!
 - WM without AI or with stationary ground AI sometimes just sits there without attacking valid targets.
+- Check whether `base.OnStart(state);` in `MissileLauncher.OnStart` can be re-enabled and some common stuff be moved to MissileBase.cs.
+- Improve custom turret aiming.
 
+- Clean up invalid UTF-8 chars by searching for `[^\x00-\x7f±°ñ—α→θψφρqω₀π²·δ↔∫•∈"γgμν‽Δ↕]` (add more to exclude as necessary). Ignore localisation files.
 
 ### TODO (smaller items and specific requests / higher priority)
 - Fix bugs
-
-- Add tooltips to settings.
-- Add thumbnails to the craft browser.
-- Figure out how to add a 0 value to UI_FloatSemiLogRange sliders.
-- Stability of the targeting cam when slewing with the mouse (jitter).
+	- Sometimes the field toggles in ModuleWeapon (and elsewhere) throw InvalidCast exceptions on startup. Suspect a race condition.
+- Finish Gauntlet tournament heats if only opponent craft are left as only relative ranking of variants is relevant.
+- Resource stealing of integer amounts should consider integer amounts per container, not overall.
+- Cts spawn with NPCs
 
 - Wiki entries
 	- Auto-Tuning
 
 - Requests from discord:
+	- Formation Flying https://discord.com/channels/720416076571082863/720423078533791854/1260742190418624633
+		- More options for formations
+		- Altitude stagger
 	- ? Add an action group trigger to the WM based on the current target being an enemy vessel within a custom distance. - Make it a collapsable section of custom triggers to include other conditions later.
 	- Artillery aiming support
 	- Lift stacking improvements with logical wing segments
@@ -30,6 +34,9 @@
 	- Smart part that can trigger an action group when one of the specified parts gets below X% HP.
 		- Would have to work similarly to the KAL to remember which parts it should affect/monitor.
 	- Scope view for aiming tank turrets (similar to the targeting pod, but more direct), maybe holding a button adjusts the camera zoom based on the distance to the target?
+	- Team continuous spawning (could be done in multiple ways — requires UI settings to configure it):
+		- NvN...vN where each team replenishes craft from their pool.
+		- NvN...vN where a new team spawns once one team is dead.
 
 - Ilya_G requests:
 	- Omni-radars to include a radiation pattern so that they don't see well along the dipole axis.
@@ -45,26 +52,16 @@
 		- Laser turrets will still be deadly accurate (increasing maxDeviation would amount to the same thing as targeting jitter).
 		- Add noise (fn of game time, not proper random) to targeting info.
 		- Multiply pos, vel, acc by 1+sin(t)/X for X=10, 100, etc. to simulate sampling noise. It doesn't need to be game time, but something related to the vessel (e.g., speed + time)
-	- Multiple ammo types used per shot for weapons (other than just EC).
 
-- Reset things that the RWP slider changes when switching away from the rounds.
-	- RWP really shouldn't be setting the sliders, but should instead provide overrides for when accessing those values.
+- Improve Immelmann angle / target behind logic.
+- Add tooltips to settings.
 - Fix the piñata spawning logic - spawn the piñata(s) separately after circular spawning has occured.
 - Add NPC and piñata support for single competitions as well (currently they're only supported in tournaments)
 	- Add "role" option in the VM for specifying PC, NPC, piñata, etc.
-- Tournament support for custom spawn templates.
-- Add VTOL AI to the AI GUI.
-- Motherships branch
 - Figure out why bullet hole decals are frequently offset behind the craft. - krakensbane or flightintegrator at time of decal attachment?
 - Inertial correction to pitch, roll, yaw errors for PID calcuations. Rotate the vessel reference transform first, computing debugPos2 from the top 
-- Preallocate the explosion merge buffer and reuse it.
-- If re-assign teams is disabled, custom spawn templates should use the team name of the first vessel in each team as the team name.
-- Fix the AIGUI slider limits and increments for the variable precision slider in the PAW
 - Low altitude AI setting should be aware of killer GM low altitude.
-- Adjust explosions to maintain velocity or not based on atmospheric density.
-- Proper 3-axis PID sliders + single PID with axis weighting
 - Memory for AI state so that it can resume once finished extending/evading instead of just scanning for new targets.
-- KerbalSafety - why are some kerbals not registering/deploying chutes
 - Tag mode should disable team icons to get colours right
 - Improve the VTOL AI:
 	- Terrain avoidance
@@ -76,8 +73,6 @@
 
 
 ### Ideas (more general things / lower priority)
-- Meteor Cannon: Summons an asteroid just in front of the vessel, then accelerates it to ~1000m/s (10x force pushing asteroid, 1x force pushing back on vessel)
-	- Meteor Cannon class has its own selection of meteors that it randomly selects from when instantiating it. Generate at start and replenish as necessary.
 - Add a PID_NeuralCoprocessor — A small FC neural network with configurable depth to modify the PID by ±pid (separate scale per channel) that learns when enabled
 - AutoPilot:
 	- On takeoff, look diagonally down and turn if the terrain normal is too steep.
@@ -92,7 +87,7 @@
 	- Boss fight tournament mode
 - Record starting conditions for bullets, position every 1000m and time and position of first impact in vessel traces. Also, bullet type. This should be sufficient for approximate curves in blender and colours, etc. can be found from the configs.
 - Add a max morgue capacity and recycle kerbals once it's full. Regen the main 4 and discard the others? Would need special handling for custom kerbals.
-- Profile the infinite ordinance option for spawning missile parts. "I wonder if it's possible to avoid a lot of the spawning cost and memory leakage by detaching the Vessel component from the missile prior to getting destroyed, packing and disabling it, then attaching, unpacking and enabling it on a new missile? Something to look at in the future..."
+- Profile the infinite ordnance option for spawning missile parts. "I wonder if it's possible to avoid a lot of the spawning cost and memory leakage by detaching the Vessel component from the missile prior to getting destroyed, packing and disabling it, then attaching, unpacking and enabling it on a new missile? Something to look at in the future..."
 - Strafing planes are wobbly initially (maybe at low speeds in general?)
 
 
@@ -105,7 +100,6 @@
 - Completely disable ramming logic and scores when "disable ramming" is globally enabled
 - using the clamp/unclamp option from the AI tab UI resets unclamped values to clamped maximum when re-clamping (check: is this still an issue?)
 - Add a tournament option for having one "boss" team that each other team fights each round
-- Do the same vessel-relative checks for rockets
 - Once the final target has been acquired in aiming, do a simulation with raycasts to check for obstacles in the way. If the target is blocked, then give it a modifier for target selection in the future that slowly recovers.
 - Kerbal Safety: if a NaN orbit is detected, try setting the orbit of the kerbal based on the orbit of the part it left.
 

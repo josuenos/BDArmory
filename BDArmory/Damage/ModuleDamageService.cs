@@ -15,6 +15,7 @@ namespace BDArmory.Damage
         public override void ReduceArmor_svc(Part p, float armorMass)
         {
             var damageModule = p.Modules.GetModule<HitpointTracker>();
+            if (!damageModule) return;
 
             damageModule.ReduceArmor(armorMass);
 
@@ -30,6 +31,7 @@ namespace BDArmory.Damage
         public override void SetDamageToPart_svc(Part p, float PartDamage)
         {
             var damageModule = p.Modules.GetModule<HitpointTracker>();
+            if (!damageModule) return;
 
             damageModule.SetDamage(PartDamage);
 
@@ -45,6 +47,7 @@ namespace BDArmory.Damage
         public override void AddDamageToPart_svc(Part p, float PartDamage)
         {
             var damageModule = p.Modules.GetModule<HitpointTracker>();
+            if (!damageModule) return;
 
             damageModule.AddDamage(PartDamage);
 
@@ -59,6 +62,7 @@ namespace BDArmory.Damage
         public override void AddHealthToPart_svc(Part p, float PartDamage, bool overcharge)
         {
             var damageModule = p.Modules.GetModule<HitpointTracker>();
+            if (!damageModule) return;
 
             damageModule.AddHealth(PartDamage, overcharge);
 
@@ -73,6 +77,7 @@ namespace BDArmory.Damage
         public override void AddDamageToKerbal_svc(KerbalEVA kerbal, float damage)
         {
             var damageModule = kerbal.part.Modules.GetModule<HitpointTracker>();
+            if (!damageModule) return;
 
             damageModule.AddDamageToKerbal(kerbal, damage);
 

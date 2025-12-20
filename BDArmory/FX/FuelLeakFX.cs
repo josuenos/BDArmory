@@ -34,6 +34,7 @@ namespace BDArmory.FX
         ModuleEngines engine;
         private bool isSRB = false;
         KSPParticleEmitter[] pEmitters;
+        Vector3 force;
 
         void OnEnable()
         {
@@ -56,22 +57,49 @@ namespace BDArmory.FX
             BDArmorySetup.numberOfParticleEmitters++;
             startTime = Time.time;
             pEmitters = gameObject.GetComponentsInChildren<KSPParticleEmitter>();
-            Vector3 Gravity = FlightGlobals.getGeeForceAtPosition(transform.position);
-            using (var pe = pEmitters.AsEnumerable().GetEnumerator())
-                while (pe.MoveNext())
-                {
-                    if (pe.Current == null) continue;
+            bool useWorldSpace = !parentPart.vessel.InVacuum();
+            Vector3 localVelocity = GetLeakVelocity() * Vector3.up; // ~6.4 m/s in vacuum, 0 m/s at Kerbin sea level and denser
+            force = GetGForce();
+            var localForce = Quaternion.Inverse(transform.rotation) * force;
+            using var pe = pEmitters.AsEnumerable().GetEnumerator();
+            while (pe.MoveNext())
+            {
+                if (pe.Current == null) continue;
+                pe.Current.emit = true;
+                _highestEnergy = pe.Current.maxEnergy;
+                pe.Current.useWorldSpace = useWorldSpace; // FIXME These should use the same useWorldSpace to avoid a discontinuity when reaching 0 atmo, otherwise localVelocity should be adjusted to compensate in one or the other cases. But adding the velocity to localVelocity doesn't seem to work properly. In any case, it's good enough for now.
+                pe.Current.localVelocity = localVelocity;
+                pe.Current.force = localForce; // Align force to local reference frame of emitter.
+                pe.Current.SetDirty();
+                EffectBehaviour.AddParticleEmitter(pe.Current);
+            }
+        }
 
-                    pe.Current.emit = true;
-                    _highestEnergy = pe.Current.maxEnergy;
-                    pe.Current.force = Gravity;
-                    if (parentPart.vessel.InVacuum())
-                    {
-                        pe.Current.localVelocity = new Vector3(0, (float)parentPart.vessel.obt_speed, 0);
-                        pe.Current.force = Vector3.zero;
-                    }
-                    EffectBehaviour.AddParticleEmitter(pe.Current);
-                }
+        /// <summary>
+        /// Combination of gravity and centripetal force.
+        /// </summary>
+        /// <returns>The overall force in the local reference frame.</returns>
+        Vector3 GetGForce()
+        {
+            // Calculate whether gravity is placing a force based on ratio of centripetal acceleration to body gravity (code below avoids Gravity.magnitude)
+            var vessel = parentPart.vessel;
+            float r = (float)(vessel.altitude + vessel.orbit.referenceBody.Radius);
+            float bodyGravity = (float)vessel.orbit.referenceBody.gravParameter / (r * r);
+            float centripetalAccel = (float)(vessel.obt_speed * vessel.obt_speed / r);
+            Vector3 force = FlightGlobals.getGeeForceAtPosition(vessel.CoM);
+            return Vector3.Lerp(force, Vector3.zero, Mathf.Clamp01(centripetalAccel / bodyGravity)); // Full force of gravity outside of orbital conditions, no gravity in orbit, somewhere in-between for sub-orbital
+        }
+
+        /// <summary>
+        /// Computes leak velocity based on atmospheric density and temperature and the resource density
+        /// </summary>
+        /// <returns>The leak velocity as a float.</returns>
+        float GetLeakVelocity(float resourceDensity = 5f) // fuel and oxidizer are 5 kg/l, monopropellant is 4 kg/l (close enough to 5 for FX)
+        {
+            float tankPressure = 1f; // in atmospheres
+            float outsidePressure = Mathf.Clamp((float)parentPart.vessel.atmDensity * (float)parentPart.vessel.atmosphericTemperature * 287.053f / 101325f, 0f, tankPressure); // p = rho * R * T, in atmospheres
+            float velocity = BDAMath.Sqrt(2f * (tankPressure - outsidePressure) * 101.325f / resourceDensity); // Incompressible bernoulli flow, returns value in m/s (0 at 1 atm, 6.37 m/s in vacuum for 5 fuel/oxidizer)
+            return velocity;
         }
 
         void OnDisable()
@@ -98,12 +126,20 @@ namespace BDArmory.FX
             if (!gameObject.activeInHierarchy || !HighLogic.LoadedSceneIsFlight || BDArmorySetup.GameIsPaused)
             {
                 return;
-            }           
-            if (parentPart.vessel.InVacuum()) transform.rotation = Quaternion.FromToRotation(Vector3.up, parentPart.vessel.obt_velocity.normalized);
-            else transform.rotation = Quaternion.FromToRotation(Vector3.up, -FlightGlobals.getGeeForceAtPosition(transform.position));
+            }
+            if (force != default)
+            {
+                var localForce = Quaternion.Inverse(transform.rotation) * force;
+                foreach (var pe in pEmitters.Where(pe => pe != null))
+                {
+                    pe.force = localForce; // Update the force direction for moving parts.
+                    pe.SetDirty();
+                }
+            }
             fuel = parentPart.Resources.Where(pr => pr.resourceName == "LiquidFuel").FirstOrDefault();
             if (disableTime < 0) //only have fire do its stuff while burning and not during FX timeout
             {
+                float impulse = 0f;
                 if (engine != null)
                 {
                     if (engine.EngineIgnited && !isSRB)
@@ -126,9 +162,11 @@ namespace BDArmory.FX
                         {
                             //part.RequestResource("LiquidFuel", ((double)drainRate * Mathf.Clamp((float)fuel.amount, 40, 400) / Mathf.Clamp((float)fuel.maxAmount, 400, (float)fuel.maxAmount)) * Time.deltaTime);
                             //This draining from across vessel?  Trying alt method
-                            fuel.amount -= ((double)drainRate * Mathf.Clamp((float)fuel.amount, 40, 400) / Mathf.Clamp((float)fuel.maxAmount, 400, (float)fuel.maxAmount)) * Time.fixedDeltaTime;
+                            double amount = ((double)drainRate * Mathf.Clamp((float)fuel.amount, 40, 400) / Mathf.Clamp((float)fuel.maxAmount, 400, (float)fuel.maxAmount)) * Time.fixedDeltaTime;
+                            fuel.amount -= amount;
                             fuel.amount = Mathf.Clamp((float)fuel.amount, 0, (float)fuel.maxAmount);
                             fuelLeft++;
+                            impulse += (float)amount * fuel.info.density / 1000f * GetLeakVelocity(fuel.info.density); // m * v
                         }
                     }
                     ox = parentPart.Resources.Where(pr => pr.resourceName == "Oxidizer").FirstOrDefault();
@@ -138,9 +176,11 @@ namespace BDArmory.FX
                         {
                             //part.RequestResource("Oxidizer", ((double)drainRate * Mathf.Clamp((float)ox.amount, 40, 400) / Mathf.Clamp((float)ox.maxAmount, 400, (float)ox.maxAmount) ) *  Time.deltaTime);
                             //more fuel = higher pressure, clamped at 400 since flow rate is constrained by outlet aperture, not fluid pressure
-                            ox.amount -= ((double)drainRate * Mathf.Clamp((float)fuel.amount, 40, 400) / Mathf.Clamp((float)fuel.maxAmount, 400, (float)fuel.maxAmount)) * Time.fixedDeltaTime;
+                            double amount = ((double)drainRate * Mathf.Clamp((float)ox.amount, 40, 400) / Mathf.Clamp((float)ox.maxAmount, 400, (float)ox.maxAmount)) * Time.fixedDeltaTime;
+                            ox.amount -= amount;
                             ox.amount = Mathf.Clamp((float)ox.amount, 0, (float)ox.maxAmount);
                             fuelLeft++;
+                            impulse += (float)amount * ox.info.density / 1000f * GetLeakVelocity(ox.info.density); // m * v
                         }
                     }
                     mp = parentPart.Resources.Where(pr => pr.resourceName == "MonoPropellant").FirstOrDefault();
@@ -149,14 +189,17 @@ namespace BDArmory.FX
                         if (mp.amount >= 0)
                         {
                             //part.RequestResource("MonoPropellant", ((double)drainRate * Mathf.Clamp((float)mp.amount, 40, 400) / Mathf.Clamp((float)mp.maxAmount, 400, (float)mp.maxAmount)) * Time.deltaTime);
-                            mp.amount -= ((double)drainRate * Mathf.Clamp((float)mp.amount, 40, 400) / Mathf.Clamp((float)mp.maxAmount, 400, (float)mp.maxAmount)) * Time.fixedDeltaTime;
+                            double amount = ((double)drainRate * Mathf.Clamp((float)mp.amount, 40, 400) / Mathf.Clamp((float)mp.maxAmount, 400, (float)mp.maxAmount)) * Time.fixedDeltaTime;
+                            mp.amount -= amount;
                             mp.amount = Mathf.Clamp((float)mp.amount, 0, (float)mp.maxAmount);
                             fuelLeft++;
+                            impulse += (float)amount * mp.info.density / 1000f * GetLeakVelocity(mp.info.density); // m * v
                         }
                     }
                 }
-                //if we want a vacuum BattleDamage option to produce (small amounts of) thrust from leaking tanks
-                //if (disableTime < 0 && (fuelLeft > 0 && (lifeTime >= 0 && Time.time - startTime < lifeTime))) parentPart.Rigidbody.AddForce(transform.up * (drainRate / 5), ForceMode.Acceleration); //needs a quaternion to reverse per-frame rotation to face prograde/gravity
+                // Add thrust to leaking tanks based on drain rate (mass flow rate) and leak velocity (F = m_dot * v)
+                if (disableTime < 0 && (fuelLeft > 0 && (lifeTime >= 0 && Time.time - startTime < lifeTime)))
+                    parentPart.Rigidbody.AddForce(impulse * transform.up, ForceMode.Impulse);
             }
 
             if (disableTime < 0 && (fuelLeft <= 0 || (lifeTime >= 0 && Time.time - startTime > lifeTime)))
@@ -172,15 +215,15 @@ namespace BDArmory.FX
                 Deactivate();
             }
         }
-        public void AttachAt(Part hitPart, RaycastHit hit, Vector3 offset)
+        public void AttachAt(Part hitPart, RaycastHit hit, Vector3 offset, Vector3 colliderLocalHitPoint = default)
         {
             if (hitPart is null) return;
             parentPart = hitPart;
             // parentPartName = parentPart.name;
             // parentVesselName = parentPart.vessel.vesselName;
-            transform.SetParent(hitPart.transform);
-            transform.position = hit.point + offset;
-            transform.rotation = (parentPart.vessel.situation == Vessel.Situations.ORBITING || parentPart.vessel.situation == Vessel.Situations.SUB_ORBITAL) ? Quaternion.FromToRotation(Vector3.up, parentPart.vessel.obt_velocity.normalized) : Quaternion.FromToRotation(Vector3.up, -FlightGlobals.getGeeForceAtPosition(transform.position));
+            transform.SetParent(hit.collider.transform);
+            transform.position = (colliderLocalHitPoint == default ? hit.point : transform.parent.TransformPoint(colliderLocalHitPoint)) + offset;
+            transform.rotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
             parentPart.OnJustAboutToDie += OnParentDestroy;
             parentPart.OnJustAboutToBeDestroyed += OnParentDestroy;
             if ((Versioning.version_major == 1 && Versioning.version_minor > 10) || Versioning.version_major > 1) // onVesselUnloaded event introduced in 1.11

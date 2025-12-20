@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System;
+using BDArmory.Utils;
 
 namespace BDArmory.Extensions
 {
@@ -15,7 +16,7 @@ namespace BDArmory.Extensions
             var maxIterations = 1000;
             var k = 0;
 
-            while( k++ < maxIterations )
+            while (k++ < maxIterations)
             {
                 var norm = body.GetRelSurfaceNVector(iLat + dLat, iLng + dLng);
                 var normA = body.GetRelSurfaceNVector(iLat + dLat - threshold, iLng + dLng);
@@ -23,11 +24,11 @@ namespace BDArmory.Extensions
                 var normC = body.GetRelSurfaceNVector(iLat + dLat, iLng + dLng - threshold);
                 var normD = body.GetRelSurfaceNVector(iLat + dLat, iLng + dLng + threshold);
 
-                var angle = Vector3.Angle(norm, Vector3.up);
-                var angleA = Vector3.Angle(normA, Vector3.up);
-                var angleB = Vector3.Angle(normB, Vector3.up);
-                var angleC = Vector3.Angle(normC, Vector3.up);
-                var angleD = Vector3.Angle(normD, Vector3.up);
+                var angle = VectorUtils.Angle(norm, Vector3.up);
+                var angleA = VectorUtils.Angle(normA, Vector3.up);
+                var angleB = VectorUtils.Angle(normB, Vector3.up);
+                var angleC = VectorUtils.Angle(normC, Vector3.up);
+                var angleD = VectorUtils.Angle(normD, Vector3.up);
 
                 if (angleA < angle)
                 {

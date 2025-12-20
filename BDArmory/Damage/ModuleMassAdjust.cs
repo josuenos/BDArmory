@@ -47,7 +47,7 @@ namespace BDArmory.Damage
 
             if (massMod < 0) //for negative mass modifier - i.e. MassEffect sytyle antigrav/weight reduction
             {
-                massMod = Mathf.Clamp(massMod, (startMass * 0.95f * -1), 0); //clamp mod mass to min of 5% of original value to prevent negative mass and whatever Kraken that summons
+                massMod = Mathf.Clamp(massMod, -0.95f * startMass, 0); //clamp mod mass to min of 5% of original value to prevent negative mass and whatever Kraken that summons
             }
         }
     }

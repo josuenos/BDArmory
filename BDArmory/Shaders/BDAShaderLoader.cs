@@ -33,7 +33,7 @@ namespace BDArmory.Shaders
 
                     case RuntimePlatform.LinuxPlayer:
                         return _bundlePath + Path.DirectorySeparatorChar +
-                               "bdarmoryshaders_macosx.bundle";
+                               "bdarmoryshaders_linux.bundle";
 
                     default:
                         return _bundlePath + Path.DirectorySeparatorChar +
@@ -44,7 +44,7 @@ namespace BDArmory.Shaders
 
         private void Awake()
         {
-            _bundlePath = Path.Combine(KSPUtil.ApplicationRootPath, "GameData", "BDArmory", "AssetBundles");
+            _bundlePath = Path.GetFullPath(Path.Combine(KSPUtil.ApplicationRootPath, "GameData", "BDArmory", "AssetBundles"));
         }
 
         private void Start()

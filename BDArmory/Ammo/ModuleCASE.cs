@@ -11,11 +11,17 @@ using BDArmory.Settings;
 using BDArmory.Utils;
 using BDArmory.VesselSpawning;
 using BDArmory.Weapons;
+using BDArmory.UI;
 
 namespace BDArmory.Ammo
 {
     class ModuleCASE : PartModule, IPartMassModifier, IPartCostModifier
     {
+        public static Dictionary<int, ObjectPool> detSpheres = new Dictionary<int, ObjectPool>();
+        GameObject visSphere;
+        Renderer r_sphere;
+        GameObject visDome;
+        Renderer r_dome;
         public float GetModuleMass(float baseMass, ModifierStagingSituation situation) => CASEmass;
         public ModifierChangeWhen GetModuleMassChangeWhen() => ModifierChangeWhen.FIXED;
         public float GetModuleCost(float baseCost, ModifierStagingSituation situation) => CASEcost;
@@ -30,10 +36,10 @@ namespace BDArmory.Ammo
 
         private string limitEdexploModelPath = "BDArmory/Models/explosion/30mmExplosion";
         private string shuntExploModelPath = "BDArmory/Models/explosion/CASEexplosion";
-
+        private string detDomeModelpath = "BDArmory/Models/explosion/detHemisphere";
         public string SourceVessel = "";
         public bool hasDetonated = false;
-        private float blastRadius = 0;
+        private float blastRadius = -1;
         const int explosionLayerMask = (int)(LayerMasks.Parts | LayerMasks.Scenery | LayerMasks.EVA | LayerMasks.Unknown19 | LayerMasks.Unknown23 | LayerMasks.Wheels);
 
         public bool externallyCalled = false;
@@ -57,6 +63,10 @@ namespace BDArmory.Ammo
         [KSPField(isPersistant = true, guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_CASE"),//Cellular Ammo Storage Equipment Tier
         UI_FloatRange(minValue = 0f, maxValue = 2f, stepIncrement = 1f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
         public float CASELevel = 0; //tier of ammo storage. 0 = nothing, ammosplosion; 1 = base, ammosplosion contained(barely), 2 = blast safely shunted outside, minimal damage to surrounding parts
+
+        [KSPField(guiActive = false, guiActiveEditor = true, guiName = "#LOC_BDArmory_CASE_Sim"),//Detonation Sim
+UI_FloatRange(minValue = 0f, maxValue = 100, stepIncrement = 0.5f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
+        public float blastSim = 0;
 
         [KSPField(isPersistant = true)]
         public bool Case2 = false;
@@ -88,6 +98,59 @@ namespace BDArmory.Ammo
                     origMass = part.mass;
                     //origScale = part.rescaleFactor;
                     CASESetup(null, null);
+                }
+
+                var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                var collider = sphere.GetComponent<Collider>();
+                if (collider)
+                {
+                    collider.enabled = false;
+                    Destroy(collider);
+                }
+                Renderer r = sphere.GetComponent<Renderer>();
+                var shader = Shader.Find("KSP/Alpha/Unlit Transparent");
+                r.material = new Material(shader);
+                r.receiveShadows = false;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.material.color = new Color(Color.red.r, 0, 0, 0.35f);
+                r.enabled = true;
+                sphere.SetActive(false);
+                detSpheres[0] = ObjectPool.CreateObjectPool(sphere, 10, true, true);
+
+                var dome = GameDatabase.Instance.GetModel(detDomeModelpath);
+                if (dome == null)
+                {
+                    Debug.LogError("[BDArmory.ModuleCase]: model '" + detDomeModelpath + "' not found.");
+                    dome = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    var dc = dome.GetComponent<Collider>();
+                    if (dc)
+                    {
+                        dc.enabled = false;
+                        Destroy(dc);
+                    }
+                }
+                Renderer d = dome.GetComponentInChildren<Renderer>();
+                if (d != null)
+                {
+                    d.material = new Material(Shader.Find("KSP/Particles/Alpha Blended"));
+                    d.material.SetColor("_TintColor", Color.blue);
+                }
+
+                dome.SetActive(false);
+                detSpheres[1] = ObjectPool.CreateObjectPool(dome, 10, true, true);
+                if (detSpheres[0] != null)
+                {
+                    visSphere = detSpheres[0].GetPooledObject();
+                    visSphere.transform.SetPositionAndRotation(transform.position, transform.rotation);
+                    visSphere.transform.localScale = Vector3.zero;
+                    r_sphere = visSphere.GetComponent<Renderer>();
+                }
+                if (detSpheres[1] != null)
+                {
+                    visDome = detSpheres[1].GetPooledObject();
+                    visDome.transform.SetPositionAndRotation(transform.position, transform.rotation);
+                    visDome.transform.localScale = Vector3.zero;
+                    r_dome = visDome.GetComponentInChildren<Renderer>();
                 }
             }
             if (HighLogic.LoadedSceneIsFlight)
@@ -202,6 +265,10 @@ namespace BDArmory.Ammo
         }
         private void CalculateBlast()
         {
+            ammoMass = 0;
+            ammoQuantity = 0;
+            ammoExplosionYield = 0;
+            blastRadius = 0;
             foreach (PartResource resource in GetResources())
             {
                 var resources = part.Resources.ToList();
@@ -213,14 +280,29 @@ namespace BDArmory.Ammo
                         {
                             ammoMass = ammo.Current.info.density;
                             ammoQuantity = ammo.Current.amount;
-                            ammoExplosionYield += (((ammoMass * 1000) * ammoQuantity) / 10);
+                            ammoExplosionYield += (((ammoMass * 1000) * ammoQuantity) / 20);
                         }
                     }
             }
-            blastRadius = BlastPhysicsUtils.CalculateBlastRange(ammoExplosionYield * BDArmorySettings.EXP_DMG_MOD_BATTLE_DAMAGE);
+            if (ammoExplosionYield > 0)
+            {
+                switch (CASELevel)
+                {
+                    case 1:
+                        ammoExplosionYield /= 2;
+                        break;
+                    case 2:
+                        ammoExplosionYield /= 4;
+                        break;
+                    default:
+                        break;
+                }
+                blastRadius = BlastPhysicsUtils.CalculateBlastRange(ammoExplosionYield * BDArmorySettings.EXP_DMG_MOD_BATTLE_DAMAGE);
+            }
         }
         public float GetBlastRadius()
         {
+            //if (blastRadius >= 0 && HighLogic.LoadedSceneIsEditor) return blastRadius; //only calc blast radius once in Editor if F2 weapon alignment/blast visualization enabeld
             CalculateBlast();
             return blastRadius;
         }
@@ -236,19 +318,19 @@ namespace BDArmory.Ammo
             {
                 if (CASELevel == 0)
                 {
-                    ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, explModelPath, explSoundPath, ExplosionSourceType.BattleDamage, 120, part, SourceVessel, null, "Ammunition (CASE-0)", direction, -1, false, part.mass + ((float)ammoExplosionYield * 10f), 1200 * BDArmorySettings.EXP_DMG_MOD_BATTLE_DAMAGE);
+                    ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, explModelPath, explSoundPath, ExplosionSourceType.BattleDamage, 120, part, SourceVessel, null, $"{part.partInfo.title} ({Math.Floor(ammoQuantity)} rounds)(CASE-0)", direction, -1, false, part.mass + ((float)ammoExplosionYield * 10f), 1200 * BDArmorySettings.EXP_DMG_MOD_BATTLE_DAMAGE);
                     if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.ModuleCASE]: CASE 0 explosion, tntMassEquivilent: " + ammoExplosionYield);
                 }
                 else
                 {
                     direction = part.transform.up;
-                    ExplosionFx.CreateExplosion(part.transform.position, ((float)ammoExplosionYield / 2), limitEdexploModelPath, explSoundPath, ExplosionSourceType.BattleDamage, 60, part, SourceVessel, null, "Ammunition (CASE-I)", direction, -1, false, part.mass + ((float)ammoExplosionYield * 10f), 600 * BDArmorySettings.EXP_DMG_MOD_BATTLE_DAMAGE);
+                    ExplosionFx.CreateExplosion(part.transform.position, ((float)ammoExplosionYield), limitEdexploModelPath, explSoundPath, ExplosionSourceType.BattleDamage, 60, part, SourceVessel, null, $"{part.partInfo.title} ({Math.Floor(ammoQuantity)} rounds)(CASE-I)", direction, -1, false, part.mass + ((float)ammoExplosionYield * 10f), 600 * BDArmorySettings.EXP_DMG_MOD_BATTLE_DAMAGE);
                     if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.ModuleCASE]: CASE I explosion, tntMassEquivilent: " + ammoExplosionYield + ", part: " + part + ", vessel: " + vesselName);
                 }
             }
             else //if (CASELevel == 2) //blast contained, shunted out side of hull, minimal damage
             {
-                ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield / 4f, shuntExploModelPath, explSoundPath, ExplosionSourceType.BattleDamage, 30, part, SourceVessel, null, "Ammunition (CASE-II)", direction, -1, true);
+                ExplosionFx.CreateExplosion(part.transform.position, (float)ammoExplosionYield, shuntExploModelPath, explSoundPath, ExplosionSourceType.BattleDamage, 30, part, SourceVessel, null, $"{part.partInfo.title} ({Math.Floor(ammoQuantity)} rounds)(CASE-II)", direction, -1, true);
                 if (BDArmorySettings.DEBUG_DAMAGE) Debug.Log("[BDArmory.ModuleCASE]: CASE II explosion, tntMassEquivilent: " + ammoExplosionYield);
                 Ray BlastRay = new Ray(part.transform.position, part.transform.up);
                 var hitCount = Physics.RaycastNonAlloc(BlastRay, raycastHitBuffer, blastRadius, explosionLayerMask);
@@ -356,6 +438,84 @@ namespace BDArmory.Ammo
                 if (!hasDetonated) DetonateIfPossible();
             }
             GameEvents.onGameSceneSwitchRequested.Remove(HandleSceneChange);
+            if (visSphere != null) visSphere.SetActive(false);
+            if (visDome != null) visDome.SetActive(false);
+        }
+
+        void OnGUI()
+        {
+            if (HighLogic.LoadedSceneIsEditor)
+            {
+                bool disableCASESimulation = false;
+                if (BDArmorySettings.BD_AMMOBINS) //having this on showWeaponAlignment could get really annoying if lots of ammo boxes on a craft and merely wanting to calibrate guns
+                {
+                    if (BDArmorySetup.showCASESimulation || blastSim >= 1)
+                        DrawDetonationVisualization(); //though perhaps a per-box visualizer toggle would be smarter than a global one?
+                    else if (blastTimeline > 0) disableCASESimulation = true;
+                }
+                else if (blastTimeline > 0) disableCASESimulation = true;
+                if (disableCASESimulation)
+                {
+                    visSphere.SetActive(false);
+                    visDome.SetActive(false);
+                    simStartTime = 0;
+                }
+            }
+        }
+
+        float simStartTime = 0;
+        float blastTimeline = 0;
+        float simTimer => Time.time - simStartTime;
+        Color blastColor = Color.red;
+        public static FloatCurve blastCurve = new([
+            new(0, 1640, -2922.85f, -2922.85f),
+            new(1, 128, -81.1f, -81.1f),
+            new(5, 20, 7.24f, 7.24f),
+            new(10, 10),
+            new(20, 7),
+            new(40, 1)]); //'close enough' approximation for the rather more complex geometry of the actual blast dmg equations
+
+        void DrawDetonationVisualization()
+        {
+            Vector2 guiPos;
+            GetBlastRadius();
+            if (!BDArmorySetup.showCASESimulation) simStartTime = 0;
+            else if (simTimer > 5) simStartTime = Time.time; //another possible improvement would have a 'sim blast range' slider that would allow seeing damage at specific range instead of cycling the anim
+            blastTimeline = BDArmorySetup.showCASESimulation ? Mathf.Clamp01(simTimer / 2) : blastSim / 100;
+            float blastDmg = Mathf.Clamp(blastCurve.Evaluate(blastRadius * blastTimeline) + (11 - (blastRadius * blastTimeline * 0.4f)) * (float)ammoExplosionYield, 0, 1200) / (CASELevel == 1 ? 2 : 1); //CASE I clamps to 600, so mult CAS 0 dmg to maintian color per x dmg value
+            blastColor = Color.HSVToRGB((((CASELevel == 1 ? 600 : 1200) - (float)blastDmg) / (CASELevel == 1 ? 600 : 1200)) / 4, 1, 1); //yellow = 200dmg, green, less, orange-> , more
+
+            switch (CASELevel)
+            {
+                case 0:
+                    visDome.SetActive(false);
+                    visSphere.SetActive(true);
+                    visSphere.transform.position = transform.position;
+                    visSphere.transform.localScale = Vector3.one * Mathf.Lerp(0, blastRadius, blastTimeline);
+                    r_sphere.material.color = new Color(blastColor.r, blastColor.g, blastColor.b, (1.3f - blastTimeline) / 2);
+                    break;
+                case 1:
+                    visSphere.SetActive(false);
+                    visDome.SetActive(true);
+                    r_dome.material.SetColor("_TintColor", new Color(blastColor.r, blastColor.g, blastColor.b, 0.15f - (blastTimeline / 10)));
+                    visDome.transform.position = transform.position;
+                    visDome.transform.localScale = Vector3.one * Mathf.Lerp(0, blastRadius, blastTimeline);
+                    visDome.transform.rotation = transform.rotation;
+                    break;
+                case 2:
+                    Vector3 fwdPos = transform.position + (blastTimeline * blastRadius * transform.up);
+                    GUIUtils.DrawLineBetweenWorldPositions(transform.position, fwdPos, 4, Color.red);
+                    visSphere.SetActive(false);
+                    visDome.SetActive(false);
+                    blastDmg = Mathf.Clamp(blastDmg, 0, 100);
+                    break;
+            }
+            if (GUIUtils.WorldToGUIPos(transform.position, out guiPos))
+            {
+                Rect labelRect = new Rect(guiPos.x + 64, guiPos.y + 32, 200, 100);
+                string label = $"{Mathf.Round(blastDmg)} damage at {Math.Round(blastTimeline * blastRadius, 2)}m";
+                GUI.Label(labelRect, label);
+            }
         }
 
         public override string GetInfo()

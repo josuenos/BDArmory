@@ -31,10 +31,11 @@
         Scenery = 1 << 15,
         Kerbals = 1 << 16, // Internal kerbals
         EVA = 1 << 17,
-        Unknown19 = 1 << 19, // Why are some raycasts using this layer?
+        Unknown19 = 1 << 19, // Why are some raycasts using this layer? PhysicalObjects?
         RootPart = 1 << 21,
-        Unknown23 = 1 << 23, // Why are some raycasts using this layer?
-        Wheels = 1 << 26
+        Unknown23 = 1 << 23, // Why are some raycasts using this layer? AeroFXIgnore?
+        Wheels = 1 << 26 // WheelCollidersIgnore?
+        // 1 << 27 WheelColliders?
     }; // Scenery includes terrain and buildings.
     // Commonly used values:
     // 163840 = (1 << 15) | (1 << 17)

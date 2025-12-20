@@ -26,14 +26,16 @@ namespace BDArmory.Evolution
             this.direction = direction;
         }
 
-        public void Apply(ConfigNode craft, VariantEngine engine)
+        public ConfigNode Apply(ConfigNode craft, VariantEngine engine)
         {
+            ConfigNode mutatedCraft = craft.CreateCopy();
             Debug.Log("[BDArmory.EngineGimbalAxisNudgeMutation]: Evolution EngineGimbalNudgeMutation applying");
-            List<ConfigNode> matchingModules = engine.FindModuleNodes(craft, moduleName);
+            List<ConfigNode> matchingModules = engine.FindModuleNodes(mutatedCraft, moduleName);
             foreach (var node in matchingModules)
             {
-                MutateIfNeeded(node, craft, engine);
+                MutateIfNeeded(node, mutatedCraft, engine);
             }
+            return mutatedCraft;
         }
 
         public Variant GetVariant(string id, string name)

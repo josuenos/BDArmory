@@ -1,13 +1,40 @@
-### Branches
-Current un-merged branches (`git branch --no-merged`) are:
-- AoA — respecting maxAoA and max G-load AI settings
-- bias-testing — testing bias due to spawn position or camera focus
-- motherships — which AI/WM is in control when parasite fighters get detached and automatically adding them to competitions
-
-Outdated, probably to be deleted:
-- spawn-strategy — partially implemented, then abandoned spawn strategy implementation by aubranium
-- sph-inertia — Simple flight dynamics analysis draft impl by aubranium, better as a separate mod since it doesn't use anything BDA specific.
-
+### Building / Debugging
+- Based on https://forum.kerbalspaceprogram.com/topic/102909-ksp-plugin-debugging-and-profiling-for-visual-studio-and-monodevelop-on-all-os/
+- Create a folder `_LocalDev` above the cloned repository, e.g., in Linux:
+    ```
+    |— _LocalDev/
+    |  |— ksp_dir.txt
+    |  |— KSPRefs → <KSP folder>/KSP_Data/Managed
+    |— BDArmory/
+    |  |— .git/
+    |  |— BDArmory/
+    |— OtherMods
+    |  |— ...
+    ```
+- Add paths to KSP installations in `ksp_dir.txt`. E.g.,
+    ```
+    /home/user/Games/KSP
+    /home/user/Games/KSP-copy
+    ```
+    In Windows, the additional files `pdb2mdb_exe.txt`, `7za_exe.txt` and `dist_dir.txt` may need creating with paths to the appropriate executables and folder.
+- BDArmory should then be able to be built with:
+    ```bash
+    export FrameWorkPathOverride=/usr/lib/mono/4.8-api/  # I recommend putting this into a .envrc file and using direnv.
+    dotnet build --configuration Debug  # Use "--configuration Release" for a release build.
+    ```
+- Install UnityHub and install the `2019.4.18f1` editor. Then copy the playback engine to the KSP folder and create a symlink to it to replace the default playback engine. E.g.,
+    ```bash
+    cd ~/Games/KSP
+    mv UnityPlayer.so UnityPlayer.so.orig
+    cp ~/Unity/Hub/Editors/2019.4.18f1/Editor/Data/PlaybackEngines/LinuxStandaloneSupport/Variations/linux64_withgfx_development_mono/UnityPlayer.so UnityPlayer.so.debug
+    ln -sf UnityPlayer.so.debug UnityPlayer.so
+    ```
+    Reverting to the non-development playback engine can be done by switching the symlink:
+    ```bash
+    ln -sf UnityPlayer.so.orig UnityPlayer.so
+    ```
+- Logged exceptions and errors should then give a stack trace with line numbers.
+- Profiling can be achieved by creating a project in UnityHub, launching the profiling window and connecting it to a running instance of KSP.
 
 ### Optimisation
 - https://learn.unity.com/tutorial/fixing-performance-problems-2019-3-1#
@@ -42,3 +69,18 @@ Outdated, probably to be deleted:
     - LoadedVesselSwitcher.AddVesselSwitcherWindowEntry -> string manipulation
     - CamTools.SetDoppler -> get_name
     - CameraTools::CTPartAudioController.Awake
+
+### Shader Compilation
+- Shaders should be compiled using Unity 2018.4.36f1 to be compatible with KSP 1.9.1.
+- To compile a shader bundle:
+    1. Install AssetBundle Browser: https://docs.unity3d.com/Manual/AssetBundles-Browser.html
+    2. Open a Unity project (an empty one is fine).
+    3. Import the shaders (if not already done) via "Assets->Import New Asset...".
+    4. Go to File->Build Settings. Pick Windows/Mac/Linux based on what bundle you plan to make.
+    5. Go to "Window->AssetBundle Browser".
+    6. Drag the 4 shader assets from the "Project" tab in the main Unity window into the AssetBundle Browser window.
+    7. Rename the asset bundle to match the build target for loading in BDAShaderLoader.cs (e.g., "bdarmoryshaders_linux").
+    8. In the build tab select Standalone Windows/Standalone OSX Universal/Standalone Linux 64 (match your build settings).
+    9. Hit build.
+    10. Repeat 4, 7, 8 and 9 for the remaining Windows/Mac/Linux bundles.
+    11. Copy them from `~/Unity/<project name>/AssetBundles` (or equivalent on the OS you're using) to `Distribution/GameData/BDArmory/AssetBundles`.

@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+using System;
+using UnityEngine;
+using System.Runtime.CompilerServices;
 
 namespace BDArmory.Utils
 {
@@ -45,9 +47,10 @@ namespace BDArmory.Utils
             return point - (distance * planeNormal);
         }
 
+        [Obsolete("Use -VectorUtils.GetAngleOnPlane(fromDirection, toDirection, referenceRight) instead.")]
         public static float SignedAngle(Vector3 fromDirection, Vector3 toDirection, Vector3 referenceRight)
         {
-            float angle = Vector3.Angle(fromDirection, toDirection);
+            float angle = VectorUtils.Angle(fromDirection, toDirection);
             float sign = Mathf.Sign(Vector3.Dot(toDirection, referenceRight));
             float finalAngle = sign * angle;
             return finalAngle;
@@ -97,5 +100,15 @@ namespace BDArmory.Utils
                 return x;
             }
         }
+
+        /// <summary>
+        /// A double version of Mathf.Clamp.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double Clamp(double value, double min, double max)
+        {
+            return value < min ? min : value > max ? max : value;
+        }
+
     }
 }

@@ -169,6 +169,7 @@
     <Compile Include="CounterMeasure\ModuleECMJammer.cs" />
     <Compile Include="CounterMeasure\VesselChaffInfo.cs" />
     <Compile Include="CounterMeasure\VesselCloakInfo.cs" />
+    <Compile Include="CounterMeasure\VesselCMDropperInfo.cs" />
     <Compile Include="CounterMeasure\VesselECMJInfo.cs" />
     <Compile Include="Damage\BuildingDamage.cs" />
     <Compile Include="Damage\DamageService.cs" />
@@ -192,7 +193,9 @@
     <Compile Include="Extensions\BodyExtensions.cs" />
     <Compile Include="Extensions\ClawExtensions.cs" />
     <Compile Include="Extensions\CrewExtensions.cs" />
+    <Compile Include="Extensions\DictionaryExtensions.cs" />
     <Compile Include="Extensions\FloatExtensions.cs" />
+    <Compile Include="Extensions\OrbitExtensions.cs" />
     <Compile Include="Extensions\PartExtensions.cs" />
     <Compile Include="Extensions\VectorExtensions.cs" />
     <Compile Include="Extensions\VesselExtensions.cs" />
@@ -216,6 +219,7 @@
     <Compile Include="GameModes\ModuleSpaceFriction.cs" />
     <Compile Include="GameModes\Mutators\BDAMutator.cs" />
     <Compile Include="GameModes\Mutators\MutatorInfo.cs" />
+    <Compile Include="GameModes\Waypoints\CourseBuilderGUI.cs" />
     <Compile Include="GameModes\Waypoints\WaypointCourses.cs" />
     <Compile Include="Guidances\BallisticGuidance.cs" />
     <Compile Include="Guidances\CruiseGuidance.cs" />
@@ -224,8 +228,12 @@
     <Compile Include="Initialization\Bootstrapper.cs" />
     <Compile Include="Initialization\Cleanup.cs" />
     <Compile Include="Initialization\Dependencies.cs" />
+    <Compile Include="ModIntegration\BDATeamIcons.cs" />
     <Compile Include="ModIntegration\CameraTools.cs" />
+    <Compile Include="ModIntegration\ConformalDecals.cs" />
+    <Compile Include="ModIntegration\ModuleManager.cs" />
     <Compile Include="ModIntegration\MouseAimFlight.cs" />
+    <Compile Include="ModIntegration\PhysicsRangeExtender.cs" />
     <Compile Include="ModIntegration\ReflectionUtils.cs" />
     <Compile Include="Modules\CFEnable.cs" />
     <Compile Include="Modules\KerbalSafety.cs" />
@@ -249,6 +257,8 @@
     <Compile Include="Settings\BDInputSettingsFields.cs" />
     <Compile Include="Settings\BDTISettings.cs" />
     <Compile Include="Settings\BDTISettingsFields.cs" />
+    <Compile Include="Settings\RWPSettings.cs" />
+    <Compile Include="Settings\CompSettings.cs" />
     <Compile Include="Shaders\BDAShaderLoader.cs" />
     <Compile Include="Targeting\GPSTargetInfo.cs" />
     <Compile Include="Targeting\ModuleTargetingCamera.cs" />
@@ -331,8 +341,11 @@
     <Compile Include="WeaponMounts\BDDeployableRail.cs" />
     <Compile Include="WeaponMounts\BDRotaryRail.cs" />
     <Compile Include="WeaponMounts\MissileTurret.cs" />
+    <Compile Include="WeaponMounts\ModuleCustomTurret.cs" />
     <Compile Include="WeaponMounts\ModuleTurret.cs" />
     <Compile Include="WeaponMounts\WMTurretGroup.cs" />
+    <Compile Include="Weapons\BDCustomWarhead.cs" />
+    <Compile Include="Weapons\BDWarheadBase.cs" />
     <Compile Include="Weapons\BDExplosivePart.cs" />
     <Compile Include="Weapons\BDModuleNuke.cs" />
     <Compile Include="Weapons\ClusterBomb.cs" />
@@ -344,6 +357,7 @@
     <Compile Include="Weapons\Missiles\MissileDummy.cs" />
     <Compile Include="Weapons\Missiles\MissileLaunchParams.cs" />
     <Compile Include="Weapons\Missiles\MissileLauncher.cs" />
+    <Compile Include="Weapons\Missiles\ModuleMissileMagazine.cs" />
     <Compile Include="Weapons\Missiles\ModuleMissileRearm.cs" />
     <Compile Include="Weapons\Missiles\MultiMissileLauncher.cs" />
     <Compile Include="Weapons\ModuleEMP.cs" />
@@ -386,7 +400,7 @@
     <None Include="Distribution\GameData\BDArmory\KSPedia\bdac fixed guns.ksp" />
     <None Include="Distribution\GameData\BDArmory\KSPedia\bdac guidance types.ksp" />
     <None Include="Distribution\GameData\BDArmory\KSPedia\bdac modules.ksp" />
-    <None Include="Distribution\GameData\BDArmory\KSPedia\bdac ordinance.ksp" />
+    <None Include="Distribution\GameData\BDArmory\KSPedia\bdac ordnance.ksp" />
     <None Include="Distribution\GameData\BDArmory\KSPedia\bdac radar and targeting.ksp" />
     <None Include="Distribution\GameData\BDArmory\KSPedia\bdac settings.ksp" />
     <None Include="Distribution\GameData\BDArmory\KSPedia\bdac turrets.ksp" /> -->
@@ -404,6 +418,7 @@
     <None Include="Distribution\GameData\BDArmory\MMPatches\BDA_TweakScale.cfg" />
     <None Include="Distribution\GameData\BDArmory\MMPatches\bdmk22_cockpit.cfg" />
     <None Include="Distribution\GameData\BDArmory\MMPatches\Explode_Mode_Squad_Tanks.cfg" />
+    <None Include="Distribution\GameData\BDArmory\MMPatches\SimpleRepaint.cfg" />
     <None Include="Distribution\GameData\BDArmory\MMPatches\StructPWing.cfg" />
     <None Include="Distribution\GameData\BDArmory\Models\bulletDecal\BulletDecal1.mu" />
     <None Include="Distribution\GameData\BDArmory\Models\bulletDecal\BulletDecal2.mu" />
@@ -545,6 +560,8 @@
     <None Include="Distribution\GameData\BDArmory\Parts\IRSTPod\part.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\jdamMk83\jdam.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\jdamMk83\model.mu" />
+    <None Include="Distribution\GameData\BDArmory\Parts\kkv\kkv.cfg" />
+    <None Include="Distribution\GameData\BDArmory\Parts\kkv\KKV_TCA.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\m102.cfg" />
     <None Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\model.mu" />
     <None Include="Distribution\GameData\BDArmory\Parts\m1Abrams\m1Abrams.cfg" />
@@ -778,6 +795,8 @@
     <Content Include="Distribution\GameData\BDArmory\Parts\hiddenVulcan\texture.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\IRSTPod\irst.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\jdamMk83\tex_jdam.png" />
+    <Content Include="Distribution\GameData\BDArmory\Parts\kkv\muzzle.dds" />
+    <Content Include="Distribution\GameData\BDArmory\Parts\kkv\TEX_TCA_KKV.dds" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\muzzle.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m102Howitzer\tex_m102.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m1Abrams\muzzle.png" />
@@ -786,7 +805,7 @@
     <Content Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\smoke.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\m230ChainGun\texture.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\maverick\texture.png" />
-    <Content Include="Distribution\GameData\BDArmory\Parts\MissileBay\ordinanceBay.png" />
+    <Content Include="Distribution\GameData\BDArmory\Parts\MissileBay\ordnanceBay.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\missileTurret\tex_detectionRadar.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\missileTurret\tex_lockingTurret.png" />
     <Content Include="Distribution\GameData\BDArmory\Parts\missileTurret\tex_missileTurret.png" />
@@ -877,12 +896,12 @@
       @echo set lpath vars from "%25GIT_PATH%25_LocalDev\LocalDev" storage...
       set /p KSP_DIR=&lt;"%25GIT_PATH%25_LocalDev\ksp_dir.txt"
       set /p PDB2MDB_EXE=&lt;"%25GIT_PATH%25_LocalDev\pdb2mdb_exe.txt"
-      set /p ZA_DIR=&lt;"%25GIT_PATH%25_LocalDev\7za_dir.txt"
+      set /p ZA_EXE=&lt;"%25GIT_PATH%25_LocalDev\7za_exe.txt"
       set /p DIST_DIR=&lt;"%25GIT_PATH%25_LocalDev\dist_dir.txt"
 
       @echo Copying assemblies to Distribution $(Targetname) files...
       if not exist "$(ProjectDir)Distribution\GameData\%25ModName%25\Plugins\" mkdir "$(ProjectDir)Distribution\GameData\%25ModName%25\Plugins\"
-      del "$(ProjectDir)Distribution/GameData/${ModName}/Plugins/"BDArmory*
+      del "$(ProjectDir)Distribution/GameData/%25ModName%25/Plugins/"BDArmory*
       xcopy /E /Y "$(TargetDir)"BDArmory*.dll "$(ProjectDir)Distribution\GameData\%25ModName%25\Plugins\"
 
       if $(ConfigurationName) == Debug (
@@ -893,11 +912,11 @@
       @echo deleting previous build ...
       if exist "%25DIST_DIR%25\%25ModName%25.*.zip" del "%25DIST_DIR%25\%25ModName%25.*.zip"
       @echo packaging new build...
-      call "%25ZA_DIR%25\7za.exe" a -tzip -r  "%25DIST_DIR%25\%25ModName%25.@(VersionNumber)_%25DATE:~4,2%25%25DATE:~7,2%25%25DATE:~10,4%25%25time:~0,2%25%25time:~3,2%25.zip" "$(ProjectDir)Distribution\*.*"
+      call "%25ZA_EXE%25" a -tzip -r  "%25DIST_DIR%25\%25ModName%25.@(VersionNumber)_%25DATE:~4,2%25%25DATE:~7,2%25%25DATE:~10,4%25%25time:~0,2%25%25time:~3,2%25.zip" "$(ProjectDir)Distribution\*.*"
 
       @echo Deploy $(ProjectDir) Distribution files to test env:  %25KSP_DIR%25\GameData...
       @echo copying:"$(ProjectDir)Distribution\GameData" to "%25KSP_DIR%25\GameData" 
-      xcopy /E /Y "$(ProjectDir)Distribution\GameData" "%25KSP_DIR%25\GameData"
+      xcopy /E /Y "$(ProjectDir)Distribution\GameData" "%25KSP_DIR%25\GameData\"
 
 
       @echo Build/deploy complete!
@@ -923,9 +942,10 @@
       echo packaging new build...
       7za  a -tzip -r  "$(ProjectDir)Distribution/${ModName}.@(VersionNumber)_`date -u -Iseconds`.zip" "$(ProjectDir)Distribution/*.*"
 
-      <!-- Deploy to all KSP folders in ksp_dir.txt -->
+      <!-- Deploy to all existing KSP folders in ksp_dir.txt -->
       bash -c 'cat $(ProjectDir)../../_LocalDev/ksp_dir.txt | while read KSP_DIR; do
         if [[ "${KSP_DIR:0:1}" == "#" ]]; then continue; fi
+        if [ ! -d "${KSP_DIR}" ]; then continue; fi
         echo Deploy $(ProjectDir) Distribution files to test env:  "${KSP_DIR}/GameData"...
         echo copying:"$(ProjectDir)Distribution/GameData" to "${KSP_DIR}/GameData" 
         cp -a "$(ProjectDir)Distribution/GameData/${ModName}" "${KSP_DIR}/GameData"

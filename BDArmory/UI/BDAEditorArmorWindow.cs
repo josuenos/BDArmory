@@ -1,6 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System;
 using KSP.UI.Screens;
 using UnityEngine;
 
@@ -41,14 +43,20 @@ namespace BDArmory.UI
         private float totalLift;
         private float totalLiftArea;
         private float totalLiftStackRatio;
-        private float wingLoading;
-        private float WLRatio;
+        private float wingLoadingWet;
+        private float wingLoadingDry;
+        private float WLRatioWet;
+        private float WLRatioDry;
+        private List<PartResourceDefinition> vesselResources;
+        private List<int> vesselResourceIDs;
+        private Rect vesselResourceBoxRect = new(10, 0, 280, 0);
         private bool CalcArmor = false;
         private bool shipModifiedfromCalcArmor = false;
         private bool SetType = false;
         private bool SetThickness = false;
         private string selectedArmor = "None";
         private bool ArmorStats = false;
+        private bool resourcePick = false;
         private float ArmorDensity = 0;
         private float ArmorStrength = 200;
         private float ArmorHardness = 300;
@@ -71,14 +79,17 @@ namespace BDArmory.UI
         private bool HPvisualizer = false;
         private bool HullVisualizer = false;
         private bool LiftVisualizer = false;
+        private bool TreeVisualizer = false;
         private bool oldVisualizer = false;
         private bool oldHPvisualizer = false;
         private bool oldHullVisualizer = false;
         private bool oldLiftVisualizer = false;
+        private bool oldTreeVisualizer = false;
         private bool refreshVisualizer = false;
         private bool refreshHPvisualizer = false;
         private bool refreshHullvisualizer = true;
         private bool refreshLiftvisualizer = false;
+        private bool refreshTreevisualizer = false;
         private string hullmat = "Aluminium";
 
         private float steelValue = 1;
@@ -86,20 +97,34 @@ namespace BDArmory.UI
         private float relValue = 1;
         private float exploValue;
 
+        //comp rules compliance stuff
+        float maxStacking = -1;
+        int maxPartCount = -1;
+        float maxLtW = -1;
+        float maxTWR = -1;
+        float maxMass = -1;
+        int maxEngines = 999;
+        int pointBuyBudget = -1;
+
         Dictionary<string, NumericInputField> thicknessField;
         void Awake()
         {
+            if (Instance != null) Destroy(Instance);
+            Instance = this;
         }
 
         void Start()
         {
-            Instance = this;
             AddToolbarButton();
             thicknessField = new Dictionary<string, NumericInputField>
             {
                 {"Thickness", gameObject.AddComponent<NumericInputField>().Initialise(0, 10, 0, 1500) }, // FIXME should use maxThickness instead of 1500 here.
             };
+            vesselResourceIDs = new List<int>();
+            vesselResources = new List<PartResourceDefinition>();
             GameEvents.onEditorShipModified.Add(OnEditorShipModifiedEvent);
+            GameEvents.onEditorPartPlaced.Add(OnEditorPartPlacedEvent);
+            GameEvents.onEditorPartDeleted.Add(OnEditorPartPlacedEvent);
             /*
             var modifiedCaliber = (15) + (15) * (2f * 0.15f * 0.15f);
             float bulletEnergy = ProjectileUtils.CalculateProjectileEnergy(0.388f, 1109);
@@ -115,6 +140,7 @@ namespace BDArmory.UI
             exploValue = 940 * 1.15f * 7.85f;
             listStyle = new GUIStyle(BDArmorySetup.BDGuiSkin.button);
             listStyle.fixedHeight = 18; //make list contents slightly smaller
+            SetupLegalityValues();
         }
 
         private void FillArmorList()
@@ -122,7 +148,7 @@ namespace BDArmory.UI
             armorGUI = new GUIContent[ArmorInfo.armors.Count];
             for (int i = 0; i < ArmorInfo.armors.Count; i++)
             {
-                GUIContent gui = new GUIContent(ArmorInfo.armors[i].name);
+                GUIContent gui = new GUIContent(ArmorInfo.armors[i].name.Length <= 17 ? ArmorInfo.armors[i].name : ArmorInfo.armors[i].name.Remove(14) + "...");
                 armorGUI[i] = gui;
             }
             armorBoxText = new GUIContent();
@@ -133,13 +159,31 @@ namespace BDArmory.UI
             hullGUI = new GUIContent[HullInfo.materials.Count];
             for (int i = 0; i < HullInfo.materials.Count; i++)
             {
-                GUIContent gui = new GUIContent(HullInfo.materials[i].name);
+                GUIContent gui = new GUIContent(HullInfo.materials[i].localizedName.Length <= 17 ? HullInfo.materials[i].localizedName : HullInfo.materials[i].localizedName.Remove(14) + "...");
                 hullGUI[i] = gui;
             }
 
             hullBoxText = new GUIContent();
             hullBoxText.text = StringUtils.Localize("#LOC_BDArmory_Armor_HullType");
         }
+
+        public void SetupLegalityValues()
+        {
+            if (BDArmorySettings.COMP_CONVENIENCE_CHECKS || BDArmorySettings.RUNWAY_PROJECT)
+            {
+                if (CompSettings.CompVesselChecksEnabled)
+                {
+                    if (CompSettings.vesselChecks.TryGetValue("maxStacking", out float ms) && ms > 0) maxStacking = ms;
+                    if (CompSettings.vesselChecks.TryGetValue("maxPartCount", out float mpc) && mpc > 0) maxPartCount = Mathf.RoundToInt(mpc);
+                    if (CompSettings.vesselChecks.TryGetValue("maxLtW", out float ltw) && mpc > 0) maxLtW = ltw;
+                    if (CompSettings.vesselChecks.TryGetValue("maxTWR", out float twr) && mpc > 0) maxTWR = twr;
+                    if (CompSettings.vesselChecks.TryGetValue("maxMass", out float m) && m > 0) maxMass = m;
+                    if (CompSettings.vesselChecks.TryGetValue("maxEngines", out float me) && me != 999) maxEngines = Mathf.RoundToInt(me);
+                }
+                if (CompSettings.CompPriceChecksEnabled && CompSettings.vesselChecks.TryGetValue("pointBuyBudget", out float pb) && pb > 0) pointBuyBudget = Mathf.RoundToInt(pb);
+            }
+        }
+
         private void OnEditorShipModifiedEvent(ShipConstruct data)
         {
             if (data is null) return;
@@ -180,7 +224,7 @@ namespace BDArmory.UI
                         if (hp == null || hp.Ready) return null;
                         return hp;
                     }).Where(hp => hp != null).Select(hp => $"{hp.part.name}: {hp.Why}"));
-                //Debug.LogWarning($"[BDArmory.BDAEditorArmorWindow]: Ship HP failed to settle within {countLimit} frames.{(string.IsNullOrEmpty(reason) ? "" : $" {reason}")}");
+                if (BDArmorySettings.DEBUG_ARMOR) Debug.LogWarning($"[BDArmory.BDAEditorArmorWindow]: Ship HP failed to settle within {countLimit} frames.{(string.IsNullOrEmpty(reason) ? "" : $" {reason}")}");
             }
             delayedRefreshVisualsInProgress = false;
 
@@ -190,24 +234,59 @@ namespace BDArmory.UI
                 {
                     CalcArmor = true;
                 }
-                if (Visualizer || HPvisualizer || HullVisualizer || LiftVisualizer)
+                if (Visualizer || HPvisualizer || HullVisualizer || LiftVisualizer || TreeVisualizer)
                 {
                     refreshVisualizer = true;
                     refreshHPvisualizer = true;
                     refreshHullvisualizer = true;
                     refreshLiftvisualizer = true;
+                    refreshTreevisualizer = true;
                 }
                 shipModifiedfromCalcArmor = false;
                 CalculateArmorMass();
+
+                var oldResources = vesselResources.ToHashSet();
+                vesselResources.Clear();
+                using (var part = EditorLogic.fetch.ship.parts.GetEnumerator())
+                    while (part.MoveNext())
+                    {
+                        foreach (PartResource res in part.Current.Resources)
+                        {
+                            if (!vesselResources.Contains(res.info))
+                            {
+                                vesselResources.Add(res.info);
+                            }
+                        }
+                    }
+                var newResources = vesselResources.ToHashSet();
+                newResources.ExceptWith(oldResources); // Newly added resources.
+                var resourceIDs = newResources.Select(res => res.id).ToHashSet(); //add all resources to VRID by default so default drymass is true drymass, until specific resouces filtered
+                resourceIDs.ExceptWith(vesselResourceIDs.ToHashSet()); // Only newly added resources that aren't already added to the IDs list.
+                if (resourceIDs.Count > 0)
+                    vesselResourceIDs.AddRange(resourceIDs);
+
                 if (!FerramAerospace.hasFAR)
                     CalculateTotalLift(); // Re-calculate lift and wing loading on armor change
                 //Debug.Log("[ArmorTool] Recalculating mass/lift");
+            }
+            DoVesselLegalityChecks(false);
+        }
+
+        private void OnEditorPartPlacedEvent(Part data)
+        {
+            DoVesselLegalityChecks(true);
+            if (BDArmorySettings.RUNWAY_PROJECT && BDArmorySettings.RUNWAY_PROJECT_ROUND == 78)
+            {
+                data.sameVesselCollision = true;
             }
         }
 
         private void OnDestroy()
         {
             GameEvents.onEditorShipModified.Remove(OnEditorShipModifiedEvent);
+            GameEvents.onEditorPartPlaced.Remove(OnEditorPartPlacedEvent);
+            GameEvents.onEditorPartDeleted.Remove(OnEditorPartPlacedEvent);
+            HideToolbarGUINow();
             if (toolbarButton)
             {
                 ApplicationLauncher.Instance.RemoveModApplication(toolbarButton);
@@ -215,33 +294,41 @@ namespace BDArmory.UI
             }
         }
 
-        IEnumerator ToolbarButtonRoutine()
-        {
-            if (toolbarButton || (!HighLogic.LoadedSceneIsEditor)) yield break;
-            yield return new WaitUntil(() => ApplicationLauncher.Ready && BDArmorySetup.toolbarButtonAdded); // Wait until after the main BDA toolbar button.
-
-            AddToolbarButton();
-        }
-
         void AddToolbarButton()
         {
-            if (HighLogic.LoadedSceneIsEditor && !BDArmorySettings.LEGACY_ARMOR)
+            if (!HighLogic.LoadedSceneIsEditor || BDArmorySettings.LEGACY_ARMOR) return;
+            StartCoroutine(ToolbarButtonRoutine());
+        }
+        IEnumerator ToolbarButtonRoutine()
+        {
+            if (toolbarButton) // Update the callbacks for the current instance.
             {
-                if (toolbarButton == null)
-                {
-                    Texture buttonTexture = GameDatabase.Instance.GetTexture(BDArmorySetup.textureDir + "icon_Armor", false);
-                    toolbarButton = ApplicationLauncher.Instance.AddModApplication(ShowToolbarGUI, HideToolbarGUI, Dummy, Dummy, Dummy, Dummy, ApplicationLauncher.AppScenes.SPH | ApplicationLauncher.AppScenes.VAB, buttonTexture);
-                }
+                toolbarButton.onTrue = ShowToolbarGUI;
+                toolbarButton.onFalse = HideToolbarGUI;
+                yield break;
             }
+            yield return new WaitUntil(() => ApplicationLauncher.Ready && BDArmorySetup.toolbarButtonAdded); // Wait until after the main BDA toolbar button.
+            Texture buttonTexture = GameDatabase.Instance.GetTexture(BDArmorySetup.textureDir + "icon_Armor", false);
+            toolbarButton = ApplicationLauncher.Instance.AddModApplication(ShowToolbarGUI, HideToolbarGUI, Dummy, Dummy, Dummy, Dummy, ApplicationLauncher.AppScenes.SPH | ApplicationLauncher.AppScenes.VAB, buttonTexture);
         }
 
         public void ShowToolbarGUI()
         {
             showArmorWindow = true;
-            CalculateArmorMass();
+            OnEditorShipModifiedEvent(EditorLogic.fetch.ship); // Trigger updating of stuff.
         }
 
-        public void HideToolbarGUI()
+        public void HideToolbarGUI() => StartCoroutine(HideToolbarGUIAtEndOfFrame());
+        bool waitingForEndOfFrame = false;
+        IEnumerator HideToolbarGUIAtEndOfFrame()
+        {
+            if (waitingForEndOfFrame) yield break;
+            waitingForEndOfFrame = true;
+            yield return new WaitForEndOfFrame();
+            waitingForEndOfFrame = false;
+            HideToolbarGUINow();
+        }
+        void HideToolbarGUINow()
         {
             showArmorWindow = false;
             CalcArmor = false;
@@ -249,8 +336,10 @@ namespace BDArmory.UI
             HPvisualizer = false;
             HullVisualizer = false;
             LiftVisualizer = false;
+            TreeVisualizer = false;
             if (thicknessField != null && thicknessField.ContainsKey("Thickness")) thicknessField["Thickness"].tryParseValueNow();
             Visualize();
+            GUIUtils.PreventClickThrough(windowRect, "BDAArmorLOCK", true);
         }
 
         void Dummy()
@@ -260,16 +349,35 @@ namespace BDArmory.UI
         {
             if (showArmorWindow)
             {
+                if (BDArmorySettings.UI_SCALE_ACTUAL != 1) GUIUtility.ScaleAroundPivot(BDArmorySettings.UI_SCALE_ACTUAL * Vector2.one, windowRect.position);
                 windowRect = GUI.Window(GUIUtility.GetControlID(FocusType.Passive), windowRect, WindowArmor, windowTitle, BDArmorySetup.BDGuiSkin.window);
             }
-            PreventClickThrough();
+            if (TreeVisualizer)
+            {
+                Part rootPart = EditorLogic.RootPart;
+                if (rootPart == null) return;
+                using (List<Part>.Enumerator parts = EditorLogic.fetch.ship.Parts.GetEnumerator())
+                    while (parts.MoveNext())
+                    {
+                        if (parts.Current == rootPart)
+                            GUIUtils.DrawTextureOnWorldPos(parts.Current.transform.position, BDArmorySetup.Instance.redDotTexture, new Vector2(48, 48), 0);
+                        else
+                        {
+                            GUIUtils.DrawTextureOnWorldPos(parts.Current.transform.position, BDArmorySetup.Instance.redDotTexture, new Vector2(16, 16), 0);
+                            Color VisualizerColor = Color.HSVToRGB(((1 - Mathf.Clamp(Mathf.Abs(Vector3.Distance(parts.Current.attPos, Vector3.zero)), 0.1f, 1)) / 1) / 3, 1, 1);
+                            //will result in any part that has been offset more than a meter showing up with a red line
+                            GUIUtils.DrawLineBetweenWorldPositions(parts.Current.transform.position, parts.Current.parent.transform.position, 3, VisualizerColor);
+                        }
+                    }
+            }
         }
 
         void WindowArmor(int windowID)
         {
+            GUIUtils.PreventClickThrough(windowRect, "BDAArmorLOCK");
             if (GUI.Button(new Rect(windowRect.width - 18, 2, 16, 16), "X"))
             {
-                HideToolbarGUI();
+                toolbarButton.SetFalse();
             }
             if (CalcArmor)
             {
@@ -297,6 +405,7 @@ namespace BDArmory.UI
                     Visualizer = false;
                     HullVisualizer = false;
                     LiftVisualizer = false;
+                    TreeVisualizer = false;
                 }
             }
             line += 1.25f;
@@ -312,6 +421,7 @@ namespace BDArmory.UI
                         HPvisualizer = false;
                         HullVisualizer = false;
                         LiftVisualizer = false;
+                        TreeVisualizer = false;
                     }
                 }
                 line += 1.25f;
@@ -327,6 +437,7 @@ namespace BDArmory.UI
                         HPvisualizer = false;
                         Visualizer = false;
                         LiftVisualizer = false;
+                        TreeVisualizer = false;
                     }
                 }
                 line += 1.25f;
@@ -342,6 +453,23 @@ namespace BDArmory.UI
                         Visualizer = false;
                         HullVisualizer = false;
                         HPvisualizer = false;
+                        TreeVisualizer = false;
+                    }
+                }
+                line += 1.25f;
+            }
+
+            //if (BDArmorySettings.RUNWAY_PROJECT)
+            {
+                if (GUI.Button(new Rect(10, line * lineHeight, 280, lineHeight), StringUtils.Localize("#LOC_BDArmory_partTreeVisualizer"), TreeVisualizer ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button))
+                {
+                    TreeVisualizer = !TreeVisualizer;
+                    if (TreeVisualizer)
+                    {
+                        Visualizer = false;
+                        HullVisualizer = false;
+                        HPvisualizer = false;
+                        LiftVisualizer = false;
                     }
                 }
                 line += 1.25f;
@@ -349,7 +477,7 @@ namespace BDArmory.UI
 
             line += 0.25f;
 
-            if ((refreshHPvisualizer || HPvisualizer != oldHPvisualizer) || (refreshVisualizer || Visualizer != oldVisualizer) || (refreshHullvisualizer || HullVisualizer != oldHullVisualizer) || (refreshLiftvisualizer || LiftVisualizer != oldLiftVisualizer))
+            if ((refreshHPvisualizer || HPvisualizer != oldHPvisualizer) || (refreshVisualizer || Visualizer != oldVisualizer) || (refreshHullvisualizer || HullVisualizer != oldHullVisualizer) || (refreshLiftvisualizer || LiftVisualizer != oldLiftVisualizer) || (refreshTreevisualizer || TreeVisualizer != oldTreeVisualizer))
             {
                 Visualize();
             }
@@ -373,7 +501,6 @@ namespace BDArmory.UI
                     Thickness = Mathf.Min((float)field.currentValue, maxThickness); // FIXME Mathf.Min shouldn't be necessary if the maxValue of the thicknessField has been updated for maxThickness
                     line++;
                 }
-                line += 0.75f;
                 GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_ArmorTotalMass")}: {totalArmorMass:0.00}", style);
                 line++;
                 GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_ArmorTotalCost")}: {Mathf.Round(totalArmorCost)}", style);
@@ -383,11 +510,16 @@ namespace BDArmory.UI
             {
                 GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_ArmorTotalLift")}: {totalLift:0.00} ({totalLiftArea:F3} m2)", style);
                 line++;
-                GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_ArmorWingLoading")}: {wingLoading:0.0} ({WLRatio:F3} kg/m2)", style);
+                GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_ArmorWingLoading")}:", style);
                 line++;
-                GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_ArmorLiftStacking")}: {totalLiftStackRatio:0%}", style);
+                GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"   - {StringUtils.Localize("#autoLOC_6001895")}: {wingLoadingWet:0.00} ({WLRatioWet:F2} kg/m2)", style);
+                line++;
+                GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"   - {StringUtils.Localize("#autoLOC_6001896")}: {wingLoadingDry:0.00} ({WLRatioDry:F2} kg/m2)", style);
+                line++;
+                GUI.Label(new Rect(10, line * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_ArmorLiftStacking")}: {totalLiftStackRatio:0.0%}", style);
                 line++;
 #if DEBUG
+                line += 0.5f;
                 if (GUI.Button(new Rect(10, line++ * lineHeight, 280, lineHeight), "Find Wings", BDArmorySetup.ButtonStyle))
                 {
                     var wings = FindWings();
@@ -404,6 +536,40 @@ namespace BDArmory.UI
                     Debug.Log($"DEBUG Lift stacking: {liftStacking}");
                 }
 #endif
+            }
+            if (!FerramAerospace.hasFAR)
+            {
+                line += 0.5f;
+                resourcePick = GUI.Toggle(new Rect(10, line++ * lineHeight, 280, lineHeight), resourcePick, StringUtils.Localize("#LOC_BDArmory_DryMassWhitelist"), resourcePick ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
+                if (resourcePick)
+                {
+                    vesselResourceBoxRect.y = line * lineHeight - 2;
+                    GUI.Box(vesselResourceBoxRect, "", BDArmorySetup.BDGuiSkin.box); // l,r,t,b = 3,3,3,3 with slight overlap of the toggle
+                    int pos = 0;
+                    using (var res = vesselResources.GetEnumerator())
+                        while (res.MoveNext())
+                        {
+                            if (res.Current.density == 0) continue; //don't show massless resouces for drymass blacklist
+                            if (res.Current.name.Contains("Intake")) continue; //don't include intake air, since that will always be present                            
+                            int resID = res.Current.id;
+                            var buttonName = res.Current.displayName.Length <= 17 ? res.Current.displayName : res.Current.displayName.Remove(14) + "...";
+                            if (GUI.Button(new Rect(pos % 2 == 0 ? 13 : 152f, (line + (int)(pos / 2)) * lineHeight + 1, 135, lineHeight), $"{buttonName}", vesselResourceIDs.Contains(resID) ? BDArmorySetup.BDGuiSkin.button : BDArmorySetup.BDGuiSkin.box)) // match BDGUIComboBox's layout
+                            {
+                                if (!vesselResourceIDs.Contains(resID))
+                                {
+                                    vesselResourceIDs.Add(resID); //resource counted as wet mass
+                                }
+                                else
+                                {
+                                    vesselResourceIDs.Remove(resID); //resouce to be counted as drymass
+                                }
+                                CalculateTotalLift();
+                            }
+                            pos++;
+                        }
+                    vesselResourceBoxRect.height = Mathf.CeilToInt(pos / 2f) * lineHeight + 6;
+                    line += Mathf.CeilToInt(pos / 2f) + 0.25f;
+                }
             }
             float StatLines = 0;
             float armorLines = 0;
@@ -444,9 +610,10 @@ namespace BDArmory.UI
                     previous_index = selected_index;
                     CalculateArmorMass();
                 }
-                line += 0.5f;
+
                 if (GameSettings.ADVANCED_TWEAKABLES)
                 {
+                    line += 0.5f;
                     ArmorStats = GUI.Toggle(new Rect(10, (line + armorLines) * lineHeight, 280, lineHeight), ArmorStats, StringUtils.Localize("#LOC_BDArmory_ArmorStats"), ArmorStats ? BDArmorySetup.BDGuiSkin.box : BDArmorySetup.BDGuiSkin.button);
                     StatLines++;
                     if (ArmorStats)
@@ -484,7 +651,7 @@ namespace BDArmory.UI
                         }
                         if (selectedArmor != "Mild Steel" && selectedArmor != "None")
                         {
-                            GUI.Label(new Rect(10, (line + armorLines + StatLines) * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_EquivalentThickness")}: {relValue * Thickness} mm", style);
+                            GUI.Label(new Rect(10, (line + armorLines + StatLines) * lineHeight, 300, lineHeight), $"{StringUtils.Localize("#LOC_BDArmory_EquivalentThickness")}: {Thickness / relValue:G3} mm", style);
                             line++;
                         }
                     }
@@ -522,6 +689,14 @@ namespace BDArmory.UI
                 }
             }
             line += 0.5f;
+            if ((BDArmorySettings.RUNWAY_PROJECT || BDArmorySettings.COMP_CONVENIENCE_CHECKS) && (CompSettings.CompBanChecksEnabled || CompSettings.CompPriceChecksEnabled || CompSettings.CompVesselChecksEnabled))
+            {
+                if (GUI.Button(new Rect(10, (line + armorLines + StatLines + HullLines) * lineHeight, 280, lineHeight), StringUtils.Localize("#LOC_BDArmory_checkVessel"), BDArmorySetup.ButtonStyle))
+                {
+                    DoVesselLegalityChecks(true, true);
+                }
+                line += 1.5f;
+            }
             GUI.DragWindow();
             height = Mathf.Lerp(height, (line + armorLines + StatLines + HullLines) * lineHeight, 0.15f);
             windowRect.height = height;
@@ -626,6 +801,7 @@ namespace BDArmory.UI
             if (EditorLogic.RootPart == null)
                 return;
 
+            var totalMass = EditorLogic.fetch.ship.GetTotalMass();
             totalLift = 0;
             using (List<Part>.Enumerator parts = EditorLogic.fetch.ship.Parts.GetEnumerator())
                 while (parts.MoveNext())
@@ -637,10 +813,13 @@ namespace BDArmory.UI
                         totalLift += wing.deflectionLiftCoeff * Vector3.Project(wing.transform.forward, Vector3.up).sqrMagnitude; // Only return vertically oriented lift components
                     }
                 }
-            wingLoading = totalLift / EditorLogic.fetch.ship.GetTotalMass(); //convert to kg/m2. 1 LiftingArea is ~ 3.51m2, or ~285kg/m2
+            wingLoadingWet = totalLift / totalMass; //convert to kg/m2. 1 LiftingArea is ~ 3.51m2, or ~285kg/m2
             totalLiftArea = totalLift * 3.52f;
-            WLRatio = (EditorLogic.fetch.ship.GetTotalMass() * 1000) / totalLiftArea;
+            WLRatioWet = totalMass * 1000 / totalLiftArea;
+            float dMass = totalMass - EditorLogic.fetch.ship.parts.SelectMany(p => p.Resources, (p, r) => r).Where(res => vesselResourceIDs.Contains(res.info.id)).Select(res => (float)res.amount * res.info.density).Sum();
 
+            wingLoadingDry = totalLift / dMass;
+            WLRatioDry = (dMass * 1000) / totalLiftArea;
             CalculateTotalLiftStacking();
         }
 
@@ -820,6 +999,7 @@ namespace BDArmory.UI
         {
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
+            if (!HighLogic.LoadedSceneIsEditor) yield break;
             totalArmorMass = 0;
             totalArmorCost = 0;
             using (List<Part>.Enumerator parts = EditorLogic.fetch.ship.Parts.GetEnumerator())
@@ -863,30 +1043,37 @@ namespace BDArmory.UI
                             {
                                 ModuleLiftingSurface wing = parts.Current.GetComponent<ModuleLiftingSurface>();
                                 if (wing != null && wing.deflectionLiftCoeff > 0f)
+                                {
                                     VisualizerColor = Color.HSVToRGB(Mathf.Clamp01(Mathf.Log10(wing.deflectionLiftCoeff + 1f)) / 3, 1, 1);
+                                    if (BDArmorySettings.MAX_PWING_LIFT > 0 && parts.Current.name.Contains("B9.Aero.Wing.Procedural") && wing.deflectionLiftCoeff > BDArmorySettings.MAX_PWING_LIFT)
+                                    {
+                                        VisualizerColor = Color.magenta;
+                                    }
+                                }
                                 else
                                     VisualizerColor = Color.HSVToRGB(0, 0, 0.5f);
                             }
                             var r = parts.Current.GetComponentsInChildren<Renderer>();
                             {
-                                if (parts.Current.name.Contains("B9.Aero.Wing.Procedural"))
+                                if (!a.RegisterProcWingShader && parts.Current.name.Contains("B9.Aero.Wing.Procedural")) //procwing defaultshader left null on start so current shader setup can be grabbed at visualizer runtime
                                 {
-                                    if (!a.RegisterProcWingShader) //procwing defaultshader left null on start so current shader setup can be grabbed at visualizer runtime
+                                    for (int s = 0; s < r.Length; s++)
                                     {
-                                        for (int s = 0; s < r.Length; s++)
+                                        if (r[s].GetComponentInParent<Part>() != parts.Current) continue; // Don't recurse to child parts.
+                                        int key = r[s].material.GetInstanceID();
+                                        a.defaultShader.Add(key, r[s].material.shader);
+                                        //Debug.Log("[Visualizer] " + parts.Current.name + " shader is " + r[s].material.shader.name);
+                                        if (r[s].material.HasProperty("_Color"))
                                         {
-                                            a.defaultShader.Add(r[s].material.shader);
-                                            //Debug.Log("[Visualizer] " + parts.Current.name + " shader is " + r[s].material.shader.name);
-                                            if (r[s].material.HasProperty("_Color"))
-                                            {
-                                                a.defaultColor.Add(r[s].material.color);
-                                            }
+                                            a.defaultColor.Add(key, r[s].material.color);
                                         }
-                                        a.RegisterProcWingShader = true;
                                     }
+                                    a.RegisterProcWingShader = true;
                                 }
                                 for (int i = 0; i < r.Length; i++)
                                 {
+                                    if (r[i].GetComponentInParent<Part>() != parts.Current) continue; // Don't recurse to child parts.
+                                    if (!a.defaultShader.ContainsKey(r[i].material.GetInstanceID())) continue; // Don't modify shaders that we don't have defaults for as we can't then replace them.
                                     if (r[i].material.shader.name.Contains("Alpha")) continue;
                                     r[i].material.shader = Shader.Find("KSP/Unlit");
                                     if (r[i].material.HasProperty("_Color"))
@@ -912,58 +1099,66 @@ namespace BDArmory.UI
                         //Procs wings turn orange at this point... oh. That's why: The visualizer reset is grabbing a list of shaders and colors at *part spawn!*
                         //pWings use dynamic shaders to paint themselves, so it's not reapplying the latest shader /color config, but the initial one, the one from the part icon  
                         var r = parts.Current.GetComponentsInChildren<Renderer>();
-                        if (parts.Current.name.Contains("B9.Aero.Wing.Procedural"))
+                        if (!armor.RegisterProcWingShader && parts.Current.name.Contains("B9.Aero.Wing.Procedural")) //procwing defaultshader left null on start so current shader setup can be grabbed at visualizer runtime
                         {
-                            if (!armor.RegisterProcWingShader) //procwing defaultshader left null on start so current shader setup can be grabbed at visualizer runtime
+                            for (int s = 0; s < r.Length; s++)
                             {
-                                for (int s = 0; s < r.Length; s++)
+                                if (r[s].GetComponentInParent<Part>() != parts.Current) continue; // Don't recurse to child parts.
+                                int key = r[s].material.GetInstanceID();
+                                armor.defaultShader.Add(key, r[s].material.shader);
+                                //Debug.Log("[Visualizer] " + parts.Current.name + " shader is " + r[s].material.shader.name);
+                                if (r[s].material.HasProperty("_Color"))
                                 {
-                                    armor.defaultShader.Add(r[s].material.shader);
-                                    //Debug.Log("[Visualizer] " + parts.Current.name + " shader is " + r[s].material.shader.name);
-                                    if (r[s].material.HasProperty("_Color"))
-                                    {
-                                        armor.defaultColor.Add(r[s].material.color);
-                                    }
+                                    armor.defaultColor.Add(key, r[s].material.color);
                                 }
-                                armor.RegisterProcWingShader = true;
                             }
+                            armor.RegisterProcWingShader = true;
                         }
                         //Debug.Log("[VISUALIZER] applying shader to " + parts.Current.name);
                         for (int i = 0; i < r.Length; i++)
                         {
                             try
                             {
-                                if (r[i].material.shader != armor.defaultShader[i])
+                                if (r[i].GetComponentInParent<Part>() != parts.Current) continue; // Don't recurse to child parts.
+                                int key = r[i].material.GetInstanceID();
+                                if (!armor.defaultShader.ContainsKey(key))
                                 {
-                                    if (armor.defaultShader[i] != null)
+                                    if (BDArmorySettings.DEBUG_RADAR) Debug.Log($"[BDArmory.BDAEditorArmorWindow]: {r[i].material.name} ({key}) not found in defaultShader for part {parts.Current.partInfo.name} on {parts.Current.vessel.vesselName}"); // Enable this to see what materials aren't getting RCS shaders applied to them.
+                                    continue;
+                                }
+                                if (r[i].material.shader != armor.defaultShader[key])
+                                {
+                                    if (armor.defaultShader[key] != null)
                                     {
-                                        r[i].material.shader = armor.defaultShader[i];
+                                        r[i].material.shader = armor.defaultShader[key];
                                     }
-                                    if (armor.defaultColor[i] != null)
+                                    if (armor.defaultColor.ContainsKey(key))
                                     {
-                                        if (parts.Current.name.Contains("B9.Aero.Wing.Procedural"))
+                                        if (armor.defaultColor[key] != null)
                                         {
-                                            //r[i].material.SetColor("_Emissive", armor.defaultColor[i]); //?
-                                            r[i].material.SetColor("_MainTex", armor.defaultColor[i]); //this doesn't work either
-                                            //LayeredSpecular has _MainTex, _Emissive, _SpecColor,_RimColor, _TemperatureColor, and _BurnColor
-                                            // source: https://github.com/tetraflon/B9-PWings-Modified/blob/master/B9%20PWings%20Fork/shaders/SpecularLayered.shader
-                                            //This works.. occasionally. Sometimes it will properly reset pwing tex/color, most of the time it doesn't. need to test later
+                                            if (parts.Current.name.Contains("B9.Aero.Wing.Procedural"))
+                                            {
+                                                r[i].material.SetColor("_MainTex", armor.defaultColor[key]);
+                                                //LayeredSpecular has _MainTex, _Emissive, _SpecColor,_RimColor, _TemperatureColor, and _BurnColor
+                                                // source: https://github.com/tetraflon/B9-PWings-Modified/blob/master/B9%20PWings%20Fork/shaders/SpecularLayered.shader
+                                                //This works.. occasionally. Sometimes it will properly reset pwing tex/color, most of the time it doesn't. need to test later
+                                            }
+                                            else
+                                            {
+                                                r[i].material.SetColor("_Color", armor.defaultColor[key]);
+                                            }
                                         }
                                         else
                                         {
-                                            r[i].material.SetColor("_Color", armor.defaultColor[i]);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        if (parts.Current.name.Contains("B9.Aero.Wing.Procedural"))
-                                        {
-                                            //r[i].material.SetColor("_Emissive", Color.white);
-                                            r[i].material.SetColor("_MainTex", Color.white);
-                                        }
-                                        else
-                                        {
-                                            r[i].material.SetColor("_Color", Color.white);
+                                            if (parts.Current.name.Contains("B9.Aero.Wing.Procedural"))
+                                            {
+                                                //r[i].material.SetColor("_Emissive", Color.white);
+                                                r[i].material.SetColor("_MainTex", Color.white);
+                                            }
+                                            else
+                                            {
+                                                r[i].material.SetColor("_Color", Color.white);
+                                            }
                                         }
                                     }
                                 }
@@ -979,45 +1174,295 @@ namespace BDArmory.UI
             oldHPvisualizer = HPvisualizer;
             oldHullVisualizer = HullVisualizer;
             oldLiftVisualizer = LiftVisualizer;
+            oldTreeVisualizer = TreeVisualizer;
             refreshVisualizer = false;
             refreshHPvisualizer = false;
             refreshHullvisualizer = false;
         }
 
-        /// <summary>
-        /// Lock the model if our own window is shown and has cursor focus to prevent click-through.
-        /// Code adapted from FAR Editor GUI
-        /// </summary>
-        private void PreventClickThrough()
-        {
-            bool cursorInGUI = false;
-            EditorLogic EdLogInstance = EditorLogic.fetch;
-            if (!EdLogInstance)
-            {
-                return;
-            }
-            if (showArmorWindow)
-            {
-                cursorInGUI = windowRect.Contains(GetMousePos());
-            }
-            if (cursorInGUI)
-            {
-                if (!CameraMouseLook.GetMouseLook())
-                    EdLogInstance.Lock(false, false, false, "BDAArmorLOCK");
-                else
-                    EdLogInstance.Unlock("BDAArmorLOCK");
-            }
-            else if (!cursorInGUI)
-            {
-                EdLogInstance.Unlock("BDAArmorLOCK");
-            }
-        }
+        float priceCkeckoout = 0;
+        Dictionary<string, List<Part>> partLimitCheck = new Dictionary<string, List<Part>>();
+        string boughtParts = "";
+        string engineparts = "";
+        int engineCount = 0;
+        string blacklistedParts = "";
+        bool nonCockpitWM = false;
+        bool nonCockpitAI = false;
+        //bool nonRootCockpit = false;
+        bool notOnPriceList = false;
+        int oversizedPWings = 0;
+        float maxThrust = 0;
+        int weaponmanagers = 0;
+        int AIs = 0;
+        ScreenMessage vessellegality = new ScreenMessage("", 7.0f, ScreenMessageStyle.LOWER_CENTER);
 
-        private Vector3 GetMousePos()
+        void DoVesselLegalityChecks(bool refreshParts, bool buttonTest = false)
         {
-            Vector3 mousePos = Input.mousePosition;
-            mousePos.y = Screen.height - mousePos.y;
-            return mousePos;
+            if ((BDArmorySettings.RUNWAY_PROJECT || BDArmorySettings.COMP_CONVENIENCE_CHECKS) && (CompSettings.CompBanChecksEnabled || CompSettings.CompPriceChecksEnabled || CompSettings.CompVesselChecksEnabled))
+            {
+                if (refreshParts)
+                {
+                    priceCkeckoout = 0;
+                    partLimitCheck.Clear();
+                    boughtParts = "";
+                    engineparts = "";
+                    engineCount = 0;
+                    maxThrust = 0;
+                    blacklistedParts = "";
+                    nonCockpitWM = false;
+                    nonCockpitAI = false;
+                    //nonRootCockpit = false;
+                    weaponmanagers = 0;
+                    AIs = 0;
+                    oversizedPWings = 0;
+
+                    foreach (var part in EditorLogic.fetch.ship.Parts) //grab a list of parts and their quantity
+                    {
+                        if (partLimitCheck.TryGetValue(part.name, out var qty))
+                            qty.Add(part);
+                        else
+                            partLimitCheck.Add(part.name, new List<Part> { part });
+                    }
+                    //begin evaluation
+                    if (CompSettings.CompBanChecksEnabled) //do we have more limited parts than allowed?
+                    {
+                        foreach (var part in CompSettings.partBlacklist)
+                        {
+                            string partName = part.Key;
+                            int listedpartCount = 0;
+                            if (partName.Contains("*"))
+                            {
+                                partName = partName.Trim('*');
+
+                                foreach (var kvp in partLimitCheck)
+                                {
+                                    if (kvp.Key.Contains(partName))
+                                        listedpartCount += kvp.Value.Count;
+                                }
+                            }
+                            else
+                                if (partLimitCheck.TryGetValue(part.Key, out var qty))
+                                listedpartCount = qty.Count;
+                            if (CompSettings.partBlacklist.TryGetValue(part.Key, out float bQ))
+                            {
+                                if (bQ >= 0 && listedpartCount > bQ)
+                                {
+                                    if (!string.IsNullOrEmpty(blacklistedParts)) blacklistedParts += " | ";
+                                    blacklistedParts += $"{partName} parts({listedpartCount}/{bQ})"; //is the part on the black list? if so, add to string for messaging illegal parts
+                                }
+                                if (bQ < 0 && listedpartCount < Mathf.Abs(bQ))
+                                {
+                                    if (!string.IsNullOrEmpty(blacklistedParts)) blacklistedParts += " | ";
+                                    blacklistedParts += $"{partName} missing({listedpartCount}/{Mathf.Abs(bQ)})"; //is the part on the white list? if so, add to string for messaging missing parts
+                                }
+                            }
+                        }
+                    }
+                    //could just eval the placed part, but that doesn't cover symmetry or subassumblies
+                    foreach (var kvp in partLimitCheck)
+                    {
+                        notOnPriceList = false;
+
+                        if (CompSettings.CompPriceChecksEnabled && pointBuyBudget > 0)// budget check 
+                        {
+                            if (CompSettings.partPointCosts.TryGetValue(kvp.Key, out float pb)) //if the part is in the pricing list
+                            {
+                                if (!string.IsNullOrEmpty(boughtParts)) boughtParts += " | ";
+                                boughtParts += $"{kvp.Value.Count}x {kvp.Value[0].partInfo.title}({kvp.Value.Count * pb})"; //make a note for later
+                                priceCkeckoout += (kvp.Value.Count * pb); //and tally total budget spent so far
+                            }
+                            else
+                            {
+                                notOnPriceList = true;
+                            }
+                        }
+                        foreach (var partModule in kvp.Value[0].Modules) //weapon whitelist/engine count
+                        {
+                            if (partModule == null) continue;
+                            switch (partModule.moduleName)
+                            {
+                                case "ModuleEngines":
+                                case "ModuleEnginesFX":
+                                    {
+                                        if (engineparts.Contains(kvp.Value[0].partInfo.title)) break; //don't grab both moduleEngines for dual-mode engines and double-count them
+                                        if (CompSettings.CompVesselChecksEnabled && maxEngines < 999 || maxTWR > 0)
+                                        {
+                                            if (maxEngines < 999)
+                                            {
+                                                if (!string.IsNullOrEmpty(engineparts)) engineparts += " | ";
+                                                engineparts += $"{kvp.Value.Count}x {kvp.Value[0].partInfo.title}";
+                                                engineCount += kvp.Value.Count;
+                                                Debug.Log($"[VesselCheckDebug] found {kvp.Value.Count} {kvp.Value[0].partInfo.title}");
+                                            }
+                                            if (maxTWR > 0) maxThrust += (kvp.Value[0].FindModuleImplementing<ModuleEngines>().maxThrust * kvp.Value[0].FindModuleImplementing<ModuleEngines>().thrustPercentage) * kvp.Value.Count;
+                                        }
+                                        break;
+                                    }
+                                case "ModuleWeapon":
+                                case "MissileBase":
+                                case "MissileLauncher":
+                                    {
+                                        if (pointBuyBudget > 0 && notOnPriceList) //if a weapon isn't on the price list, it's banned
+                                        {
+                                            if (!string.IsNullOrEmpty(blacklistedParts)) blacklistedParts += " | ";
+                                            blacklistedParts += $"{kvp.Value[0].partInfo.title}({kvp.Value.Count}/0)";
+                                        }
+                                        break;
+                                    }
+                                case "MissileFire":
+                                    {
+                                        weaponmanagers += kvp.Value.Count;
+                                        if (weaponmanagers > 1) //only 1 WM per vessel. TODO - remember to change this out if Doc ever gets mothership sub-WMs implemented fully
+                                        {
+                                            if (!string.IsNullOrEmpty(blacklistedParts)) blacklistedParts += " | ";
+                                            blacklistedParts += $"{kvp.Value[0].partInfo.title}(WMs: {kvp.Value.Count}/1)";
+                                        }
+                                        /*
+                                        if (kvp.Value[0].parent != EditorLogic.fetch.ship.Parts[0] || kvp.Value[0] != EditorLogic.fetch.ship.Parts[0])
+                                        {
+                                            nonCockpitWM = true;
+                                        }
+                                        */
+                                        var isChair = kvp.Value[0].FindModuleImplementing<KerbalSeat>();
+                                        if (isChair != null)
+                                        {
+                                            break;
+                                        }
+                                        ModuleCommand AIParent = null;
+                                        if (kvp.Value[0].parent) AIParent = kvp.Value[0].parent.FindModuleImplementing<ModuleCommand>();
+                                        if (AIParent == null)
+                                        {
+                                            nonCockpitWM = true;
+                                        }
+                                        break;
+                                    }
+                                case "BDModulePilotAI":
+                                case "BDModuleSurfaceAI":
+                                case "BDModuleVTOLAI":
+                                case "BDModuleOrbitalAI":
+                                    {
+                                        AIs += kvp.Value.Count;
+                                        if (AIs > 1) //only 1 WM per vessel. TODO - remember to change this out if Doc ever gets mothership sub-WMs implemented fully
+                                        {
+                                            if (!string.IsNullOrEmpty(blacklistedParts)) blacklistedParts += " | ";
+                                            blacklistedParts += $"{kvp.Value[0].partInfo.title}(AI: {kvp.Value.Count}/1)";
+                                        }
+                                        //editorLogic.fetch.ship.parts[0] doesn't account for re-rooting the craft. fetch.ship also doesn't support .rootpart
+                                        //if (kvp.Value[0].parent != EditorLogic.fetch.ship.Parts[0] || kvp.Value[0] != EditorLogic.fetch.ship.Parts[0])
+                                        var isChair = kvp.Value[0].FindModuleImplementing<KerbalSeat>();
+                                        if (isChair != null)
+                                        {
+                                            break;
+                                        }
+                                        ModuleCommand AIParent = null;
+                                        if (kvp.Value[0].parent) AIParent = kvp.Value[0].parent.FindModuleImplementing<ModuleCommand>();
+                                        if (AIParent == null)
+                                        {
+                                            nonCockpitAI = true;
+                                        }
+                                        break;
+                                    }
+                                case "ModuleCommand":                                
+                                    {
+                                        int crewCount = kvp.Value[0].FindModuleImplementing<ModuleCommand>().minimumCrew;
+                                        if (crewCount <= 0)
+                                        {
+                                            if (!string.IsNullOrEmpty(blacklistedParts)) blacklistedParts += " | ";
+                                            blacklistedParts += $"{kvp.Value[0].partInfo.title}(Probecore: {kvp.Value.Count}/0)";
+                                        }
+                                        /*
+                                        if (kvp.Value[0] != EditorLogic.fetch.ship.Parts[0])
+                                        {
+                                            nonRootCockpit = true;
+                                        }
+                                        */
+                                        break;
+                                    }
+                            }
+                        }
+                    }
+                    if (BDArmorySettings.MAX_PWING_LIFT > 0)
+                    {
+                        foreach (var part in EditorLogic.fetch.ship.Parts) //not ideal, but this needs to fire onVesselModified, not onPartPlaced, but linking this to Visualizer's parts eval only updates when that does
+                        {
+                            if (part.name.Contains("B9.Aero.Wing.Procedural.Type"))
+                            {
+                                ModuleLiftingSurface wing = part.GetComponent<ModuleLiftingSurface>();
+                                if (wing != null && wing.deflectionLiftCoeff > 0f)
+                                {
+                                    if (wing.deflectionLiftCoeff > BDArmorySettings.MAX_PWING_LIFT)
+                                        oversizedPWings++;
+                                }
+                            }
+                        }
+                    }
+                }
+                StringBuilder evaluationstring = new StringBuilder();                
+                if (CompSettings.CompVesselChecksEnabled)
+                {
+                    CalculateTotalLift(); //update wing lading/lift stack values if GUI not open
+                    if (maxPartCount > 0 && EditorLogic.fetch.ship.Parts.Count > maxPartCount)
+                        evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorToolPartCount")} ({EditorLogic.fetch.ship.Parts.Count}/{maxPartCount})"); //"Part count exceeded!"
+                    if (engineCount > 0)
+                    {
+                        if (maxEngines >= 0 && engineCount > maxEngines)
+                            evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorToolEngineCount")} ({engineCount}/{maxEngines}) - {engineparts}"); //Too Many Engines:"
+                        if (maxEngines < 0 && engineCount < Mathf.Abs(maxEngines))
+                            evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorToolEngineCountFloor")} ({engineCount}/{Mathf.Abs(maxEngines)})"); //"Too Few Engines:"
+                    }
+                    if (maxTWR > 0 && Math.Round(((maxThrust / (PhysicsGlobals.GravitationalAcceleration * FlightGlobals.GetHomeBody().GeeASL) * EditorLogic.fetch.ship.GetTotalMass())), 2) > maxLtW)
+                        evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorToolTWR")} {Math.Round(maxThrust / (EditorLogic.fetch.ship.GetTotalMass() * (PhysicsGlobals.GravitationalAcceleration * FlightGlobals.GetHomeBody().GeeASL)), 2)}/{maxTWR}"); //"TWR Exceeded:"
+                    if (maxLtW > 0 && wingLoadingWet > maxLtW)
+                        evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorToolLTW")} {wingLoadingWet}/{maxLtW}"); //"LTW Exceeded:"
+                    if (maxStacking > 0 && totalLiftStackRatio * 100 > maxStacking)
+                        evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorLiftStacking")}: {Mathf.RoundToInt(totalLiftStackRatio * 100)}/{maxStacking}%"); //"Lift Stacking"
+                    if (maxMass > 0 && EditorLogic.fetch.ship.GetTotalMass() > maxMass)
+                        evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorToolMaxMass")} {EditorLogic.fetch.ship.GetTotalMass()}/{maxMass}"); //"Maxx Limit Exceeded:"
+                    //max Dimensions?
+                }
+                if (CompSettings.CompPriceChecksEnabled && pointBuyBudget > 0)
+                {
+                    if (priceCkeckoout > pointBuyBudget)
+                        evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorToolMaxPoints")} ({priceCkeckoout}/{pointBuyBudget}) - {boughtParts}"); //Point Limit Exceeded:
+                }
+                if (CompSettings.CompVesselChecksEnabled || CompSettings.CompBanChecksEnabled)
+                {
+                    if (!string.IsNullOrEmpty(blacklistedParts))
+                        evaluationstring.AppendLine($"{StringUtils.Localize("#LOC_BDArmory_ArmorToolIllegalParts")} - {blacklistedParts}"); //"Illegal Parts:"
+                }
+
+                if (nonCockpitAI || nonCockpitWM) // || nonRootCockpit)
+                {
+                    string commandStatus = "";
+                    if (nonCockpitAI) commandStatus += StringUtils.Localize("#LOC_BDArmory_Settings_DebugAI"); //"AI"
+                    if (nonCockpitWM)
+                    {
+                        if (!string.IsNullOrEmpty(commandStatus)) commandStatus += ", ";
+                        commandStatus += StringUtils.Localize("#LOC_BDArmory_WMWindow_title"); //"BDA Weapon Manager"
+                    }
+                    commandStatus += $" {(StringUtils.Localize("#LOC_BDArmory_ArmorToolNonCockpit"))}"; //"not attached to cockpit"
+                    //if (nonRootCockpit)
+                    //{
+                    //    commandStatus += ", which is not a cockpit.";
+                    //}
+                    evaluationstring.AppendLine(commandStatus);
+                }
+
+                if (buttonTest)
+                {
+                    if (evaluationstring.Length == 0)
+                        evaluationstring.AppendLine(StringUtils.Localize("#LOC_BDArmory_ArmorToolVesselLegal")); //"Vessel Legal!"
+                }
+                if (oversizedPWings > 0)
+                    evaluationstring.AppendLine($"{oversizedPWings} {StringUtils.Localize("#LOC_BDArmory_ArmorToolOversizedPWings")}"); //"pWings exceedeing max Lift - check Lift Visualize"
+                ScreenMessages.RemoveMessage(vessellegality);
+                vessellegality.textInstance = null;
+                vessellegality.message = evaluationstring.ToString();
+                vessellegality.style = ScreenMessageStyle.UPPER_CENTER;
+
+                ScreenMessages.PostScreenMessage(vessellegality);
+                //todo - draw a GUI line to each illegal part?
+            }
         }
 
         private void CalculateArmorStats()
@@ -1039,7 +1484,7 @@ namespace BDArmory.UI
                 */
                 //armorValue = ProjectileUtils.CalculatePenetration(30, newCaliber, 0.388f, 1109, ArmorDuctility, ArmorDensity, ArmorStrength, 30, 0.8f, false);
                 armorValue = ProjectileUtils.CalculatePenetration(30, 1109, 0.388f, 0.8f, ArmorStrength, ArmorVfactor, ArmorMu1, ArmorMu2, ArmorMu3); //why is this hardcoded? it needs to be the selected armor mat's vars
-                relValue = BDAMath.RoundToUnit(steelValue / armorValue, 0.1f);
+                relValue = BDAMath.RoundToUnit(armorValue / steelValue, 0.1f);
                 exploValue = ArmorStrength * (1 + ArmorDuctility) * (ArmorDensity / 1000);
             }
         }

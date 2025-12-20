@@ -18,8 +18,8 @@ namespace BDArmory.Weapons
 {
     class BDModuleNuke : PartModule
     {
-        [KSPField(isPersistant = true, guiActive = true, guiName = "WARNING: Reactor Safeties:", guiActiveEditor = false), UI_Label(affectSymCounterparts = UI_Scene.All, scene = UI_Scene.All)]//Weapon Name
-        public string status = "OFFLINE";
+        //[KSPField(isPersistant = true, guiActive = true, guiName = "WARNING: Reactor Safeties:", guiActiveEditor = false), UI_Label(affectSymCounterparts = UI_Scene.All, scene = UI_Scene.All)]//Weapon Name
+        //public string status = "OFFLINE";
 
         //[KSPField(isPersistant = true, guiActive = true, guiName = "Coolant Remaining", guiActiveEditor = false), UI_Label(scene = UI_Scene.All)]
         //public double fuelleft = 0;
@@ -192,7 +192,7 @@ namespace BDArmory.Weapons
         {
             if (v != vessel || hasDetonated || goingCritical || !engineCore) return;
             VesselModuleRegistry.OnVesselModified(v);
-            if (VesselModuleRegistry.GetModuleCount<MissileFire>(v) == 0)
+            if (v.ActiveController().WM == null)
             {
                 if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.RWPS3R2NukeModule]: Nuclear engine on " + Sourcevessel + " has become detached.");
                 goingCritical = true;
@@ -222,7 +222,7 @@ namespace BDArmory.Weapons
                 {
                     goingCritical = false;
                     if (BDArmorySettings.DEBUG_OTHER) Debug.Log("[BDArmory.BDModuleNuke]: engines on " + Sourcevessel + " still have fuel, aborting detonation");
-                    StopCoroutine(DelayedDetonation(delay));
+                    yield break;
                 }
                 if (BDACompetitionMode.Instance.competitionIsActive)
                 {
@@ -270,7 +270,7 @@ namespace BDArmory.Weapons
                 output.AppendLine($"Yield: {yield}");
                 output.AppendLine($"Generates EMP: {isEMP}");
             }
-            if (Launcher != null)
+            else
             {
                 output.AppendLine($"Nuclear Warhead");
                 output.AppendLine($"Yield: {yield}");
