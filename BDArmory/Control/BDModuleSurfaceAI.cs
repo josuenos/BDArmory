@@ -106,13 +106,33 @@ namespace BDArmory.Control
             UI_FloatRange(minValue = 0f, maxValue = 10f, stepIncrement = .05f, scene = UI_Scene.All)]
         public float radiusConstant = 2;
 
-        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Braking Acceleration"),
-            UI_FloatRange(minValue = 1f, maxValue = 100f, stepIncrement = 1f, scene = UI_Scene.All)]
-        public float brakingAcceleration = 20;
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Braking Threshold"),
+            UI_FloatRange(minValue = 1f, maxValue = 30f, stepIncrement = 1f, scene = UI_Scene.All)]
+        public float brakingThreshold = 5;
 
-        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Aiming Radius"),
-            UI_FloatRange(minValue = 1f, maxValue = 15f, stepIncrement = .1f, scene = UI_Scene.All)]
-        public float aimingRadius = 5;
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Braking Constant"),
+            UI_FloatRange(minValue = 0.1f, maxValue = 2f, stepIncrement = 0.05f, scene = UI_Scene.All)]
+        public float brakingConstant = 0.85f;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Turn Entry Speed Factor"),
+            UI_FloatRange(minValue = 0f, maxValue = 1f, stepIncrement = 0.05f, scene = UI_Scene.All)]
+        public float entryFactor = 0.8f;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Turn Entry Speed Exponent"),
+            UI_FloatRange(minValue = 0.1f, maxValue = 10f, stepIncrement = 0.1f, scene = UI_Scene.All)]
+        public float entryExponent = 1f;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Early Turn-In Distance"),
+            UI_FloatRange(minValue = 0f, maxValue = 30f, stepIncrement = 1f, scene = UI_Scene.All)]
+        public float turnInDistance = 15f;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Early Throttle Radius"),
+            UI_FloatRange(minValue = 1f, maxValue = 30f, stepIncrement = .1f, scene = UI_Scene.All)]
+        public float throttleRadius = 15f;
+
+        [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Waypoint Aiming Radius"),
+            UI_FloatRange(minValue = 1f, maxValue = 30f, stepIncrement = .1f, scene = UI_Scene.All)]
+        public float aimingRadius = 10f;
 
         [KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_BDArmory_AI_TargetPitch"),//Moving pitch
             UI_FloatRange(minValue = -10f, maxValue = 10f, stepIncrement = .1f, scene = UI_Scene.All)]
@@ -404,13 +424,32 @@ namespace BDArmory.Control
         #endregion
 
         #region Actual AI Pilot
-        private bool WillMakeWaypoint()
+        private bool WillMakeWaypoint(float radius)
         {
             float angle = Mathf.Deg2Rad * Mathf.Min(Vector3.Angle(vessel.srf_velocity.normalized, waypointPosition - vessel.transform.position), 89f);
-            if (Mathf.Tan(angle) * waypointRange < aimingRadius || waypointRange < aimingRadius)
+            if (Mathf.Tan(angle) * waypointRange < radius || waypointRange < radius)
             {
                 return true;
             }
+            return false;
+        }
+
+        private bool WillMakeNextWaypoint(float radius)
+        {
+            if (activeWaypointIndex < waypoints.Count() - 1)
+            {
+                var nextWaypoint = waypoints[activeWaypointIndex + 1];
+                var terrainAltitude = FlightGlobals.currentMainBody.TerrainAltitude(nextWaypoint.x, nextWaypoint.y);
+                var nextWaypointPosition = FlightGlobals.currentMainBody.GetWorldSurfacePosition(nextWaypoint.x, nextWaypoint.y, nextWaypoint.z + terrainAltitude);
+                float nextWaypointRange = (float)(nextWaypointPosition - vessel.transform.position).magnitude;
+                float angle = Mathf.Min(Vector3.Angle(vessel.srf_velocity.normalized, nextWaypointPosition - vessel.transform.position), 89f);
+                if (angle < 10.0f || nextWaypointRange < radius)//* nextWaypointRange < aimingRadius || nextWaypointRange < aimingRadius)
+                {
+                    return true;
+                }
+            }
+
+           
             return false;
         }
 
@@ -422,7 +461,7 @@ namespace BDArmory.Control
             Vector3 upVector = Vector3.Cross(Velocity.normalized, diffVector.normalized);
             Vector3 radiusVector = Vector3.Cross(upVector.normalized, Velocity.normalized);
             float radius = Vector3.Dot(diffVector, midpointVector) / Vector3.Dot(diffVector, radiusVector);
-            return WillMakeWaypoint() ? 999f : radius;
+            return WillMakeWaypoint(throttleRadius) ? 999f : radius;
         }
 
         private float NextTurnRadius()
@@ -432,7 +471,7 @@ namespace BDArmory.Control
                 var nextWaypoint = waypoints[activeWaypointIndex + 1];
                 var terrainAltitude = FlightGlobals.currentMainBody.TerrainAltitude(nextWaypoint.x, nextWaypoint.y);
                 var nextWaypointPosition = FlightGlobals.currentMainBody.GetWorldSurfacePosition(nextWaypoint.x, nextWaypoint.y, nextWaypoint.z + terrainAltitude);
-                Vector3 Velocity = WillMakeWaypoint() ? vessel.srf_velocity : waypointPosition - vessel.transform.position;
+                Vector3 Velocity = WillMakeWaypoint(aimingRadius) ? vessel.srf_velocity : waypointPosition - vessel.transform.position;
                 Vector3 diffVector = nextWaypointPosition - waypointPosition;
                 Vector3 midpointVector = diffVector / 2;
                 Vector3 upVector = Vector3.Cross(Velocity.normalized, diffVector.normalized);
@@ -446,6 +485,44 @@ namespace BDArmory.Control
             }
         }
 
+        private Vector3 GetNextWaypointPosition()
+        {
+            if (activeWaypointIndex < waypoints.Count() - 1)
+            {
+                var nextWaypoint = waypoints[activeWaypointIndex + 1];
+                var terrainAltitude = FlightGlobals.currentMainBody.TerrainAltitude(nextWaypoint.x, nextWaypoint.y);
+                var nextWaypointPosition = FlightGlobals.currentMainBody.GetWorldSurfacePosition(nextWaypoint.x, nextWaypoint.y, nextWaypoint.z + terrainAltitude);
+                return nextWaypointPosition;
+            }
+
+            return waypointPosition;
+            
+        }
+
+        /*private float NextTurnRadiusCorrected()
+        {
+            if (activeWaypointIndex < waypoints.Count() - 1)
+            {
+                var nextWaypoint = waypoints[activeWaypointIndex + 1];
+                var terrainAltitude = FlightGlobals.currentMainBody.TerrainAltitude(nextWaypoint.x, nextWaypoint.y);
+                var nextWaypointPosition = FlightGlobals.currentMainBody.GetWorldSurfacePosition(nextWaypoint.x, nextWaypoint.y, nextWaypoint.z + terrainAltitude);
+                Vector3 Velocity = WillMakeWaypoint(aimingRadius) ? vessel.srf_velocity : waypointPosition - vessel.transform.position;
+                var correctedWaypointPosition = waypointPosition + turningReactionTime * Velocity.normalized * Mathf.Min(GetCornerSpeed(NextTurnRadius()), 100f);
+                float debugRange = (turningReactionTime * Velocity.normalized * Mathf.Min(GetCornerSpeed(NextTurnRadius()), 100f)).magnitude;
+                if (BDArmorySettings.DEBUG_TELEMETRY || BDArmorySettings.DEBUG_AI) DebugLine($"Extra Waypoint Distance: {debugRange}; turningReactionTime: {turningReactionTime}; cornerSpeed (calculated): {GetCornerSpeed(NextTurnRadius())}; cornerSpeed (Clamped): {Mathf.Min(GetCornerSpeed(NextTurnRadius()), 100f)}");
+                Vector3 diffVector = nextWaypointPosition - correctedWaypointPosition;
+                Vector3 midpointVector = diffVector / 2;
+                Vector3 upVector = Vector3.Cross(Velocity.normalized, diffVector.normalized);
+                Vector3 radiusVector = Vector3.Cross(upVector.normalized, Velocity.normalized);
+                float radius = Vector3.Dot(diffVector, midpointVector) / Vector3.Dot(diffVector, radiusVector);
+                return radius;
+            }
+            else
+            {
+                return CurrentTurnRadius();
+            }
+        }*/
+
         private float GetCornerSpeed(float turnRadius)
         {
             if (vessel.srfSpeed < 10)
@@ -458,15 +535,29 @@ namespace BDArmory.Control
             }
         }
 
+        private float GetBrakingDistance(float v0, float vt, float a)
+        {
+            if (a == 0 || vt > v0) return 0f;
+            float t = Mathf.Log(v0 / vt) / a;
+            float dist = v0 / a * (1f - Mathf.Exp(-a * t));
+            return dist;
+        }
+
         private float GetTargetSpeed()
         {
             // Gets top speed for the current corner. Then, checks corner speed for the next corner. If it is lower than the current vehicle speed, calculates distance needed for braking
             float currentSpeedLimit = GetCornerSpeed(CurrentTurnRadius());
             float nextSpeedLimit = GetCornerSpeed(NextTurnRadius());
+            float entryCorrection = 1f - (1f - entryFactor) * Mathf.Exp(-0.1f * entryExponent * (nextSpeedLimit - 15f));
+            entryCorrection = Mathf.Max(entryCorrection, entryFactor);
+            if (BDArmorySettings.DEBUG_TELEMETRY || BDArmorySettings.DEBUG_AI) DebugLine($"Entry Correction: {entryCorrection}; Old Next Speed Limit: {nextSpeedLimit}; New Next Speed Limit (calculated): {nextSpeedLimit * entryCorrection}");
+            nextSpeedLimit *= entryCorrection;
             //float excessSpeed = vessel.srfSpeed > nextSpeedLimit ? (float)vessel.srfSpeed - nextSpeedLimit : 0;
-            float brakingLength = vessel.srfSpeed > nextSpeedLimit ? (Mathf.Pow((float)vessel.srfSpeed, 2) - Mathf.Pow(nextSpeedLimit, 2)) / (2 * brakingAcceleration) : 0;
+            //float brakingLength = vessel.srfSpeed > nextSpeedLimit ? (Mathf.Pow((float)vessel.srfSpeed, 2) - Mathf.Pow(nextSpeedLimit, 2)) / (2 * brakingAcceleration) : 0;
+            float brakingLength = vessel.srfSpeed > nextSpeedLimit ? GetBrakingDistance((float)vessel.srfSpeed, nextSpeedLimit, brakingConstant) : 0;
+            if (BDArmorySettings.DEBUG_TELEMETRY || BDArmorySettings.DEBUG_AI) DebugLine($"Braking Distance: {GetBrakingDistance((float)vessel.srfSpeed, nextSpeedLimit, brakingConstant)}");
             if (waypointRange < brakingLength)
-                currentSpeedLimit = nextSpeedLimit;
+                currentSpeedLimit = nextSpeedLimit - brakingThreshold;
             return currentSpeedLimit;
         }
         protected override void AutoPilot(FlightCtrlState s)
@@ -475,6 +566,7 @@ namespace BDArmory.Control
                 vessel.ActionGroups.SetGroup(KSPActionGroup.SAS, true);
 
             targetVelocity = 0;
+            motorControl.brakingThreshold = brakingThreshold;
             targetDirection = vesselTransform.up;
             aimingMode = AimingMode.Off;
             upDir = vessel.up;
@@ -935,7 +1027,16 @@ namespace BDArmory.Control
                 // goto
                 if (command == PilotCommands.Waypoints)
                 {
-                    Pathfind(VectorUtils.WorldPositionToGeoCoords(waypointPosition, vessel.mainBody));
+                    Vector3 aimingPosition;
+                    if ((waypointRange < turnInDistance) && WillMakeWaypoint(aimingRadius)) //|| WillMakeNextWaypoint(aimingRadius)))
+                    {
+                        aimingPosition = GetNextWaypointPosition();
+                    }
+                    else
+                    {
+                        aimingPosition = waypointPosition;
+                    }
+                    Pathfind(VectorUtils.WorldPositionToGeoCoords(aimingPosition, vessel.mainBody));
                 }
                 else if (leftPath && bypassTarget == null)
                 {
@@ -1085,14 +1186,14 @@ namespace BDArmory.Control
             }
             else
             {
-                if (BDArmorySettings.DEBUG_TELEMETRY || BDArmorySettings.DEBUG_AI) DebugLine($"Target velocity: {targetSpeed}; signed Velocity: {velocitySignedSrfSpeed}; brakeVel: {targetSpeed - velocitySignedSrfSpeed}; use brakes: {(targetSpeed - velocitySignedSrfSpeed < -5)}");
+                if (BDArmorySettings.DEBUG_TELEMETRY || BDArmorySettings.DEBUG_AI) DebugLine($"Target velocity: {targetSpeed}; signed Velocity: {velocitySignedSrfSpeed}; brakeVel: {targetSpeed - velocitySignedSrfSpeed}; use brakes: {(targetSpeed - velocitySignedSrfSpeed < - brakingThreshold)}");
             }
             if (BDArmorySettings.DEBUG_TELEMETRY || BDArmorySettings.DEBUG_AI) DebugLine($"engine thrust: {speedController.debugThrust}, motor zero: {motorControl.zeroPoint}");
 
             speedController.targetSpeed = motorControl.targetSpeed = targetSpeed;
             motorControl.signedSrfSpeed = velocitySignedSrfSpeed;
             //speedController.useBrakes = motorControl.preventNegativeZeroPoint = speedController.debugThrust > 0;
-            speedController.useBrakes = targetSpeed - velocitySignedSrfSpeed < -5;
+            speedController.useBrakes = targetSpeed - velocitySignedSrfSpeed < - brakingThreshold;
         }
 
         Vector3 directionIntegral;

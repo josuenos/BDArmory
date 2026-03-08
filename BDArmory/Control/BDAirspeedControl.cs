@@ -282,6 +282,7 @@ namespace BDArmory.Control
         public float signedSrfSpeed;
         public Vessel vessel;
         public bool preventNegativeZeroPoint = false;
+        public float brakingThreshold = 5;
 
         AxisGroupsModule axisGroupsModule;
         bool hasAxisGroupsModule = false; // To avoid repeated null checks
@@ -323,11 +324,11 @@ namespace BDArmory.Control
             else
             {
                 float throttle = zeroPoint + (targetSpeed - signedSrfSpeed) * gain;
-                lastThrottle = Mathf.Clamp(throttle, -0.1f, 1);
+                lastThrottle = Mathf.Clamp(throttle, 0f, 1);
                 zeroPoint = (zeroPoint + lastThrottle * zeroMult) * (1 - zeroMult);
                 if (preventNegativeZeroPoint && zeroPoint < 0) zeroPoint = 0;
                 SetThrottle(s, lastThrottle);
-                vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, (targetSpeed - signedSrfSpeed < -5));
+                vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, (targetSpeed - signedSrfSpeed < - brakingThreshold));
             }
         }
 
