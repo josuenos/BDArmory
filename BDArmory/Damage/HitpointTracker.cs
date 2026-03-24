@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -730,7 +730,7 @@ namespace BDArmory.Damage
                 CalculateDryCost(); //recalc if modify event added a fueltank -resource swap, etc
                 HullMassAdjust = oldHullMassAdjust; // Put the HullmassAdjust back so we can test against it when we update the hull mass.
                 float tweakScaleMassMultiplier = _tweakScaleMassMultiplier;
-                _tweakScaleMassMultiplier = part.GetTweakScaleMultiplier(); // Update our copy of the TweakScale mass multiplier.
+                _tweakScaleMassMultiplier = part.GetTweakScaleMassMultiplier(); // Update our copy of the TweakScale mass multiplier.
                 if (oldPartMass != partMass)
                 {
                     if (BDArmorySettings.DEBUG_ARMOR) Debug.Log($"[BDArmory.HitpointTracker]: {part.name} updated mass at {Time.time}: part.mass {part.mass}, partMass {oldPartMass}->{partMass}, armorMass {armorMass}, hullMassAdjust {HullMassAdjust}, tweakScaleMassMultiplier {tweakScaleMassMultiplier}->{_tweakScaleMassMultiplier}");
@@ -1625,7 +1625,20 @@ namespace BDArmory.Damage
             hullType = hullInfo.name;
             CalculateRCSreduction();
             float dryCost = part.GetTweakScaleDryCost(); // Use the TweakScale DryCost if available.
-            if (dryCost == 0) dryCost = part.partInfo.cost + part.partInfo.variant.Cost - (float)resourceCost;
+            switch (dryCost)
+            {
+                case 0:
+                    {
+                        dryCost = part.partInfo.cost + part.partInfo.variant.Cost - (float)resourceCost;
+                        break;
+                    }
+                case -1:
+                    {
+                        _tweakScaleMassMultiplier = part.GetTweakScaleMassMultiplier(); // Update our copy of the TweakScale mass multiplier.
+                        dryCost = (part.partInfo.cost + part.partInfo.variant.Cost) * _tweakScaleMassMultiplier - (float)resourceCost;
+                        break;
+                    }
+            }
             if (hullInfo.costMod < 1) HullCostAdjust = Mathf.Max(dryCost * hullInfo.costMod, dryCost - (1000 - hullInfo.costMod * 1000)) - dryCost; //max of 1000 funds discount on cheaper materials
             else HullCostAdjust = Mathf.Min(dryCost * hullInfo.costMod, dryCost + hullInfo.costMod * 1000) - dryCost; //Increase costs if costMod => 1
             //this returns cost of base variant, yielding part variant that are discounted by 50% or 500 of base variant cost, not current variant. method to get currently selected variant?
